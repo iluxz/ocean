@@ -131,6 +131,11 @@
     .tab-pane { display:none; }
     .tab-pane.active { display:block; }
     .equipped-banner { font-size:12px; color:var(--muted); margin-bottom:10px; padding:8px 10px; border:1px solid rgba(126,200,255,0.1); border-radius:10px; background:rgba(255,255,255,0.02); }
+    .update-list { display:grid; gap:8px; max-height:min(58vh,520px); overflow:auto; padding-right:4px; scrollbar-width:thin; }
+    .update-item { padding:10px 12px; border-radius:10px; border:1px solid rgba(126,200,255,0.1); background:rgba(255,255,255,0.02); }
+    .update-item strong { display:block; font-size:12px; color:var(--text); margin-bottom:4px; }
+    .update-item span { font-size:11px; color:var(--muted); line-height:1.45; display:block; }
+    .update-item em { font-size:10px; color:rgba(126,200,255,0.55); font-style:normal; letter-spacing:.08em; text-transform:uppercase; display:block; margin-bottom:4px; }
     .badge { padding:4px 8px; border-radius:999px; border:1px solid rgba(126,200,255,0.2); font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
     .badge.bug { color:#9fd0ff; }
     .badge.suggestion { color:#b8e0ff; }
@@ -181,6 +186,7 @@
       </div>
       <div class="action-row">
         <button class="btn" id="achBtn" type="button">achievements</button>
+        <button class="btn" id="updateBtn" type="button">update log</button>
       </div>
       <div class="action-row">
         <button class="btn" id="feedbackBtn" type="button">send feedback</button>
@@ -209,6 +215,14 @@
       <h2>achievements</h2>
       <div class="ach-list" id="achList" style="max-height:min(58vh,520px);"></div>
       <div class="modal-actions"><button class="btn" id="achClose" type="button">close</button></div>
+    </div>
+  </div>
+
+  <div class="modal" id="updateModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Update log" style="width:min(640px,calc(100vw - 32px));">
+      <h2>update log</h2>
+      <div class="update-list" id="updateList"></div>
+      <div class="modal-actions"><button class="btn" id="updateClose" type="button">close</button></div>
     </div>
   </div>
 
@@ -339,6 +353,7 @@
     const photoBtn = document.getElementById('photoBtn');
     const logBtn = document.getElementById('logBtn');
     const achBtn = document.getElementById('achBtn');
+    const updateBtn = document.getElementById('updateBtn');
     const feedbackBtn = document.getElementById('feedbackBtn');
     const crashBtn = document.getElementById('crashBtn');
     const feedbackStatus = document.getElementById('feedbackStatus');
@@ -355,6 +370,9 @@
     const achModal = document.getElementById('achModal');
     const achClose = document.getElementById('achClose');
     const achList = document.getElementById('achList');
+    const updateModal = document.getElementById('updateModal');
+    const updateClose = document.getElementById('updateClose');
+    const updateList = document.getElementById('updateList');
     const equippedBanner = document.getElementById('equippedBanner');
     const errorRefresh = document.getElementById('errorRefresh');
     errorRefresh.addEventListener('click', () => location.reload());
@@ -477,6 +495,19 @@
       renderDiscoveries();
       syncSettingsUI();
     }
+    const UPDATE_LOG = [
+      { date: '2026-11-25', title: 'achievements + equipped discoveries', detail: 'split achievements into their own button, made discoveries into proper cards with lock states, and equipping now spawns the discovery in the world.' },
+      { date: '2026-11-25', title: 'photo mode + crash fixes', detail: 'added photo mode exit button, fixed rain clipping at the waterline, avoided file:// bgm CORS silence, and guarded audio volume from non-finite values.' },
+      { date: '2026-11-25', title: 'crash mode chaos', detail: 'added initiate crash, wii-style crash buzz, and last-second crash audio looping behavior.' },
+      { date: '2026-11-25', title: 'weather + audio feel', detail: 'added rain droplet ripples on the ocean surface and muffled music when diving underwater.' },
+      { date: '2026-11-25', title: 'big ocean pass', detail: 'thunder/lightning, saved settings, photo mode, click ripples/bubbles, surface life, deeper underwater variety, ambient sfx, message in a bottle, discoveries log, reduced motion, time speed slider, and mobile tuning.' },
+      { date: '2026-11-25', title: 'initial ocean release', detail: '2d animated ocean with DeepBlue.wav, day/night cycle, dive controls, settings, and feedback flow.' }
+    ];
+
+    function renderUpdateLog() {
+      updateList.innerHTML = UPDATE_LOG.map(u => `<div class="update-item"><em>${u.date}</em><strong>${u.title}</strong><span>${u.detail}</span></div>`).join('');
+    }
+
     function renderAchievements() {
       achList.innerHTML = ACHIEVEMENT_DEFS.map(a => {
         const unlocked = achievements.includes(a.id);
@@ -1584,6 +1615,9 @@
     achBtn.addEventListener('click', (e) => { e.stopPropagation(); renderAchievements(); achModal.classList.add('open'); achModal.setAttribute('aria-hidden','false'); });
     achClose.addEventListener('click', () => { achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); });
     achModal.addEventListener('click', (e) => { if (e.target === achModal) achClose.click(); });
+    updateBtn.addEventListener('click', (e) => { e.stopPropagation(); renderUpdateLog(); updateModal.classList.add('open'); updateModal.setAttribute('aria-hidden','false'); });
+    updateClose.addEventListener('click', () => { updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); });
+    updateModal.addEventListener('click', (e) => { if (e.target === updateModal) updateClose.click(); });
     crashBtn.addEventListener('click', (e) => { e.stopPropagation(); unlockAchievement('chaos'); startAudio(); setTimeout(() => { throw new Error('manual ocean crash initiated by user'); }, 30); });
     feedbackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFeedback(); });
     feedbackCancel.addEventListener('click', closeFeedback);
@@ -1622,7 +1656,7 @@
 
     window.addEventListener('pointerdown', (e) => { if (e.target.closest('.settings-wrap') || e.target.closest('.modal') || e.target === canvas) return; startAudio(); }, { passive: true });
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
+      if (e.key === 'Escape') { closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
       if (e.key.toLowerCase() === 'p' && !e.target.closest('textarea,input,select')) { setPhotoMode(!photoMode); return; }
       startAudio();
     });
