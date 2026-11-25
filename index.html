@@ -380,7 +380,7 @@
     // --- audio sfx ---
     let audioCtx = null, masterGain = null, rainGain = null, windGain = null, underwaterGain = null, dayGain = null, nightGain = null;
     let rainNoise = null, windNoise = null, underwaterNoise = null, dayNoise = null, nightNoise = null;
-    let bgmNode = null, captureDest = null, mediaRecorder = null, audioChunks = [], crashLoopAudio = null;
+    let bgmNode = null, bgmFilter = null, captureDest = null, mediaRecorder = null, audioChunks = [], crashLoopAudio = null;
     function ensureAudio() {
       if (audioCtx) return;
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -397,8 +397,13 @@
       masterGain.connect(audioCtx.destination);
       masterGain.connect(captureDest);
       try {
+        bgmFilter = audioCtx.createBiquadFilter();
+        bgmFilter.type = 'lowpass';
+        bgmFilter.frequency.value = 14000;
+        bgmFilter.Q.value = 0.7;
         bgmNode = audioCtx.createMediaElementSource(bgm);
-        bgmNode.connect(masterGain);
+        bgmNode.connect(bgmFilter);
+        bgmFilter.connect(masterGain);
       } catch (_) { /* already connected or unsupported */ }
       try {
         audioChunks = [];
@@ -483,6 +488,11 @@
       nightGain.gain.setTargetAtTime(surface * (1-d) * 0.01, audioCtx.currentTime, 0.4);
       if (rainNoise) rainNoise.f.frequency.setTargetAtTime(900 + weatherIntensity * 700, audioCtx.currentTime, 0.2);
       if (windNoise) windNoise.f.frequency.setTargetAtTime(400 + weatherIntensity * 250, audioCtx.currentTime, 0.2);
+      if (bgmFilter) {
+        const cutoff = lerp(14000, 650, Math.pow(under, 1.2));
+        bgmFilter.frequency.setTargetAtTime(cutoff, audioCtx.currentTime, 0.18);
+        bgmFilter.Q.setTargetAtTime(0.7 + under * 0.6, audioCtx.currentTime, 0.18);
+      }
     }
 
     function easeInOutCubic(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
@@ -651,6 +661,7 @@
     function drawWeather() {
       if (weatherIntensity <= 0.01) return;
       const count = Math.min(rainDrops.length, Math.floor((reducedMotion ? 20 : 40) + weatherIntensity * (reducedMotion ? 70 : 140)));
+      const horizon = h * 0.58;
       ctx.save();
       ctx.strokeStyle = `rgba(170,205,230,${0.18 + weatherIntensity*0.18})`;
       ctx.lineWidth = 1;
@@ -658,7 +669,18 @@
         const d = rainDrops[i];
         if (!d) continue;
         const x = ((d.x * w) + animTime * 0.03 * d.s) % w;
-        const y = ((d.y * h + animTime * (0.35 + weatherIntensity*0.35) * d.s) % (h + 30)) - 20;
+        const travel = h + 30;
+        const yRaw = d.y * h + animTime * (0.35 + weatherIntensity*0.35) * d.s;
+        const prev = d._yRaw ?? yRaw;
+        const y = (yRaw % travel) - 20;
+        const prevY = (prev % travel) - 20;
+        const waterY = getWaveY(x, horizon);
+        const crossed = (prevY < waterY && y >= waterY) || (yRaw - prev > travel * 0.5); // wrapped
+        if (crossed && Math.random() < 0.35) {
+          ripples.push({ x, y: waterY + 1, r: 1.5 + Math.random()*2, age: 0, life: 600 + Math.random()*350, rain: true });
+          if (ripples.length > 120) ripples.splice(0, ripples.length - 120);
+        }
+        d._yRaw = yRaw;
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.lineTo(x - 1.5 * d.s, y + d.l);
@@ -752,16 +774,23 @@
     }
 
     function drawRipplesAndBubbles() {
-      // surface ripples
+      // surface ripples / raindrop impacts
       ctx.save();
       for (let i=ripples.length-1; i>=0; i--) {
         const r = ripples[i];
         r.age += 16;
         const p = r.age / r.life;
         if (p >= 1) { ripples.splice(i,1); continue; }
-        ctx.strokeStyle = `rgba(180,225,255,${(1-p)*0.35})`;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r + p*50, (r.r+p*50)*0.35, 0, 0, Math.PI*2); ctx.stroke();
+        const rain = !!r.rain;
+        const alpha = (1-p) * (rain ? 0.22 : 0.35);
+        ctx.strokeStyle = `rgba(190,230,255,${alpha})`;
+        ctx.lineWidth = rain ? 1 : 1.5;
+        const grow = rain ? 14 : 50;
+        ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r + p*grow, (r.r+p*grow)*0.35, 0, 0, Math.PI*2); ctx.stroke();
+        if (rain && p < 0.25) {
+          ctx.fillStyle = `rgba(210,240,255,${(0.25-p)*1.4})`;
+          ctx.beginPath(); ctx.arc(r.x, r.y - 2 - p*10, 1.2, 0, Math.PI*2); ctx.fill();
+        }
       }
       ctx.restore();
       // underwater click bubbles
