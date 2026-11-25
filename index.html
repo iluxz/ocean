@@ -614,7 +614,7 @@
         if (p >= 1) { ripples.splice(i,1); continue; }
         ctx.strokeStyle = `rgba(180,225,255,${(1-p)*0.35})`;
         ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.ellipse(r.x, r.y - cameraY*h, r.r + p*50, (r.r+p*50)*0.35, 0, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r + p*50, (r.r+p*50)*0.35, 0, 0, Math.PI*2); ctx.stroke();
       }
       ctx.restore();
       // underwater click bubbles
@@ -625,7 +625,7 @@
         if (b.age > b.life) { clickBubbles.splice(i,1); continue; }
         const a = 1 - b.age/b.life;
         ctx.strokeStyle = `rgba(170,220,245,${a*0.5})`;
-        ctx.beginPath(); ctx.arc(b.x, b.y - cameraY*h, b.r, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.stroke();
       }
       ctx.restore();
     }
