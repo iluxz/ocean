@@ -70,6 +70,8 @@
     .feedback { font-size:11px; color:var(--muted); min-height:16px; padding-top:6px; border-top:1px solid rgba(126,200,255,0.08); }
     .action-row { display:flex; gap:8px; padding-top:10px; border-top:1px solid rgba(126,200,255,0.08); }
     .action-row .btn { flex:1; text-align:center; padding:9px 10px; }
+    .setting-row input[type="range"] { width: 120px; accent-color: #7ec8ff; }
+    .setting-row select { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid rgba(126,200,255,0.18); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12px; }
     .modal { position:fixed; inset:0; display:none; place-items:center; z-index:20; background:rgba(2,8,20,0.45); backdrop-filter: blur(4px); }
     .modal.open { display:grid; }
     .modal-card { width:min(560px, calc(100vw - 32px)); background:rgba(3,16,34,0.88); border:1px solid rgba(126,200,255,0.2); border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,0.45); }
@@ -105,10 +107,15 @@
     <button class="btn" id="settingsBtn" type="button" aria-expanded="false" aria-controls="settingsPanel">settings</button>
     <div class="settings-panel" id="settingsPanel">
       <div class="settings-title">ocean settings</div>
-      <div class="setting-row"><label for="setSound">sound<small>play DeepBlue.wav</small></label><input class="toggle" id="setSound" type="checkbox" checked></div>
-      <div class="setting-row"><label for="setCycle">day n night cycle<small>auto animate sky</small></label><input class="toggle" id="setCycle" type="checkbox" checked></div>
+      <div class="setting-row"><label for="setSound">sound<small>master audio</small></label><input class="toggle" id="setSound" type="checkbox" checked></div>
+      <div class="setting-row"><label for="setVolume">volume<small>affects mood too</small></label><input id="setVolume" type="range" min="0" max="100" value="65"></div>
+      <div class="setting-row"><label for="setBrightness">brightness<small>affects weather</small></label><input id="setBrightness" type="range" min="20" max="100" value="100"></div>
+      <div class="setting-row"><label for="setCycle">day n night cycle<small>sun/moon orbit</small></label><input class="toggle" id="setCycle" type="checkbox" checked></div>
       <div class="setting-row"><label for="setDay">day<small>force daytime</small></label><input class="toggle" id="setDay" type="checkbox"></div>
       <div class="setting-row"><label for="setNight">night<small>force nighttime</small></label><input class="toggle" id="setNight" type="checkbox" checked></div>
+      <div class="setting-row"><label for="setWeather">weather<small>rain, storm, clear</small></label>
+        <select id="setWeather"><option value="auto">auto</option><option value="clear">clear</option><option value="rain">rain</option><option value="storm">storm</option></select>
+      </div>
       <div class="action-row">
         <button class="btn" id="goDownBtn" type="button">go down</button>
         <button class="btn" id="goUpBtn" type="button">go up</button>
@@ -148,9 +155,12 @@
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsPanel = document.getElementById('settingsPanel');
     const setSound = document.getElementById('setSound');
+    const setVolume = document.getElementById('setVolume');
+    const setBrightness = document.getElementById('setBrightness');
     const setCycle = document.getElementById('setCycle');
     const setDay = document.getElementById('setDay');
     const setNight = document.getElementById('setNight');
+    const setWeather = document.getElementById('setWeather');
     const goDownBtn = document.getElementById('goDownBtn');
     const goUpBtn = document.getElementById('goUpBtn');
     const feedbackBtn = document.getElementById('feedbackBtn');
@@ -164,15 +174,87 @@
 
     let w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
     let t = 0;
+    let lastT = 0;
     let started = false;
     let soundEnabled = true;
+    let masterVolume = 0.65;
+    let brightness = 1;
     let dayCycle = true;
     let forcedMode = 'night'; // 'day' | 'night' | null
+    let manualDayPhase = 0.75; // 0=sunrise,0.25=day,0.5=sunset,0.75=night
+    let weatherMode = 'auto'; // auto|clear|rain|storm
+    let weatherIntensity = 0; // 0 clear, 1 rain, 2 storm-ish
+    let weatherTarget = 0;
     let dayFactor = 0;
     let cameraY = 0;      // 0 = surface, 1 = underwater
     let cameraTarget = 0;
     let camAnim = null;
-    bgm.volume = 0.65;
+    bgm.volume = masterVolume;
+
+    // --- audio sfx ---
+    let audioCtx = null, masterGain = null, musicGain = null, rainGain = null, windGain = null, underwaterGain = null;
+    let rainNoise = null, windNoise = null, underwaterNoise = null;
+    function ensureAudio() {
+      if (audioCtx) return;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx();
+      masterGain = audioCtx.createGain(); masterGain.gain.value = masterVolume;
+      musicGain = audioCtx.createGain(); musicGain.gain.value = 1;
+      rainGain = audioCtx.createGain(); rainGain.gain.value = 0;
+      windGain = audioCtx.createGain(); windGain.gain.value = 0;
+      underwaterGain = audioCtx.createGain(); underwaterGain.gain.value = 0;
+      masterGain.connect(audioCtx.destination);
+      musicGain.connect(masterGain);
+      rainGain.connect(masterGain);
+      windGain.connect(masterGain);
+      underwaterGain.connect(masterGain);
+      try { const src = audioCtx.createMediaElementSource(bgm); src.connect(musicGain); } catch(e) {}
+
+      function noiseBuf() {
+        const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i=0;i<data.length;i++) data[i] = Math.random()*2-1;
+        return buf;
+      }
+      function loopNoise(filterType, freq, q, gainNode) {
+        const src = audioCtx.createBufferSource(); src.buffer = noiseBuf(); src.loop = true;
+        const f = audioCtx.createBiquadFilter(); f.type = filterType; f.frequency.value = freq; f.Q.value = q;
+        src.connect(f); f.connect(gainNode); src.start();
+        return {src, f};
+      }
+      rainNoise = loopNoise('bandpass', 1200, 0.7, rainGain);
+      windNoise = loopNoise('lowpass', 500, 0.4, windGain);
+      underwaterNoise = loopNoise('lowpass', 350, 0.8, underwaterGain);
+    }
+    function setMasterVolume(v) {
+      masterVolume = Math.max(0, Math.min(1, v));
+      bgm.volume = masterVolume;
+      if (masterGain) masterGain.gain.setTargetAtTime(soundEnabled ? masterVolume : 0, audioCtx.currentTime, 0.05);
+    }
+    function sfxClick() {
+      if (!audioCtx || !soundEnabled) return;
+      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = 520; g.gain.value = 0.03;
+      o.connect(g); g.connect(masterGain); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08); o.stop(audioCtx.currentTime + 0.09);
+    }
+    function sfxDive(down) {
+      if (!audioCtx || !soundEnabled) return;
+      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(down ? 420 : 220, audioCtx.currentTime);
+      o.frequency.exponentialRampToValueAtTime(down ? 180 : 480, audioCtx.currentTime + 0.35);
+      g.gain.value = 0.03; o.connect(g); g.connect(masterGain); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.4); o.stop(audioCtx.currentTime + 0.41);
+    }
+    function updateAudioMix() {
+      if (!audioCtx) return;
+      const on = soundEnabled ? 1 : 0;
+      masterGain.gain.setTargetAtTime(on * masterVolume, audioCtx.currentTime, 0.08);
+      const under = cameraY;
+      const surface = 1 - under;
+      rainGain.gain.setTargetAtTime(surface * Math.min(1, weatherIntensity) * 0.22, audioCtx.currentTime, 0.2);
+      windGain.gain.setTargetAtTime(surface * Math.max(0, weatherIntensity - 0.8) * 0.18, audioCtx.currentTime, 0.3);
+      underwaterGain.gain.setTargetAtTime(under * 0.08, audioCtx.currentTime, 0.2);
+      if (rainNoise) rainNoise.f.frequency.setTargetAtTime(900 + weatherIntensity * 700, audioCtx.currentTime, 0.2);
+    }
 
     function easeInOutCubic(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
     function setCamera(target) {
@@ -213,93 +295,103 @@
 
     function lerp(a,b,p){ return a + (b-a)*p; }
     function mix(c1,c2,p){ return `rgb(${Math.round(lerp(c1[0],c2[0],p))}, ${Math.round(lerp(c1[1],c2[1],p))}, ${Math.round(lerp(c1[2],c2[2],p))})`; }
-    function getDayFactor() {
-      if (forcedMode === 'day') return 1;
-      if (forcedMode === 'night') return 0;
-      if (!dayCycle) return dayFactor; // hold
-      const cycle = (t * 0.00003) % (Math.PI * 2);
-      return (Math.sin(cycle - Math.PI / 2) + 1) / 2;
+    function getCyclePhase() {
+      if (forcedMode === 'day') return 0.25;
+      if (forcedMode === 'night') return 0.75;
+      if (!dayCycle) return manualDayPhase;
+      return ((t * 0.00003) % 1 + 1) % 1; // full cycle every ~209s at 60fps-ish timebase
     }
+    function getDayFactor() {
+      const phase = getCyclePhase();
+      // 0 sunrise, 0.25 noon, 0.5 sunset, 0.75 midnight
+      return Math.sin(phase * Math.PI * 2) * 0.5 + 0.5;
+    }
+
+    function bodyPos(phase) {
+      // phase 0..1 around sky arc; y>0 below horizon
+      const a = phase * Math.PI * 2 - Math.PI / 2;
+      return { x: w * (0.5 + Math.cos(a) * 0.42), y: h * (0.58 - Math.sin(a) * 0.42) };
+    }
+
+    const rainDrops = Array.from({ length: 220 }, () => ({ x: Math.random(), y: Math.random(), l: 8 + Math.random()*16, s: 0.6 + Math.random()*1.2 }));
 
     function drawSky() {
       dayFactor = getDayFactor();
       const d = dayFactor;
+      const phase = getCyclePhase();
       const nightTop=[2,6,20], nightMid=[5,22,45], nightLow=[8,34,62], nightBot=[5,18,37];
       const dayTop=[80,170,235], dayMid=[120,200,255], dayLow=[160,220,255], dayBot=[210,238,255];
+      const stormDark = Math.min(0.55, weatherIntensity * 0.22);
+      const darken = (c) => [Math.round(c[0]*(1-stormDark)), Math.round(c[1]*(1-stormDark)), Math.round(c[2]*(1-stormDark))];
       const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, mix(nightTop, dayTop, d));
-      g.addColorStop(0.35, mix(nightMid, dayMid, d));
-      g.addColorStop(0.6, mix(nightLow, dayLow, d));
-      g.addColorStop(1, mix(nightBot, dayBot, d));
+      g.addColorStop(0, mix(darken(nightTop), darken(dayTop), d));
+      g.addColorStop(0.35, mix(darken(nightMid), darken(dayMid), d));
+      g.addColorStop(0.6, mix(darken(nightLow), darken(dayLow), d));
+      g.addColorStop(1, mix(darken(nightBot), darken(dayBot), d));
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
 
-      // sun / moon arc
-      const arc = (dayCycle && !forcedMode) ? ((t * 0.00003) % (Math.PI * 2)) : (d * Math.PI);
-      const bodyX = w * (0.15 + 0.7 * ((Math.sin(arc - Math.PI/2) + 1) / 2));
-      const bodyY = h * (0.62 - 0.42 * Math.sin(arc));
-      const sunA = Math.max(0, Math.min(1, (d - 0.2) / 0.35));
-      const moonA = Math.max(0, Math.min(1, (0.45 - d) / 0.35));
+      const sun = bodyPos(phase);
+      const moon = bodyPos((phase + 0.5) % 1);
+      const sunA = Math.max(0, Math.min(1, (h * 0.62 - sun.y) / (h * 0.18)));
+      const moonA = Math.max(0, Math.min(1, (h * 0.62 - moon.y) / (h * 0.18)));
 
       if (sunA > 0) {
-        const sg = ctx.createRadialGradient(bodyX, bodyY, 0, bodyX, bodyY, 160);
+        const sg = ctx.createRadialGradient(sun.x, sun.y, 0, sun.x, sun.y, 170);
         sg.addColorStop(0, `rgba(255,245,200,${0.45 * sunA})`);
         sg.addColorStop(0.3, `rgba(255,210,120,${0.18 * sunA})`);
         sg.addColorStop(1, 'rgba(255,210,120,0)');
         ctx.fillStyle = sg; ctx.fillRect(0,0,w,h*0.75);
         ctx.save();
-        ctx.fillStyle = `rgba(255, 244, 210, ${0.98 * sunA})`;
-        ctx.shadowColor = `rgba(255,220,150,${0.9*sunA})`;
+        ctx.fillStyle = `rgba(255,244,210,${0.98 * sunA})`;
+        ctx.shadowColor = `rgba(255,220,150,${0.9 * sunA})`;
         ctx.shadowBlur = 40;
-        ctx.beginPath(); ctx.arc(bodyX, bodyY, Math.min(w,h)*0.034, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sun.x, sun.y, Math.min(w,h)*0.034, 0, Math.PI*2); ctx.fill();
         ctx.restore();
       }
 
-      // aurora at night
       if (moonA > 0.05) {
         const ax = w * (0.3 + Math.sin(t * 0.00012) * 0.08);
         const ay = h * 0.22;
         const aurora = ctx.createRadialGradient(ax, ay, 0, ax, ay, Math.max(w, h) * 0.45);
-        aurora.addColorStop(0, `rgba(60, 160, 255, ${0.10 * moonA})`);
-        aurora.addColorStop(0.45, `rgba(70, 160, 220, ${0.04 * moonA})`);
-        aurora.addColorStop(1, 'rgba(70, 160, 220, 0)');
-        ctx.fillStyle = aurora; ctx.fillRect(0, 0, w, h * 0.7);
+        aurora.addColorStop(0, `rgba(60,160,255,${0.10 * moonA * (1-weatherIntensity*0.4)})`);
+        aurora.addColorStop(0.45, `rgba(70,160,220,${0.04 * moonA})`);
+        aurora.addColorStop(1, 'rgba(70,160,220,0)');
+        ctx.fillStyle = aurora; ctx.fillRect(0,0,w,h*0.7);
       }
 
       if (moonA > 0) {
-        const mx = w * (0.78 + Math.sin(t * 0.00003) * 0.01);
-        const my = h * (0.18 + Math.sin(t * 0.00005) * 0.008);
-        const moonGlow = ctx.createRadialGradient(mx, my, 0, mx, my, 140);
+        const moonGlow = ctx.createRadialGradient(moon.x, moon.y, 0, moon.x, moon.y, 140);
         moonGlow.addColorStop(0, `rgba(210,235,255,${0.24*moonA})`);
         moonGlow.addColorStop(0.4, `rgba(120,180,235,${0.09*moonA})`);
         moonGlow.addColorStop(1, 'rgba(120,180,235,0)');
         ctx.fillStyle = moonGlow; ctx.fillRect(0,0,w,h*0.7);
         ctx.save();
         ctx.globalAlpha = moonA;
-        ctx.fillStyle = 'rgba(230, 244, 255, 0.94)';
-        ctx.shadowColor = 'rgba(180, 225, 255, 0.85)';
+        ctx.fillStyle = 'rgba(230,244,255,0.94)';
+        ctx.shadowColor = 'rgba(180,225,255,0.85)';
         ctx.shadowBlur = 28;
-        ctx.beginPath(); ctx.arc(mx, my, Math.min(w,h)*0.028, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(moon.x, moon.y, Math.min(w,h)*0.028, 0, Math.PI*2); ctx.fill();
         ctx.restore();
       }
 
-      // stars fade in at night
       if (moonA > 0.01) {
         for (const s of stars) {
           const twinkle = (Math.sin(t * 0.0012 * s.tw + s.ph) + 1) * 0.5;
           const y = s.y * h + Math.sin(t * 0.00015 + s.ph) * 1.5;
-          ctx.fillStyle = `rgba(220, 240, 255, ${s.a * (0.35 + twinkle * 0.65) * moonA})`;
+          ctx.fillStyle = `rgba(220,240,255,${s.a * (0.35 + twinkle * 0.65) * moonA * (1-weatherIntensity*0.5)})`;
           ctx.beginPath(); ctx.arc(s.x * w, y, s.r * (0.8 + twinkle * 0.5), 0, Math.PI * 2); ctx.fill();
         }
       }
 
-      // clouds
       for (const c of clouds) {
-        const cx = ((c.x + t * c.sp) % 1.4 - 0.2) * w;
+        const cx = ((c.x + t * c.sp * (1 + weatherIntensity*0.8)) % 1.4 - 0.2) * w;
         const cy = c.y * h + Math.sin(t * 0.0002 + c.off) * 6;
         const cw = 180 * c.s, ch = 38 * c.s;
         const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cw);
-        const cloudCol = d > 0.5 ? `rgba(255,255,255,${c.a * (0.9 + d*0.8)})` : `rgba(150,190,230,${c.a * (1.2-d)})`;
+        const baseA = c.a * (d > 0.5 ? (0.9 + d*0.8) : (1.2-d));
+        const grey = lerp(255, 120, Math.min(1, weatherIntensity*0.7));
+        const cloudCol = `rgba(${grey},${grey},${Math.min(255,grey+20)},${baseA + weatherIntensity*0.03})`;
         cg.addColorStop(0, cloudCol);
         cg.addColorStop(1, 'rgba(150,190,230,0)');
         ctx.fillStyle = cg;
@@ -309,6 +401,28 @@
         ctx.ellipse(cx + cw * 0.45, cy + ch * 0.1, cw * 0.5, ch * 0.65, 0, 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+
+    function drawWeather() {
+      if (weatherIntensity <= 0.01) return;
+      const count = Math.floor(40 + weatherIntensity * 140);
+      ctx.save();
+      ctx.strokeStyle = `rgba(170,205,230,${0.18 + weatherIntensity*0.18})`;
+      ctx.lineWidth = 1;
+      for (let i=0; i<count; i++) {
+        const d = rainDrops[i];
+        const x = ((d.x * w) + t * 0.03 * d.s) % w;
+        const y = ((d.y * h + t * (0.35 + weatherIntensity*0.35) * d.s) % (h + 30)) - 20;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - 1.5 * d.s, y + d.l);
+        ctx.stroke();
+      }
+      if (weatherIntensity > 1.3 && Math.random() < 0.003 * weatherIntensity) {
+        ctx.fillStyle = 'rgba(220,235,255,0.12)';
+        ctx.fillRect(0,0,w,h);
+      }
+      ctx.restore();
     }
 
     function waveY(base, amp, freq, phase, x) {
@@ -349,16 +463,22 @@
 
     function drawReflection() {
       const d = dayFactor;
-      const arc = (dayCycle && !forcedMode) ? ((t * 0.00003) % (Math.PI * 2)) : (d * Math.PI);
-      const mx = w * (0.15 + 0.7 * ((Math.sin(arc - Math.PI/2) + 1) / 2));
+      const phase = getCyclePhase();
+      const sun = bodyPos(phase);
+      const moon = bodyPos((phase + 0.5) % 1);
+      const useSun = sun.y < moon.y;
+      const b = useSun ? sun : moon;
+      const mx = b.x;
+      const vis = Math.max(0, Math.min(1, (h * 0.62 - b.y) / (h * 0.2)));
+      if (vis <= 0.01) return;
       const top = h * 0.58;
       const bottom = h * 0.95;
       ctx.save();
-      ctx.globalAlpha = lerp(0.12, 0.2, d);
+      ctx.globalAlpha = (useSun ? lerp(0.08, 0.16, d) : 0.1) * vis * (1 - weatherIntensity*0.5);
       const g = ctx.createLinearGradient(0, top, 0, bottom);
-      const rc = d > 0.5 ? '255, 245, 200' : '190, 230, 255';
-      g.addColorStop(0, `rgba(${rc}, ${lerp(0.55,0.7,d)})`);
-      g.addColorStop(1, `rgba(${rc}, 0)`);
+      const rc = useSun ? '255,245,200' : '190,230,255';
+      g.addColorStop(0, `rgba(${rc},0.65)`);
+      g.addColorStop(1, `rgba(${rc},0)`);
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.moveTo(mx - 10, top);
@@ -565,6 +685,20 @@
 
     function render(ts) {
       t = ts;
+      const dt = Math.min(0.05, (ts - (lastT || ts)) / 1000);
+      lastT = ts;
+
+      // weather target: manual or auto from brightness+volume
+      if (weatherMode === 'clear') weatherTarget = 0;
+      else if (weatherMode === 'rain') weatherTarget = 1;
+      else if (weatherMode === 'storm') weatherTarget = 2;
+      else {
+        const brightFactor = 1 - brightness; // lower brightness = worse weather
+        const quietFactor = 1 - masterVolume; // lower volume = worse weather
+        weatherTarget = brightFactor * 1.4 + quietFactor * 0.8;
+      }
+      weatherIntensity += (weatherTarget - weatherIntensity) * Math.min(1, dt * 1.5);
+
       if (camAnim) {
         const p = Math.min(1, (ts - camAnim.start) / camAnim.dur);
         cameraY = camAnim.from + (camAnim.to - camAnim.from) * easeInOutCubic(p);
@@ -580,19 +714,21 @@
 
       const horizon = h * 0.58;
       const d = dayFactor;
+      const dark = Math.min(0.35, weatherIntensity * 0.12);
+      const wc = (r,g,b,a) => `rgba(${Math.round(r*(1-dark))}, ${Math.round(g*(1-dark))}, ${Math.round(b*(1-dark))}, ${a})`;
       const layers = [
-        { base: horizon + 18, amp: 10, freq: 0.008,  phase: t * 0.00045, colorTop: `rgba(${lerp(24,70,d)}, ${lerp(72,140,d)}, ${lerp(120,190,d)}, ${lerp(0.55,0.45,d)})`, colorBottom: `rgba(${lerp(6,30,d)}, ${lerp(24,80,d)}, ${lerp(50,120,d)}, ${lerp(0.65,0.55,d)})`, alpha: 1, stroke: `rgba(140,210,255,${lerp(0.06,0.12,d)})` },
-        { base: horizon + 34, amp: 14, freq: 0.0105, phase: t * 0.00062 + 1.2, colorTop: `rgba(${lerp(18,50,d)}, ${lerp(68,130,d)}, ${lerp(118,185,d)}, ${lerp(0.72,0.58,d)})`, colorBottom: `rgba(${lerp(5,20,d)}, ${lerp(22,70,d)}, ${lerp(46,110,d)}, ${lerp(0.82,0.65,d)})`, alpha: 1, stroke: `rgba(140,210,255,${lerp(0.08,0.14,d)})` },
-        { base: horizon + 56, amp: 18, freq: 0.009,  phase: -t * 0.00052 + 2.1, colorTop: `rgba(${lerp(12,35,d)}, ${lerp(54,115,d)}, ${lerp(98,175,d)}, ${lerp(0.82,0.68,d)})`, colorBottom: `rgba(${lerp(4,15,d)}, ${lerp(18,60,d)}, ${lerp(40,100,d)}, ${lerp(0.92,0.75,d)})`, alpha: 1, stroke: `rgba(140,210,255,${lerp(0.1,0.16,d)})` },
-        { base: horizon + 84, amp: 24, freq: 0.0075, phase: t * 0.00072 + 0.4, colorTop: `rgba(${lerp(8,25,d)}, ${lerp(40,95,d)}, ${lerp(78,160,d)}, ${lerp(0.9,0.78,d)})`, colorBottom: `rgba(${lerp(2,10,d)}, ${lerp(12,50,d)}, ${lerp(30,90,d)}, ${lerp(0.96,0.85,d)})`, alpha: 1, stroke: `rgba(150,220,255,${lerp(0.11,0.18,d)})` },
-        { base: horizon + 120, amp: 32, freq: 0.0062, phase: -t * 0.00058 + 3.4, colorTop: `rgba(${lerp(5,15,d)}, ${lerp(28,75,d)}, ${lerp(58,140,d)}, ${lerp(0.96,0.88,d)})`, colorBottom: `rgba(${lerp(1,5,d)}, ${lerp(8,35,d)}, ${lerp(22,75,d)}, 1)`, alpha: 1, stroke: `rgba(150,220,255,${lerp(0.08,0.14,d)})` }
+        { base: horizon + 18, amp: 10, freq: 0.008,  phase: t * 0.00045, colorTop: wc(lerp(24,70,d), lerp(72,140,d), lerp(120,190,d), lerp(0.55,0.45,d)), colorBottom: wc(lerp(6,30,d), lerp(24,80,d), lerp(50,120,d), lerp(0.65,0.55,d)), alpha: 1, stroke: `rgba(140,210,255,${lerp(0.06,0.12,d)})` },
+        { base: horizon + 34, amp: 14, freq: 0.0105, phase: t * 0.00062 + 1.2, colorTop: wc(lerp(18,50,d), lerp(68,130,d), lerp(118,185,d), lerp(0.72,0.58,d)), colorBottom: wc(lerp(5,20,d), lerp(22,70,d), lerp(46,110,d), lerp(0.82,0.65,d)), alpha: 1, stroke: `rgba(140,210,255,${lerp(0.08,0.14,d)})` },
+        { base: horizon + 56, amp: 18, freq: 0.009,  phase: -t * 0.00052 + 2.1, colorTop: wc(lerp(12,35,d), lerp(54,115,d), lerp(98,175,d), lerp(0.82,0.68,d)), colorBottom: wc(lerp(4,15,d), lerp(18,60,d), lerp(40,100,d), lerp(0.92,0.75,d)), alpha: 1, stroke: `rgba(140,210,255,${lerp(0.1,0.16,d)})` },
+        { base: horizon + 84, amp: 24, freq: 0.0075, phase: t * 0.00072 + 0.4, colorTop: wc(lerp(8,25,d), lerp(40,95,d), lerp(78,160,d), lerp(0.9,0.78,d)), colorBottom: wc(lerp(2,10,d), lerp(12,50,d), lerp(30,90,d), lerp(0.96,0.85,d)), alpha: 1, stroke: `rgba(150,220,255,${lerp(0.11,0.18,d)})` },
+        { base: horizon + 120, amp: 32, freq: 0.0062, phase: -t * 0.00058 + 3.4, colorTop: wc(lerp(5,15,d), lerp(28,75,d), lerp(58,140,d), lerp(0.96,0.88,d)), colorBottom: wc(lerp(1,5,d), lerp(8,35,d), lerp(22,75,d), 1), alpha: 1, stroke: `rgba(150,220,255,${lerp(0.08,0.14,d)})` }
       ];
 
       drawReflection();
       drawMist();
       for (const layer of layers) drawWave(layer);
+      drawWeather();
 
-      // underwater below the surface
       ctx.save();
       ctx.translate(0, h);
       drawUnderwater();
@@ -600,13 +736,19 @@
 
       ctx.restore();
 
-      // global vignette (screen space)
+      // brightness overlay (in-game brightness control)
+      if (brightness < 0.999) {
+        ctx.fillStyle = `rgba(0,0,0,${(1 - brightness) * 0.65})`;
+        ctx.fillRect(0, 0, w, h);
+      }
+
       const vg = ctx.createRadialGradient(w * 0.5, h * 0.55, Math.min(w,h) * 0.2, w * 0.5, h * 0.6, Math.max(w,h) * 0.8);
       vg.addColorStop(0, 'rgba(0,0,0,0)');
-      vg.addColorStop(1, `rgba(0,0,0,${lerp(0.28,0.14,d) + cameraY*0.12})`);
+      vg.addColorStop(1, `rgba(0,0,0,${lerp(0.28,0.14,d) + cameraY*0.12 + weatherIntensity*0.05})`);
       ctx.fillStyle = vg;
       ctx.fillRect(0, 0, w, h);
 
+      updateAudioMix();
       requestAnimationFrame(render);
     }
     requestAnimationFrame(render);
@@ -672,7 +814,10 @@
     }
 
     async function startAudio() {
-      if (!soundEnabled || (started && !bgm.paused)) return;
+      if (!soundEnabled) return;
+      ensureAudio();
+      if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+      if (!bgm.paused) { syncSettingsUI(); return; }
       try {
         await bgm.play();
         started = true;
@@ -693,20 +838,23 @@
       }
     });
 
-    setSound.addEventListener('change', () => { soundEnabled = setSound.checked; if (soundEnabled) startAudio(); else bgm.pause(); syncSettingsUI(); });
-    setCycle.addEventListener('change', () => { dayCycle = setCycle.checked; syncSettingsUI(); });
+    setSound.addEventListener('change', () => { soundEnabled = setSound.checked; if (soundEnabled) startAudio(); else bgm.pause(); sfxClick(); syncSettingsUI(); });
+    setVolume.addEventListener('input', () => { setMasterVolume(Number(setVolume.value) / 100); if (soundEnabled) startAudio(); });
+    setBrightness.addEventListener('input', () => { brightness = Number(setBrightness.value) / 100; sfxClick(); });
+    setCycle.addEventListener('change', () => { dayCycle = setCycle.checked; if (!dayCycle) manualDayPhase = getCyclePhase(); sfxClick(); syncSettingsUI(); });
     setDay.addEventListener('change', () => {
       if (setDay.checked) { forcedMode = 'day'; setNight.checked = false; dayCycle = false; setCycle.checked = false; }
       else if (!setNight.checked) { forcedMode = null; }
-      syncSettingsUI();
+      sfxClick(); syncSettingsUI();
     });
     setNight.addEventListener('change', () => {
       if (setNight.checked) { forcedMode = 'night'; setDay.checked = false; dayCycle = false; setCycle.checked = false; }
       else if (!setDay.checked) { forcedMode = null; }
-      syncSettingsUI();
+      sfxClick(); syncSettingsUI();
     });
-    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(1); });
-    goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(0); });
+    setWeather.addEventListener('change', () => { weatherMode = setWeather.value; sfxClick(); });
+    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(1); sfxDive(true); });
+    goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(0); sfxDive(false); });
     feedbackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFeedback(); });
     feedbackCancel.addEventListener('click', closeFeedback);
     feedbackSend.addEventListener('click', submitFeedback);
