@@ -83,6 +83,7 @@
     .badge.suggestion { color:#b8e0ff; }
     .badge.spam { color:#ffb0b0; }
     .badge.harassment { color:#ffcf8a; }
+    .badge.other { color:#d4dbe6; }
     .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
     .modal-note { margin-top:8px; font-size:11px; color:var(--muted); line-height:1.4; }
     .hint {
@@ -765,33 +766,38 @@
     // --- feedback ---
     const FEEDBACK_REPO = 'iluxz/ocean'; // change when repo exists
     function classifyFeedback(text) {
-      const t = (text || '').toLowerCase().trim();
+      const raw = (text || '').trim();
+      const t = raw.toLowerCase();
       const rules = {
-        harassment: [/\b(kill|die|kys|suicide|threat|bomb|shoot|stab|rape|nazi)\b/, /\bi know where you live\b/, /\bdox\b/],
+        harassment: [/\b(kill|die|kys|suicide|threat|bomb|shoot|stab|rape|nazi|dox)\b/, /\bi know where you live\b/, /\b(fuck(ing)? you|you suck|moron|idiot|stfu|shut up|hate you|dumbass|asshole|bitch)\b/],
         spam: [/(.)\1{7,}/, /\b(buy now|free money|crypto|casino|viagra|nft promo)\b/, /^https?:\/\/\S+$/],
-        bug: [/\b(bug|broken|crash|error|glitch|not working|doesn'?t work|issue|lag|freeze|stuck|black screen|overlap)\b/],
-        suggestion: [/\b(add|should|could|please|would be nice|feature|suggest|option|improve|make it)\b/]
+        bug: [/\b(bug|broken|crash|error|glitch|not working|doesn'?t work|issue|lag|freeze|stuck|black screen|overlap|flicker|audio bug|sound bug)\b/],
+        suggestion: [/\b(add|should|could|please|would be nice|feature|suggest|option|improve|make it|can you|maybe)\b/]
       };
       const score = { harassment:0, spam:0, bug:0, suggestion:0 };
-      for (const [k, arr] of Object.entries(rules)) for (const r of arr) if (r.test(t)) score[k] += 2;
-      if (t.length < 4) score.spam += 2;
-      if (t.length > 12 && !/\b(bug|broken|crash|add|please|should)\b/.test(t) && /https?:\/\//.test(t)) score.spam += 2;
-      let category = 'suggestion';
-      let max = -1;
-      for (const k of ['harassment','spam','bug','suggestion']) { if (score[k] > max) { max = score[k]; category = k; } }
-      if (max <= 0) category = t.includes('?') || t.includes('should') ? 'suggestion' : 'bug';
-      const actionMap = { bug: 'prioritize', suggestion: 'less priority', spam: 'filter', harassment: 'flag for review' };
+      for (const [k, arr] of Object.entries(rules)) for (const r of arr) if (r.test(t)) score[k] += 3;
+      if (raw.length < 4) score.spam += 2;
+      if (/^https?:\/\//.test(t) && !score.bug && !score.suggestion) score.spam += 3;
+      let category = 'other';
+      let max = 0;
+      for (const k of ['harassment','spam','bug','suggestion']) {
+        if (score[k] > max) { max = score[k]; category = k; }
+      }
+      if (max === 0) category = 'other';
+      const actionMap = { bug: 'prioritize', suggestion: 'less priority', spam: 'filter', harassment: 'flag for review', other: 'needs review' };
       return { category, action: actionMap[category] };
     }
 
     function updateFeedbackMeta() {
       const { category, action } = classifyFeedback(feedbackText.value);
-      feedbackCategory.textContent = category === 'harassment' ? 'harassment/threat' : category;
-      feedbackCategory.className = `badge ${category === 'harassment' ? 'harassment' : category}`;
+      const labelMap = { harassment: 'harassment/threat', other: 'other/uncategorized' };
+      feedbackCategory.textContent = labelMap[category] || category;
+      feedbackCategory.className = `badge ${category}`;
       feedbackAction.textContent = action;
-      feedbackSend.textContent = (category === 'spam' || category === 'harassment') ? 'flagged (blocked)' : 'open github issue';
-      feedbackSend.disabled = (category === 'spam' || category === 'harassment');
-      feedbackSend.style.opacity = feedbackSend.disabled ? '0.55' : '1';
+      const blocked = category === 'spam' || category === 'harassment';
+      feedbackSend.textContent = blocked ? 'flagged (blocked)' : 'open github issue';
+      feedbackSend.disabled = blocked;
+      feedbackSend.style.opacity = blocked ? '0.55' : '1';
     }
 
     function openFeedback() { feedbackModal.classList.add('open'); feedbackModal.setAttribute('aria-hidden','false'); updateFeedbackMeta(); feedbackText.focus(); }
