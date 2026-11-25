@@ -400,10 +400,14 @@
     let cameraY = 0;
     let cameraTarget = 0;
     let camAnim = null;
+    const MAX_DEPTH = 2;
     let lightning = 0;
     let nextLightning = 4000 + Math.random() * 8000;
     const ripples = [];
     const clickBubbles = [];
+    const abyssParticles = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random()*1.8+0.3, ph: Math.random()*10, sp: 0.00001+Math.random()*0.00002 }));
+    const ventBubbles = Array.from({ length: 18 }, () => ({ x: 0.5 + (Math.random()-0.5)*0.08, y: Math.random(), r: Math.random()*3+1.2, sp: 0.00003+Math.random()*0.00005 }));
+    const angler = { x: 0.15, y: 0.45, dir: 1, sp: 0.000012, ph: Math.random()*10 };
     const discoveries = JSON.parse(localStorage.getItem('ocean_discoveries') || '[]');
     const achievements = JSON.parse(localStorage.getItem('ocean_achievements') || '[]');
     let equippedDiscovery = localStorage.getItem('ocean_equipped') || '';
@@ -427,7 +431,10 @@
       { id:'jelly', name:'Moon Jelly Drift', desc:'A rare jellyfish pulsed through the deep blue like a living lantern.', emoji:'🪼', c1:'#183a73', c2:'#6e86d6' },
       { id:'storm', name:'Storm Witness', desc:'You caught lightning splitting the clouds above a restless sea.', emoji:'⚡', c1:'#24304a', c2:'#6e7d96' },
       { id:'deep', name:'Deep Blue Descent', desc:'You reached the deep. The light thinned, the water darkened, and the ocean got quiet.', emoji:'🌊', c1:'#06203b', c2:'#0f5f89' },
-      { id:'aurora', name:'Aurora Night', desc:'The night sky glowed with aurora over calm water.', emoji:'🌌', c1:'#10204a', c2:'#3c8fd1' }
+      { id:'aurora', name:'Aurora Night', desc:'The night sky glowed with aurora over calm water.', emoji:'🌌', c1:'#10204a', c2:'#3c8fd1' },
+      { id:'abyss', name:'The Abyss', desc:'You went deeper than deep. The water turned black-blue and the ocean started whispering in bioluminescence.', emoji:'🕳️', c1:'#020614', c2:'#1a0f3d' },
+      { id:'angler', name:'Anglerfish Encounter', desc:'A glowing anglerfish drifted out of the dark, curious, creepy, and kinda beautiful.', emoji:'🐡', c1:'#05081a', c2:'#1f5f5a' },
+      { id:'vent', name:'Hydrothermal Vent', desc:'A vent on the abyss floor breathed heat and strange light into the crushing dark.', emoji:'♨️', c1:'#120a08', c2:'#7a2d12' }
     ];
     const ACHIEVEMENT_DEFS = [
       { id:'first_find', name:'First Discovery', desc:'Find your first discovery.', check: () => discoveries.length >= 1 },
@@ -435,7 +442,9 @@
       { id:'oceanographer', name:'Oceanographer', desc:'Find all discoveries.', check: () => discoveries.length >= DISCOVERY_DEFS.length },
       { id:'clicker', name:'Hands On', desc:'Click the ocean 20 times.', check: () => clicks >= 20 },
       { id:'photographer', name:'Photo Mode', desc:'Save a photo.', check: () => photoCount >= 1 },
-      { id:'chaos', name:'Crash Test Dummy', desc:'Initiate a crash.', check: () => achievements.includes('chaos') }
+      { id:'chaos', name:'Crash Test Dummy', desc:'Initiate a crash.', check: () => achievements.includes('chaos') },
+      { id:'abyss_diver', name:'Abyss Diver', desc:'Reach the abyss in Ocean: Part 3.', check: () => discoveries.includes('abyss') },
+      { id:'abyss_secrets', name:'Abyss Secrets', desc:'Find every abyss discovery.', check: () => ['abyss','angler','vent'].every(id => discoveries.includes(id)) }
     ];
 
     function saveSettings() {
@@ -496,6 +505,7 @@
       syncSettingsUI();
     }
     const UPDATE_LOG = [
+      { date: '2026-11-25', title: 'ocean: part 3 - the abyss', detail: 'you can go down again past underwater into a new abyss layer, with a darker biome, new creatures/vent, new abyss discoveries, new achievements, and depth-aware audio/visuals.' },
       { date: '2026-11-25', title: 'achievements + equipped discoveries', detail: 'split achievements into their own button, made discoveries into proper cards with lock states, and equipping now spawns the discovery in the world.' },
       { date: '2026-11-25', title: 'photo mode + crash fixes', detail: 'added photo mode exit button, fixed rain clipping at the waterline, avoided file:// bgm CORS silence, and guarded audio volume from non-finite values.' },
       { date: '2026-11-25', title: 'crash mode chaos', detail: 'added initiate crash, wii-style crash buzz, and last-second crash audio looping behavior.' },
@@ -640,33 +650,35 @@
     }
     function updateAudioMix() {
       bgm.muted = !soundEnabled;
-      const under = Number.isFinite(cameraY) ? Math.max(0, Math.min(1, cameraY)) : 0;
+      const depthRaw = Number.isFinite(cameraY) ? Math.max(0, Math.min(MAX_DEPTH, cameraY)) : 0;
+      const under = Math.min(1, depthRaw);
+      const abyss = Math.max(0, depthRaw - 1);
       const volBase = Number.isFinite(masterVolume) ? Math.max(0, Math.min(1, masterVolume)) : 0.65;
-      const duck = bgmFilter ? 1 : lerp(1, 0.32, Math.pow(under, 1.1));
+      const duck = bgmFilter ? 1 : lerp(1, 0.22, Math.pow(depthRaw / MAX_DEPTH, 1.1));
       const vol = volBase * (Number.isFinite(duck) ? duck : 1);
       bgm.volume = Number.isFinite(vol) ? Math.max(0, Math.min(1, vol)) : volBase;
       if (!audioCtx) return;
       const on = soundEnabled ? 1 : 0;
       masterGain.gain.setTargetAtTime(on * masterVolume, audioCtx.currentTime, 0.08);
-      const surface = 1 - under;
+      const surface = Math.max(0, 1 - depthRaw);
       const d = dayFactor;
       rainGain.gain.setTargetAtTime(surface * Math.min(1, weatherIntensity) * 0.2, audioCtx.currentTime, 0.25);
       windGain.gain.setTargetAtTime(surface * Math.max(0, weatherIntensity - 0.8) * 0.16, audioCtx.currentTime, 0.3);
-      underwaterGain.gain.setTargetAtTime(under * 0.08, audioCtx.currentTime, 0.2);
+      underwaterGain.gain.setTargetAtTime((under * 0.08) + (abyss * 0.04), audioCtx.currentTime, 0.2);
       dayGain.gain.setTargetAtTime(surface * d * (0.012 + (1-Math.min(1,weatherIntensity))*0.01), audioCtx.currentTime, 0.4);
       nightGain.gain.setTargetAtTime(surface * (1-d) * 0.01, audioCtx.currentTime, 0.4);
       if (rainNoise) rainNoise.f.frequency.setTargetAtTime(900 + weatherIntensity * 700, audioCtx.currentTime, 0.2);
       if (windNoise) windNoise.f.frequency.setTargetAtTime(400 + weatherIntensity * 250, audioCtx.currentTime, 0.2);
       if (bgmFilter) {
-        const cutoff = lerp(14000, 650, Math.pow(under, 1.2));
+        const cutoff = lerp(14000, 420, Math.pow(depthRaw / MAX_DEPTH, 1.25));
         bgmFilter.frequency.setTargetAtTime(cutoff, audioCtx.currentTime, 0.18);
-        bgmFilter.Q.setTargetAtTime(0.7 + under * 0.6, audioCtx.currentTime, 0.18);
+        bgmFilter.Q.setTargetAtTime(0.7 + Math.min(1, depthRaw) * 0.8, audioCtx.currentTime, 0.18);
       }
     }
 
     function easeInOutCubic(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
     function setCamera(target) {
-      target = Math.max(0, Math.min(1, target));
+      target = Math.max(0, Math.min(MAX_DEPTH, target));
       camAnim = { from: cameraY, to: target, start: performance.now(), dur: 1600 };
       cameraTarget = target;
       syncSettingsUI();
@@ -936,18 +948,37 @@
 
     function drawEquippedUnderwater() {
       if (!equippedDiscovery || !discoveries.includes(equippedDiscovery)) return;
+      const inAbyss = cameraY >= 1.2;
       if (equippedDiscovery === 'jelly') {
         const x = w * 0.72 + Math.sin(animTime * 0.0003) * 30;
         const y = h * 0.48 + Math.sin(animTime * 0.0007) * 18;
-        ctx.save(); ctx.globalAlpha = 0.92; drawJelly(x, y, 1.05); ctx.restore();
+        ctx.save(); ctx.globalAlpha = 0.92; drawJelly(x, y, inAbyss ? 1.25 : 1.05); ctx.restore();
       } else if (equippedDiscovery === 'deep') {
         const x = w * 0.5, y = h * 0.72 + Math.sin(animTime*0.0008)*8;
         ctx.save();
         const g = ctx.createRadialGradient(x, y, 0, x, y, 70);
-        g.addColorStop(0,'rgba(120,220,255,0.22)'); g.addColorStop(1,'rgba(120,220,255,0)');
+        g.addColorStop(0,inAbyss ? 'rgba(140,120,255,0.24)' : 'rgba(120,220,255,0.22)'); g.addColorStop(1,'rgba(120,220,255,0)');
         ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,70,0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle='rgba(140,220,255,0.45)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y,20+Math.sin(animTime*0.002)*2,0,Math.PI*2); ctx.stroke();
-        ctx.fillStyle='rgba(180,235,255,0.75)'; ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle=inAbyss ? 'rgba(170,150,255,0.5)' : 'rgba(140,220,255,0.45)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y,20+Math.sin(animTime*0.002)*2,0,Math.PI*2); ctx.stroke();
+        ctx.fillStyle=inAbyss ? 'rgba(210,190,255,0.8)' : 'rgba(180,235,255,0.75)'; ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      } else if (equippedDiscovery === 'angler') {
+        const x = w * 0.3 + Math.sin(animTime*0.0002)*40;
+        const y = h * 0.55 + Math.sin(animTime*0.0007)*18;
+        ctx.save(); ctx.globalAlpha = 0.95; drawAngler(x, y, 0.75); ctx.restore();
+      } else if (equippedDiscovery === 'vent') {
+        const vx = w * 0.5, fy = h * 0.86;
+        ctx.save();
+        ctx.fillStyle = '#1a1512'; ctx.beginPath(); ctx.moveTo(vx-20, fy+2); ctx.lineTo(vx-8, fy-18); ctx.lineTo(vx+8, fy-18); ctx.lineTo(vx+20, fy+2); ctx.closePath(); ctx.fill();
+        const vg = ctx.createRadialGradient(vx, fy-16, 0, vx, fy-16, 30);
+        vg.addColorStop(0, 'rgba(255,120,40,0.35)'); vg.addColorStop(1, 'rgba(255,120,40,0)');
+        ctx.fillStyle = vg; ctx.beginPath(); ctx.arc(vx, fy-16, 30, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      } else if (equippedDiscovery === 'abyss') {
+        ctx.save();
+        const g = ctx.createRadialGradient(w*0.5, h*0.5, 10, w*0.5, h*0.5, 140);
+        g.addColorStop(0, 'rgba(100,80,255,0.12)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
         ctx.restore();
       }
     }
@@ -1272,9 +1303,8 @@
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
 
-      // light rays fade with depth
       ctx.save();
-      ctx.globalAlpha = lerp(0.02, 0.06, d) * (1 - cameraY * 0.8);
+      ctx.globalAlpha = lerp(0.02, 0.06, d) * (1 - Math.min(1,cameraY) * 0.8);
       for (let i = 0; i < 4; i++) {
         const rx = w * (0.2 + i * 0.18) + Math.sin(animTime * 0.00008 + i) * 10;
         const rg = ctx.createLinearGradient(rx, 0, rx + 30, h * 0.85);
@@ -1315,7 +1345,6 @@
         drawFish(f, fx, fy2, f.s * Math.min(w, h) * 0.00055);
       }
 
-      // rare jellyfish
       if (jelly.active) {
         const jx = ((jelly.x + animTime * jelly.sp * 20) % 1.2 - 0.1) * w;
         const jy = h * jelly.y + Math.sin(animTime*0.0006 + jelly.ph) * 20;
@@ -1331,6 +1360,101 @@
       sg.addColorStop(0, `rgb(${topCol[0]},${topCol[1]},${topCol[2]})`);
       sg.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = sg; ctx.fillRect(0, 0, w, 140);
+
+      // hint into abyss
+      const abyssHint = ctx.createLinearGradient(0, h - 120, 0, h);
+      abyssHint.addColorStop(0, 'rgba(0,0,0,0)');
+      abyssHint.addColorStop(1, 'rgba(1,2,12,0.55)');
+      ctx.fillStyle = abyssHint; ctx.fillRect(0, h - 120, w, 120);
+    }
+
+    function drawAngler(x, y, s) {
+      ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+      ctx.fillStyle = 'rgba(35,45,70,0.95)';
+      ctx.beginPath(); ctx.ellipse(0, 0, 34, 22, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(20,28,45,0.95)';
+      ctx.beginPath(); ctx.moveTo(-30,0); ctx.lineTo(-48,-12); ctx.lineTo(-48,12); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(120,200,180,0.45)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(10,-18); ctx.quadraticCurveTo(22,-36, 34,-28); ctx.stroke();
+      const glow = 0.5 + 0.5*Math.sin(animTime*0.003);
+      ctx.fillStyle = `rgba(170,255,220,${0.25 + glow*0.35})`;
+      ctx.beginPath(); ctx.arc(34,-28, 8 + glow*2, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(220,255,245,0.95)'; ctx.beginPath(); ctx.arc(34,-28, 3.5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#e9fbff'; ctx.beginPath(); ctx.arc(12,-4, 3, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#1b2b3a'; ctx.beginPath(); ctx.arc(13,-4, 1.4, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = 'rgba(210,240,255,0.35)'; ctx.beginPath(); ctx.moveTo(18,6); ctx.lineTo(28,10); ctx.lineTo(20,14); ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawAbyss() {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#020713');
+      g.addColorStop(0.35, '#01030b');
+      g.addColorStop(1, '#000105');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      // faint bioluminescent haze
+      const haze = ctx.createRadialGradient(w*0.5, h*0.35, 20, w*0.5, h*0.45, w*0.7);
+      haze.addColorStop(0, 'rgba(40,80,140,0.08)');
+      haze.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = haze; ctx.fillRect(0,0,w,h);
+
+      for (const p of abyssParticles) {
+        const px = (p.x * w + Math.sin(animTime*0.00015 + p.ph) * 18) % w;
+        const py = (p.y * h + animTime * p.sp * 8) % h;
+        const a = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(animTime*0.001 + p.ph));
+        ctx.fillStyle = `rgba(120,220,255,${a})`;
+        ctx.beginPath(); ctx.arc(px, py, p.r, 0, Math.PI*2); ctx.fill();
+      }
+
+      // abyss floor / vents
+      const fy = h * 0.86;
+      ctx.fillStyle = '#05070d';
+      ctx.beginPath(); ctx.moveTo(0,h); ctx.lineTo(0,fy);
+      for (let x=0; x<=w; x+=40) ctx.lineTo(x, fy + Math.sin(x*0.02)*6 - 4);
+      ctx.lineTo(w,h); ctx.closePath(); ctx.fill();
+
+      // vent
+      const vx = w * 0.62;
+      ctx.fillStyle = '#1a1512';
+      ctx.beginPath(); ctx.moveTo(vx-28, fy+2); ctx.lineTo(vx-10, fy-24); ctx.lineTo(vx+10, fy-24); ctx.lineTo(vx+28, fy+2); ctx.closePath(); ctx.fill();
+      const vg = ctx.createRadialGradient(vx, fy-20, 0, vx, fy-20, 40);
+      vg.addColorStop(0, `rgba(255,120,40,${0.25+0.15*Math.sin(animTime*0.004)})`);
+      vg.addColorStop(1, 'rgba(255,120,40,0)');
+      ctx.fillStyle = vg; ctx.beginPath(); ctx.arc(vx, fy-20, 40, 0, Math.PI*2); ctx.fill();
+      for (const vb of ventBubbles) {
+        vb.y -= vb.sp * 16;
+        if (vb.y < -0.05) { vb.y = 0.9 + Math.random()*0.1; vb.x = 0.62 + (Math.random()-0.5)*0.05; }
+        const bx = vb.x * w; const by = fy - 24 - vb.y * 180;
+        ctx.strokeStyle = 'rgba(255,170,120,0.25)'; ctx.beginPath(); ctx.arc(bx, by, vb.r, 0, Math.PI*2); ctx.stroke();
+      }
+
+      // anglerfish
+      angler.x += angler.sp * angler.dir * 16;
+      if (angler.x > 1.15) angler.dir = -1;
+      if (angler.x < -0.15) angler.dir = 1;
+      const ax = angler.x * w;
+      const ay = h * angler.y + Math.sin(animTime*0.0006 + angler.ph) * 26;
+      ctx.save();
+      if (angler.dir < 0) { ctx.translate(ax, ay); ctx.scale(-1,1); drawAngler(0,0,0.9); }
+      else drawAngler(ax, ay, 0.9);
+      ctx.restore();
+
+      // abyss creatures (tiny glowing fish)
+      for (let i=0;i<8;i++) {
+        const fx = ((animTime*0.00002*(i%2?1:-1) + i*0.13) % 1.2 - 0.1) * w;
+        const fy = h*(0.2 + (i%5)*0.12) + Math.sin(animTime*0.001+i)*14;
+        ctx.fillStyle = `rgba(120,240,210,${0.18 + (i%3)*0.06})`;
+        ctx.beginPath(); ctx.ellipse(fx, fy, 7, 3, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(170,255,230,0.6)'; ctx.beginPath(); ctx.arc(fx + (i%2?4:-4), fy-1, 1.2, 0, Math.PI*2); ctx.fill();
+      }
+
+      // top fade from deep water
+      const topFade = ctx.createLinearGradient(0,0,0,120);
+      topFade.addColorStop(0,'rgba(1,4,14,0.95)');
+      topFade.addColorStop(1,'rgba(1,4,14,0)');
+      ctx.fillStyle = topFade; ctx.fillRect(0,0,w,120);
     }
 
     function render(ts) {
@@ -1366,7 +1490,7 @@
       if (camAnim) {
         const p = Math.min(1, (ts - camAnim.start) / camAnim.dur);
         cameraY = camAnim.from + (camAnim.to - camAnim.from) * easeInOutCubic(p);
-        if (p >= 1) { camAnim = null; if (cameraY > 0.95) recordDiscovery('deep'); }
+        if (p >= 1) { camAnim = null; if (cameraY > 0.95) recordDiscovery('deep'); if (cameraY > 1.95) recordDiscovery('abyss'); }
       }
 
       ctx.clearRect(0, 0, w, h);
@@ -1400,6 +1524,12 @@
       ctx.save();
       ctx.translate(0, h);
       drawUnderwater();
+      if (cameraY < 1.5) drawEquippedUnderwater();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(0, h * 2);
+      drawAbyss();
       drawEquippedUnderwater();
       ctx.restore();
 
@@ -1417,13 +1547,23 @@
     }
     requestAnimationFrame(render);
 
+    function depthLabel(target) {
+      if (target <= 0.01) return 'surface';
+      if (target < 1.5) return 'underwater';
+      return 'abyss';
+    }
     function syncSettingsUI() {
       setSound.checked = soundEnabled;
       setCycle.checked = dayCycle;
       setDay.checked = forcedMode === 'day';
       setNight.checked = forcedMode === 'night';
-      goDownBtn.textContent = cameraTarget >= 1 ? 'underwater' : 'go down';
-      goUpBtn.textContent = cameraTarget <= 0 ? 'surface' : 'go up';
+      goDownBtn.textContent = cameraTarget >= MAX_DEPTH - 0.01 ? 'abyss' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
+      goUpBtn.textContent = cameraTarget <= 0.01 ? 'surface' : (cameraTarget > 1.01 ? 'go up' : 'go up');
+      goDownBtn.disabled = cameraTarget >= MAX_DEPTH - 0.01;
+      goUpBtn.disabled = cameraTarget <= 0.01;
+      goDownBtn.style.opacity = goDownBtn.disabled ? '0.45' : '1';
+      goUpBtn.style.opacity = goUpBtn.disabled ? '0.45' : '1';
+      discoverHint.textContent = `discoveries: ${discoveries.length}/${DISCOVERY_DEFS.length} found • depth: ${depthLabel(cameraTarget)}`;
     }
 
     // --- feedback ---
@@ -1519,10 +1659,6 @@
     }
 
     function syncSettingsUI() {
-      goDownBtn.disabled = cameraTarget >= 0.99;
-      goUpBtn.disabled = cameraTarget <= 0.01;
-      goDownBtn.style.opacity = goDownBtn.disabled ? '0.45' : '1';
-      goUpBtn.style.opacity = goUpBtn.disabled ? '0.45' : '1';
       setSound.checked = soundEnabled;
       setCycle.checked = dayCycle;
       setSpeed.value = String(Math.round(cycleSpeed * 100));
@@ -1532,7 +1668,14 @@
       setWeather.value = weatherMode;
       setMotion.checked = reducedMotion;
       setPhoto.checked = photoMode;
+      goDownBtn.textContent = cameraTarget >= MAX_DEPTH - 0.01 ? 'abyss' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
+      goUpBtn.textContent = cameraTarget <= 0.01 ? 'surface' : 'go up';
+      goDownBtn.disabled = cameraTarget >= MAX_DEPTH - 0.01;
+      goUpBtn.disabled = cameraTarget <= 0.01;
+      goDownBtn.style.opacity = goDownBtn.disabled ? '0.45' : '1';
+      goUpBtn.style.opacity = goUpBtn.disabled ? '0.45' : '1';
       document.body.classList.toggle('photo-mode', photoMode);
+      discoverHint.textContent = `discoveries: ${discoveries.length}/${DISCOVERY_DEFS.length} found • depth: ${depthLabel(cameraTarget)}`;
       renderDiscoveries();
     }
 
@@ -1606,8 +1749,8 @@
     }
     setPhoto.addEventListener('change', () => { setPhotoMode(setPhoto.checked); sfxClick(); });
     photoExitBtn.addEventListener('click', (e) => { e.stopPropagation(); setPhotoMode(false); sfxClick(); });
-    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(1); sfxDive(true); });
-    goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(0); sfxDive(false); });
+    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.min(MAX_DEPTH, cameraTarget + 1)); sfxDive(true); });
+    goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.max(0, cameraTarget - 1)); sfxDive(false); });
     photoBtn.addEventListener('click', (e) => { e.stopPropagation(); savePhoto(); });
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
     logClose.addEventListener('click', () => { logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); });
@@ -1639,7 +1782,6 @@
       if (cameraY < 0.5 && worldY > horizon && worldY < h) {
         ripples.push({ x, y: worldY, r: 5, age: 0, life: 900 });
         sfxSplash();
-        // bottle click?
         if (bottle.active && Math.abs(x - bottle.screenX) < 22 && Math.abs(worldY - bottle.screenY) < 24) {
           bottle.found = true;
           bottle.active = false;
@@ -1648,6 +1790,16 @@
           recordDiscovery('bottle');
           sfxClick();
         }
+      } else if (cameraY >= 1.2) {
+        // abyss interactions
+        for (let i=0;i<6;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.8, sp: 0.25+Math.random()*0.5, ph: Math.random()*10, age:0, life: 1100+Math.random()*700 });
+        sfxBubble();
+        const localY = worldY - h * 2;
+        const ax = angler.x * w;
+        const ay = h * angler.y + Math.sin(animTime*0.0006 + angler.ph) * 26;
+        if (Math.abs(x - ax) < 60 && Math.abs(localY - ay) < 40) recordDiscovery('angler');
+        const vx = w * 0.62, vy = h * 0.86 - 24;
+        if (Math.abs(x - vx) < 50 && Math.abs(localY - vy) < 55) recordDiscovery('vent');
       } else if (cameraY > 0.2) {
         for (let i=0;i<5;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.5, sp: 0.3+Math.random()*0.6, ph: Math.random()*10, age:0, life: 900+Math.random()*500 });
         sfxBubble();
