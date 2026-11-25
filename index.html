@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ocean</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23030d1f%27/%3E%3Cpath d=%27M8 42c6 0 6-4 12-4s6 4 12 4 6-4 12-4 6 4 12 4v10H8z%27 fill=%27%234fa8d8%27/%3E%3Cpath d=%27M8 32c6 0 6-4 12-4s6 4 12 4 6-4 12-4 6 4 12 4v6c-6 0-6-4-12-4s-6 4-12 4-6-4-12-4-6 4-12 4z%27 fill=%27%237ec8ff%27 opacity=%27.85%27/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #020814;
+      --glow: #7ec8ff;
+      --text: rgba(236, 247, 255, 0.92);
+      --muted: rgba(236, 247, 255, 0.62);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--text);
+    }
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .hint {
+      transition: opacity .6s ease;
+    }
+    .hint.hidden { opacity: 0; }    .btn {
+      appearance: none;
+      border: 1px solid rgba(126, 200, 255, 0.22);
+      background: rgba(3, 16, 34, 0.45);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      transition: transform .15s ease, background .2s ease, border-color .2s ease;
+    }
+    .btn:hover { transform: translateY(-1px); background: rgba(10, 36, 68, 0.55); border-color: rgba(126, 200, 255, 0.38); }
+    .btn:active { transform: translateY(0); }
+    .settings-wrap { position: fixed; top: 18px; right: 18px; z-index: 12; }
+    .settings-panel {
+      position: absolute; top: 46px; right: 0; width: min(290px, calc(100vw - 36px));
+      padding: 14px; border-radius: 16px; border: 1px solid rgba(126, 200, 255, 0.2);
+      background: rgba(3, 16, 34, 0.72); backdrop-filter: blur(10px);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.35); display: none;
+    }
+    .settings-panel.open { display: block; }
+    .settings-title { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+    .setting-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-top:1px solid rgba(126,200,255,0.08); font-size:13px; }
+    .setting-row:first-of-type { border-top: 0; }
+    .setting-row label { color: var(--text); }
+    .setting-row small { display:block; color: var(--muted); font-size:11px; margin-top:2px; }
+    .toggle {
+      appearance:none; width:44px; height:26px; border-radius:999px; background:rgba(255,255,255,0.12);
+      border:1px solid rgba(126,200,255,0.18); position:relative; cursor:pointer; flex:0 0 auto; transition:background .2s ease;
+    }
+    .toggle::after { content:""; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:rgba(236,247,255,0.9); transition:transform .2s ease; }
+    .toggle:checked { background: rgba(80,170,255,0.45); }
+    .toggle:checked::after { transform: translateX(18px); }
+    .feedback { font-size:11px; color:var(--muted); min-height:16px; padding-top:6px; border-top:1px solid rgba(126,200,255,0.08); }
+    .action-row { display:flex; gap:8px; padding-top:10px; border-top:1px solid rgba(126,200,255,0.08); }
+    .action-row .btn { flex:1; text-align:center; padding:9px 10px; }
+    .modal { position:fixed; inset:0; display:none; place-items:center; z-index:20; background:rgba(2,8,20,0.45); backdrop-filter: blur(4px); }
+    .modal.open { display:grid; }
+    .modal-card { width:min(560px, calc(100vw - 32px)); background:rgba(3,16,34,0.88); border:1px solid rgba(126,200,255,0.2); border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,0.45); }
+    .modal-card h2 { font-size:14px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; font-weight:500; }
+    .modal-card textarea { width:100%; min-height:130px; resize:vertical; background:rgba(255,255,255,0.04); color:var(--text); border:1px solid rgba(126,200,255,0.18); border-radius:10px; padding:10px; font:inherit; font-size:13px; }
+    .modal-meta { display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:10px; font-size:12px; color:var(--muted); }
+    .badge { padding:4px 8px; border-radius:999px; border:1px solid rgba(126,200,255,0.2); font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
+    .badge.bug { color:#9fd0ff; }
+    .badge.suggestion { color:#b8e0ff; }
+    .badge.spam { color:#ffb0b0; }
+    .badge.harassment { color:#ffcf8a; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+    .modal-note { margin-top:8px; font-size:11px; color:var(--muted); line-height:1.4; }
+    .hint {
+      position: fixed;
+      left: 18px;
+      bottom: 20px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(236, 247, 255, 0.35);
+      z-index: 11;
+      user-select: none;
+      transition: opacity .6s ease;
+    }
+    .hint.hidden { opacity: 0; }
+  </style>
+</head>
+<body>
+  <canvas id="ocean"></canvas>
+
+  <div class="settings-wrap">
+    <button class="btn" id="settingsBtn" type="button" aria-expanded="false" aria-controls="settingsPanel">settings</button>
+    <div class="settings-panel" id="settingsPanel">
+      <div class="settings-title">ocean settings</div>
+      <div class="setting-row"><label for="setSound">sound<small>play DeepBlue.wav</small></label><input class="toggle" id="setSound" type="checkbox" checked></div>
+      <div class="setting-row"><label for="setCycle">day n night cycle<small>auto animate sky</small></label><input class="toggle" id="setCycle" type="checkbox" checked></div>
+      <div class="setting-row"><label for="setDay">day<small>force daytime</small></label><input class="toggle" id="setDay" type="checkbox"></div>
+      <div class="setting-row"><label for="setNight">night<small>force nighttime</small></label><input class="toggle" id="setNight" type="checkbox" checked></div>
+      <div class="action-row">
+        <button class="btn" id="goDownBtn" type="button">go down</button>
+        <button class="btn" id="goUpBtn" type="button">go up</button>
+      </div>
+      <div class="action-row">
+        <button class="btn" id="feedbackBtn" type="button">send feedback</button>
+      </div>
+      <div class="feedback" id="feedbackStatus">feedback: ready</div>
+    </div>
+  </div>
+
+  <div class="hint" id="hint">click anywhere for sound</div>
+
+  <div class="modal" id="feedbackModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Send feedback">
+      <h2>feedback</h2>
+      <textarea id="feedbackText" placeholder="describe a bug, suggestion, or issue..."></textarea>
+      <div class="modal-meta">
+        <span id="feedbackCategory" class="badge suggestion">suggestion</span>
+        <span id="feedbackAction">less priority</span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="feedbackCancel" type="button">cancel</button>
+        <button class="btn" id="feedbackSend" type="button">open github issue</button>
+      </div>
+      <div class="modal-note">no email sent. this opens a prefilled GitHub issue draft. spam/harassment/threats get flagged and blocked from issue creation.</div>
+    </div>
+  </div>
+
+  <audio id="bgm" src="DeepBlue.wav" loop preload="auto"></audio>
+
+  <script>
+    const canvas = document.getElementById('ocean');
+    const ctx = canvas.getContext('2d');
+    const bgm = document.getElementById('bgm');
+    const hint = document.getElementById('hint');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsPanel = document.getElementById('settingsPanel');
+    const setSound = document.getElementById('setSound');
+    const setCycle = document.getElementById('setCycle');
+    const setDay = document.getElementById('setDay');
+    const setNight = document.getElementById('setNight');
+    const goDownBtn = document.getElementById('goDownBtn');
+    const goUpBtn = document.getElementById('goUpBtn');
+    const feedbackBtn = document.getElementById('feedbackBtn');
+    const feedbackStatus = document.getElementById('feedbackStatus');
+    const feedbackModal = document.getElementById('feedbackModal');
+    const feedbackText = document.getElementById('feedbackText');
+    const feedbackCategory = document.getElementById('feedbackCategory');
+    const feedbackAction = document.getElementById('feedbackAction');
+    const feedbackCancel = document.getElementById('feedbackCancel');
+    const feedbackSend = document.getElementById('feedbackSend');
+
+    let w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let t = 0;
+    let started = false;
+    let soundEnabled = true;
+    let dayCycle = true;
+    let forcedMode = 'night'; // 'day' | 'night' | null
+    let dayFactor = 0;
+    let cameraY = 0;      // 0 = surface, 1 = underwater
+    let cameraTarget = 0;
+    let camAnim = null;
+    bgm.volume = 0.65;
+
+    function easeInOutCubic(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+    function setCamera(target) {
+      target = Math.max(0, Math.min(1, target));
+      camAnim = { from: cameraY, to: target, start: performance.now(), dur: 1600 };
+      cameraTarget = target;
+      syncSettingsUI();
+    }
+
+    function resize() {
+      w = window.innerWidth;
+      h = window.innerHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const stars = Array.from({ length: 170 }, () => ({
+      x: Math.random(),
+      y: Math.random() * 0.58,
+      r: Math.random() * 1.7 + 0.2,
+      a: Math.random() * 0.8 + 0.15,
+      tw: Math.random() * 2.2 + 0.4,
+      ph: Math.random() * Math.PI * 2
+    }));
+
+    const clouds = Array.from({ length: 9 }, (_, i) => ({
+      x: Math.random(),
+      y: 0.08 + Math.random() * 0.34,
+      s: 0.6 + Math.random() * 1.4,
+      sp: 0.000004 + Math.random() * 0.00001,
+      a: 0.03 + Math.random() * 0.05,
+      off: i * 17.3
+    }));
+
+    function lerp(a,b,p){ return a + (b-a)*p; }
+    function mix(c1,c2,p){ return `rgb(${Math.round(lerp(c1[0],c2[0],p))}, ${Math.round(lerp(c1[1],c2[1],p))}, ${Math.round(lerp(c1[2],c2[2],p))})`; }
+    function getDayFactor() {
+      if (forcedMode === 'day') return 1;
+      if (forcedMode === 'night') return 0;
+      if (!dayCycle) return dayFactor; // hold
+      const cycle = (t * 0.00003) % (Math.PI * 2);
+      return (Math.sin(cycle - Math.PI / 2) + 1) / 2;
+    }
+
+    function drawSky() {
+      dayFactor = getDayFactor();
+      const d = dayFactor;
+      const nightTop=[2,6,20], nightMid=[5,22,45], nightLow=[8,34,62], nightBot=[5,18,37];
+      const dayTop=[80,170,235], dayMid=[120,200,255], dayLow=[160,220,255], dayBot=[210,238,255];
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, mix(nightTop, dayTop, d));
+      g.addColorStop(0.35, mix(nightMid, dayMid, d));
+      g.addColorStop(0.6, mix(nightLow, dayLow, d));
+      g.addColorStop(1, mix(nightBot, dayBot, d));
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      // sun / moon arc
+      const arc = (dayCycle && !forcedMode) ? ((t * 0.00003) % (Math.PI * 2)) : (d * Math.PI);
+      const bodyX = w * (0.15 + 0.7 * ((Math.sin(arc - Math.PI/2) + 1) / 2));
+      const bodyY = h * (0.62 - 0.42 * Math.sin(arc));
+      const sunA = Math.max(0, Math.min(1, (d - 0.2) / 0.35));
+      const moonA = Math.max(0, Math.min(1, (0.45 - d) / 0.35));
+
+      if (sunA > 0) {
+        const sg = ctx.createRadialGradient(bodyX, bodyY, 0, bodyX, bodyY, 160);
+        sg.addColorStop(0, `rgba(255,245,200,${0.45 * sunA})`);
+        sg.addColorStop(0.3, `rgba(255,210,120,${0.18 * sunA})`);
+        sg.addColorStop(1, 'rgba(255,210,120,0)');
+        ctx.fillStyle = sg; ctx.fillRect(0,0,w,h*0.75);
+        ctx.save();
+        ctx.fillStyle = `rgba(255, 244, 210, ${0.98 * sunA})`;
+        ctx.shadowColor = `rgba(255,220,150,${0.9*sunA})`;
+        ctx.shadowBlur = 40;
+        ctx.beginPath(); ctx.arc(bodyX, bodyY, Math.min(w,h)*0.034, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+
+      // aurora at night
+      if (moonA > 0.05) {
+        const ax = w * (0.3 + Math.sin(t * 0.00012) * 0.08);
+        const ay = h * 0.22;
+        const aurora = ctx.createRadialGradient(ax, ay, 0, ax, ay, Math.max(w, h) * 0.45);
+        aurora.addColorStop(0, `rgba(60, 160, 255, ${0.10 * moonA})`);
+        aurora.addColorStop(0.45, `rgba(70, 160, 220, ${0.04 * moonA})`);
+        aurora.addColorStop(1, 'rgba(70, 160, 220, 0)');
+        ctx.fillStyle = aurora; ctx.fillRect(0, 0, w, h * 0.7);
+      }
+
+      if (moonA > 0) {
+        const mx = w * (0.78 + Math.sin(t * 0.00003) * 0.01);
+        const my = h * (0.18 + Math.sin(t * 0.00005) * 0.008);
+        const moonGlow = ctx.createRadialGradient(mx, my, 0, mx, my, 140);
+        moonGlow.addColorStop(0, `rgba(210,235,255,${0.24*moonA})`);
+        moonGlow.addColorStop(0.4, `rgba(120,180,235,${0.09*moonA})`);
+        moonGlow.addColorStop(1, 'rgba(120,180,235,0)');
+        ctx.fillStyle = moonGlow; ctx.fillRect(0,0,w,h*0.7);
+        ctx.save();
+        ctx.globalAlpha = moonA;
+        ctx.fillStyle = 'rgba(230, 244, 255, 0.94)';
+        ctx.shadowColor = 'rgba(180, 225, 255, 0.85)';
+        ctx.shadowBlur = 28;
+        ctx.beginPath(); ctx.arc(mx, my, Math.min(w,h)*0.028, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+
+      // stars fade in at night
+      if (moonA > 0.01) {
+        for (const s of stars) {
+          const twinkle = (Math.sin(t * 0.0012 * s.tw + s.ph) + 1) * 0.5;
+          const y = s.y * h + Math.sin(t * 0.00015 + s.ph) * 1.5;
+          ctx.fillStyle = `rgba(220, 240, 255, ${s.a * (0.35 + twinkle * 0.65) * moonA})`;
+          ctx.beginPath(); ctx.arc(s.x * w, y, s.r * (0.8 + twinkle * 0.5), 0, Math.PI * 2); ctx.fill();
+        }
+      }
+
+      // clouds
+      for (const c of clouds) {
+        const cx = ((c.x + t * c.sp) % 1.4 - 0.2) * w;
+        const cy = c.y * h + Math.sin(t * 0.0002 + c.off) * 6;
+        const cw = 180 * c.s, ch = 38 * c.s;
+        const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cw);
+        const cloudCol = d > 0.5 ? `rgba(255,255,255,${c.a * (0.9 + d*0.8)})` : `rgba(150,190,230,${c.a * (1.2-d)})`;
+        cg.addColorStop(0, cloudCol);
+        cg.addColorStop(1, 'rgba(150,190,230,0)');
+        ctx.fillStyle = cg;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, cw, ch, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx - cw * 0.45, cy + ch * 0.15, cw * 0.55, ch * 0.7, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx + cw * 0.45, cy + ch * 0.1, cw * 0.5, ch * 0.65, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function waveY(base, amp, freq, phase, x) {
+      return base
+        + Math.sin(x * freq + phase) * amp
+        + Math.sin(x * freq * 0.52 - phase * 0.7) * amp * 0.45
+        + Math.sin(x * freq * 1.85 + phase * 1.3) * amp * 0.18;
+    }
+
+    function drawWave(layer) {
+      const { base, amp, freq, phase, colorTop, colorBottom, alpha, stroke } = layer;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      const step = 8;
+      ctx.moveTo(0, h);
+      for (let x = 0; x <= w + step; x += step) {
+        const y = waveY(base, amp, freq, phase, x);
+        if (x === 0) ctx.lineTo(0, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+
+      const g = ctx.createLinearGradient(0, base - amp * 2, 0, h);
+      g.addColorStop(0, colorTop);
+      g.addColorStop(1, colorBottom);
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawReflection() {
+      const d = dayFactor;
+      const arc = (dayCycle && !forcedMode) ? ((t * 0.00003) % (Math.PI * 2)) : (d * Math.PI);
+      const mx = w * (0.15 + 0.7 * ((Math.sin(arc - Math.PI/2) + 1) / 2));
+      const top = h * 0.58;
+      const bottom = h * 0.95;
+      ctx.save();
+      ctx.globalAlpha = lerp(0.12, 0.2, d);
+      const g = ctx.createLinearGradient(0, top, 0, bottom);
+      const rc = d > 0.5 ? '255, 245, 200' : '190, 230, 255';
+      g.addColorStop(0, `rgba(${rc}, ${lerp(0.55,0.7,d)})`);
+      g.addColorStop(1, `rgba(${rc}, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(mx - 10, top);
+      for (let y = top; y <= bottom; y += 8) {
+        const p = (y - top) / (bottom - top);
+        const spread = 8 + p * 70 + Math.sin(y * 0.08 + t * 0.0018) * (2 + p * 8);
+        ctx.lineTo(mx + spread, y);
+      }
+      for (let y = bottom; y >= top; y -= 8) {
+        const p = (y - top) / (bottom - top);
+        const spread = 8 + p * 70 + Math.sin(y * 0.08 + t * 0.0018 + 1.7) * (2 + p * 8);
+        ctx.lineTo(mx - spread, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawMist() {
+      const y = h * 0.62;
+      const g = ctx.createLinearGradient(0, y - 40, 0, y + 60);
+      g.addColorStop(0, 'rgba(150, 210, 255, 0)');
+      g.addColorStop(0.5, 'rgba(150, 210, 255, 0.045)');
+      g.addColorStop(1, 'rgba(150, 210, 255, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, y - 40, w, 100);
+    }
+
+    // --- underwater ---
+    const fishDefs = Array.from({ length: 7 }, (_, i) => ({
+      x: Math.random(),
+      y: 0.22 + Math.random() * 0.5,
+      s: 0.22 + Math.random() * 0.18,
+      sp: 0.000008 + Math.random() * 0.00001,
+      dir: i % 2 === 0 ? 1 : -1,
+      ph: Math.random() * Math.PI * 2,
+      bob: 6 + Math.random() * 8
+    }));
+    const bubbles = Array.from({ length: 18 }, () => ({
+      x: Math.random(), y: Math.random(), r: 1 + Math.random() * 2.5,
+      sp: 0.000015 + Math.random() * 0.000025, ph: Math.random() * 10
+    }));
+
+    function drawFish(f, ox, oy, scale) {
+      ctx.save();
+      ctx.translate(ox, oy);
+      ctx.scale(scale * f.dir, scale);
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
+      // tail
+      ctx.fillStyle = '#1f679e';
+      ctx.strokeStyle = '#123f66';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-100, 0); ctx.lineTo(-170, -55); ctx.lineTo(-157, 0); ctx.lineTo(-170, 55);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+
+      // fins
+      ctx.fillStyle = '#4ba3d1';
+      ctx.beginPath();
+      ctx.moveTo(-30, -47); ctx.quadraticCurveTo(0, -102, 40, -55); ctx.quadraticCurveTo(15, -37, 5, -29);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-30, 47); ctx.quadraticCurveTo(0, 102, 40, 55); ctx.quadraticCurveTo(15, 37, 5, 29);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+
+      // body
+      const bg = ctx.createLinearGradient(0, -65, 0, 65);
+      bg.addColorStop(0, '#7bc7e8');
+      bg.addColorStop(1, '#2b78b8');
+      ctx.fillStyle = bg;
+      ctx.beginPath(); ctx.ellipse(0, 0, 112, 65, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+      // gills
+      ctx.strokeStyle = '#123f66'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-40, -17); ctx.quadraticCurveTo(-15, 0, -40, 17); ctx.stroke();
+
+      // eye
+      ctx.fillStyle = '#102c45'; ctx.beginPath(); ctx.arc(70, -17, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(73, -20, 2.5, 0, Math.PI * 2); ctx.fill();
+
+      // mouth
+      ctx.strokeStyle = '#123f66'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(87, 12); ctx.quadraticCurveTo(100, 21, 109, 8); ctx.stroke();
+
+      // details
+      ctx.strokeStyle = 'rgba(180, 237, 255, 0.55)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(15, -9); ctx.quadraticCurveTo(30, 0, 15, 9); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-75, -15); ctx.quadraticCurveTo(-60, 0, -75, 15); ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawCoral(x, baseY, s, sway) {
+      const d = dayFactor;
+      const c = `rgb(${lerp(20,35,d)}, ${lerp(55,85,d)}, ${lerp(85,130,d)})`;
+      const tip = `rgb(${lerp(35,55,d)}, ${lerp(75,110,d)}, ${lerp(110,155,d)})`;
+      ctx.save();
+      ctx.translate(x, baseY);
+      ctx.scale(s, s);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = c;
+      function stem(x0,y0,cx,cy,x1,y1,w) {
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(x0,y0);
+        ctx.quadraticCurveTo(cx + sway, cy, x1 + sway * 0.6, y1);
+        ctx.stroke();
+      }
+      stem(0,0, -6,-35, -14,-78, 14);
+      stem(0,0, 10,-30, 22,-68, 11);
+      stem(-14,-78, -22,-98, -10,-118, 8);
+      stem(-14,-78, 0,-98, 10,-112, 7);
+      stem(22,-68, 30,-88, 40,-100, 7);
+      ctx.fillStyle = tip;
+      [[-10,-121],[10,-115],[40,-103]].forEach(([tx,ty]) => { ctx.beginPath(); ctx.arc(tx + sway*0.5, ty, 4, 0, Math.PI*2); ctx.fill(); });
+      ctx.restore();
+    }
+
+    function drawSeaweed(x, baseY, hgt, sway) {
+      const d = dayFactor;
+      ctx.save();
+      ctx.translate(x, baseY);
+      ctx.strokeStyle = `rgba(${lerp(18,35,d)}, ${lerp(50,80,d)}, ${lerp(75,115,d)}, 0.55)`;
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      for (let i = 1; i <= 5; i++) {
+        const yy = -hgt * (i / 5);
+        const xx = Math.sin(sway + i * 0.9) * (5 + i * 1.6);
+        ctx.quadraticCurveTo(xx * 0.5, yy + hgt * 0.08, xx, yy);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawUnderwater() {
+      const d = dayFactor;
+      // Use the same deep tones as the ocean surface layers, just darker with depth
+      const topCol = [lerp(5, 15, d), lerp(28, 75, d), lerp(58, 140, d)];
+      const midCol = [lerp(3, 10, d), lerp(18, 50, d), lerp(40, 100, d)];
+      const deepCol = [lerp(1, 5, d), lerp(8, 30, d), lerp(22, 70, d)];
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, `rgb(${topCol[0]},${topCol[1]},${topCol[2]})`);
+      g.addColorStop(0.45, `rgb(${midCol[0]},${midCol[1]},${midCol[2]})`);
+      g.addColorStop(1, `rgb(${deepCol[0]},${deepCol[1]},${deepCol[2]})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      // subtle light rays
+      ctx.save();
+      ctx.globalAlpha = lerp(0.025, 0.06, d);
+      for (let i = 0; i < 4; i++) {
+        const rx = w * (0.2 + i * 0.18) + Math.sin(t * 0.00008 + i) * 10;
+        const rg = ctx.createLinearGradient(rx, 0, rx + 30, h * 0.85);
+        rg.addColorStop(0, `rgba(${lerp(120,170,d)}, ${lerp(190,220,d)}, 255, 0.45)`);
+        rg.addColorStop(1, 'rgba(120,190,255,0)');
+        ctx.fillStyle = rg;
+        ctx.beginPath();
+        ctx.moveTo(rx - 18, 0); ctx.lineTo(rx + 24, 0); ctx.lineTo(rx + 70, h * 0.85); ctx.lineTo(rx - 50, h * 0.85);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+
+      // subtle bubbles
+      ctx.strokeStyle = `rgba(${lerp(120,160,d)}, ${lerp(180,210,d)}, 230, ${lerp(0.1, 0.16, d)})`;
+      ctx.lineWidth = 1;
+      for (const b of bubbles) {
+        const by = h - ((t * b.sp + b.y * h) % (h + 30));
+        const bx = b.x * w + Math.sin(t * 0.0004 + b.ph) * 4;
+        ctx.beginPath(); ctx.arc(bx, by, b.r, 0, Math.PI * 2); ctx.stroke();
+      }
+
+      // sea floor - same hue family
+      const fy = h * 0.86;
+      ctx.fillStyle = `rgb(${lerp(3,8,d)}, ${lerp(14,32,d)}, ${lerp(30,65,d)})`;
+      ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(0, fy);
+      for (let x = 0; x <= w; x += 48) ctx.lineTo(x, fy + Math.sin(x * 0.012) * 5 - 3);
+      ctx.lineTo(w, h); ctx.closePath(); ctx.fill();
+
+      // muted coral & seaweed (blue-grey, matching palette)
+      for (let i = 0; i < 7; i++) {
+        const cx = (i / 6) * w * 0.92 + w * 0.04;
+        const sway = Math.sin(t * 0.00035 + i) * 3;
+        drawSeaweed(cx - 26, fy + 2, 60 + (i % 3) * 20, t * 0.0004 + i);
+        drawCoral(cx, fy + 1, 0.45 + (i % 3) * 0.08, sway);
+      }
+
+      // fish
+      for (const f of fishDefs) {
+        const swim = (t * f.sp * f.dir + f.x);
+        const fx = ((swim % 1.3) - 0.15) * w;
+        const fy2 = f.y * h + Math.sin(t * 0.0005 + f.ph) * f.bob;
+        drawFish(f, fx, fy2, f.s * Math.min(w, h) * 0.00055);
+      }
+
+      // top fade to blend with bottom ocean wave
+      const sg = ctx.createLinearGradient(0, 0, 0, 140);
+      sg.addColorStop(0, `rgb(${topCol[0]},${topCol[1]},${topCol[2]})`);
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = sg; ctx.fillRect(0, 0, w, 140);
+    }
+
+    function render(ts) {
+      t = ts;
+      if (camAnim) {
+        const p = Math.min(1, (ts - camAnim.start) / camAnim.dur);
+        cameraY = camAnim.from + (camAnim.to - camAnim.from) * easeInOutCubic(p);
+        if (p >= 1) camAnim = null;
+      }
+      ctx.clearRect(0, 0, w, h);
+
+      const camPx = cameraY * h;
+      ctx.save();
+      ctx.translate(0, -camPx);
+
+      drawSky();
+
+      const horizon = h * 0.58;
+      const d = dayFactor;
+      const layers = [
+        { base: horizon + 18, amp: 10, freq: 0.008,  phase: t * 0.00045, colorTop: `rgba(${lerp(24,70,d)}, ${lerp(72,140,d)}, ${lerp(120,190,d)}, ${lerp(0.55,0.45,d)})`, colorBottom: `rgba(${lerp(6,30,d)}, ${lerp(24,80,d)}, ${lerp(50,120,d)}, ${lerp(0.65,0.55,d)})`, alpha: 1, stroke: `rgba(140,210,255,${lerp(0.06,0.12,d)})` },
+        { base: horizon + 34, amp: 14, freq: 0.0105, phase: t * 0.00062 + 1.2, colorTop: `rgba(${lerp(18,50,d)}, ${lerp(68,130,d)}, ${lerp(118,185,d)}, ${lerp(0.72,0.58,d)})`, colorBottom: `rgba(${lerp(5,20,d)}, ${lerp(22,70,d)}, ${lerp(46,110,d)}, ${lerp(0.82,0.65,d)})`, alpha: 1, stroke: `rgba(140,210,255,${lerp(0.08,0.14,d)})` },
+        { base: horizon + 56, amp: 18, freq: 0.009,  phase: -t * 0.00052 + 2.1, colorTop: `rgba(${lerp(12,35,d)}, ${lerp(54,115,d)}, ${lerp(98,175,d)}, ${lerp(0.82,0.68,d)})`, colorBottom: `rgba(${lerp(4,15,d)}, ${lerp(18,60,d)}, ${lerp(40,100,d)}, ${lerp(0.92,0.75,d)})`, alpha: 1, stroke: `rgba(140,210,255,${lerp(0.1,0.16,d)})` },
+        { base: horizon + 84, amp: 24, freq: 0.0075, phase: t * 0.00072 + 0.4, colorTop: `rgba(${lerp(8,25,d)}, ${lerp(40,95,d)}, ${lerp(78,160,d)}, ${lerp(0.9,0.78,d)})`, colorBottom: `rgba(${lerp(2,10,d)}, ${lerp(12,50,d)}, ${lerp(30,90,d)}, ${lerp(0.96,0.85,d)})`, alpha: 1, stroke: `rgba(150,220,255,${lerp(0.11,0.18,d)})` },
+        { base: horizon + 120, amp: 32, freq: 0.0062, phase: -t * 0.00058 + 3.4, colorTop: `rgba(${lerp(5,15,d)}, ${lerp(28,75,d)}, ${lerp(58,140,d)}, ${lerp(0.96,0.88,d)})`, colorBottom: `rgba(${lerp(1,5,d)}, ${lerp(8,35,d)}, ${lerp(22,75,d)}, 1)`, alpha: 1, stroke: `rgba(150,220,255,${lerp(0.08,0.14,d)})` }
+      ];
+
+      drawReflection();
+      drawMist();
+      for (const layer of layers) drawWave(layer);
+
+      // underwater below the surface
+      ctx.save();
+      ctx.translate(0, h);
+      drawUnderwater();
+      ctx.restore();
+
+      ctx.restore();
+
+      // global vignette (screen space)
+      const vg = ctx.createRadialGradient(w * 0.5, h * 0.55, Math.min(w,h) * 0.2, w * 0.5, h * 0.6, Math.max(w,h) * 0.8);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, `rgba(0,0,0,${lerp(0.28,0.14,d) + cameraY*0.12})`);
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, w, h);
+
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+
+    function syncSettingsUI() {
+      setSound.checked = soundEnabled;
+      setCycle.checked = dayCycle;
+      setDay.checked = forcedMode === 'day';
+      setNight.checked = forcedMode === 'night';
+      goDownBtn.textContent = cameraTarget >= 1 ? 'underwater' : 'go down';
+      goUpBtn.textContent = cameraTarget <= 0 ? 'surface' : 'go up';
+    }
+
+    // --- feedback ---
+    const FEEDBACK_REPO = 'iluxz/ocean'; // change when repo exists
+    function classifyFeedback(text) {
+      const t = (text || '').toLowerCase().trim();
+      const rules = {
+        harassment: [/\b(kill|die|kys|suicide|threat|bomb|shoot|stab|rape|nazi)\b/, /\bi know where you live\b/, /\bdox\b/],
+        spam: [/(.)\1{7,}/, /\b(buy now|free money|crypto|casino|viagra|nft promo)\b/, /^https?:\/\/\S+$/],
+        bug: [/\b(bug|broken|crash|error|glitch|not working|doesn'?t work|issue|lag|freeze|stuck|black screen|overlap)\b/],
+        suggestion: [/\b(add|should|could|please|would be nice|feature|suggest|option|improve|make it)\b/]
+      };
+      const score = { harassment:0, spam:0, bug:0, suggestion:0 };
+      for (const [k, arr] of Object.entries(rules)) for (const r of arr) if (r.test(t)) score[k] += 2;
+      if (t.length < 4) score.spam += 2;
+      if (t.length > 12 && !/\b(bug|broken|crash|add|please|should)\b/.test(t) && /https?:\/\//.test(t)) score.spam += 2;
+      let category = 'suggestion';
+      let max = -1;
+      for (const k of ['harassment','spam','bug','suggestion']) { if (score[k] > max) { max = score[k]; category = k; } }
+      if (max <= 0) category = t.includes('?') || t.includes('should') ? 'suggestion' : 'bug';
+      const actionMap = { bug: 'prioritize', suggestion: 'less priority', spam: 'filter', harassment: 'flag for review' };
+      return { category, action: actionMap[category] };
+    }
+
+    function updateFeedbackMeta() {
+      const { category, action } = classifyFeedback(feedbackText.value);
+      feedbackCategory.textContent = category === 'harassment' ? 'harassment/threat' : category;
+      feedbackCategory.className = `badge ${category === 'harassment' ? 'harassment' : category}`;
+      feedbackAction.textContent = action;
+      feedbackSend.textContent = (category === 'spam' || category === 'harassment') ? 'flagged (blocked)' : 'open github issue';
+      feedbackSend.disabled = (category === 'spam' || category === 'harassment');
+      feedbackSend.style.opacity = feedbackSend.disabled ? '0.55' : '1';
+    }
+
+    function openFeedback() { feedbackModal.classList.add('open'); feedbackModal.setAttribute('aria-hidden','false'); updateFeedbackMeta(); feedbackText.focus(); }
+    function closeFeedback() { feedbackModal.classList.remove('open'); feedbackModal.setAttribute('aria-hidden','true'); }
+    function submitFeedback() {
+      const text = feedbackText.value.trim();
+      const { category, action } = classifyFeedback(text);
+      if (!text) { feedbackStatus.textContent = 'feedback: write something first'; return; }
+      if (category === 'spam' || category === 'harassment') {
+        feedbackStatus.textContent = `feedback: ${category} flagged locally, not sent`;
+        closeFeedback();
+        return;
+      }
+      const title = `[${category}] ${text.slice(0, 60).replace(/\s+/g, ' ')}`;
+      const body = `## Category\n${category}\n\n## Priority/Action\n${action}\n\n## Message\n${text}\n\n## Context\n- page: ocean\n- ua: ${navigator.userAgent}\n- time: ${new Date().toISOString()}`;
+      const url = `https://github.com/${FEEDBACK_REPO}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+      window.open(url, '_blank', 'noopener');
+      feedbackStatus.textContent = `feedback: opened ${category} issue draft`;
+      closeFeedback();
+    }
+
+    async function startAudio() {
+      if (!soundEnabled || (started && !bgm.paused)) return;
+      try {
+        await bgm.play();
+        started = true;
+        hint.classList.add('hidden');
+      } catch (e) {}
+      syncSettingsUI();
+    }
+
+    settingsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = settingsPanel.classList.toggle('open');
+      settingsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+        settingsPanel.classList.remove('open');
+        settingsBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    setSound.addEventListener('change', () => { soundEnabled = setSound.checked; if (soundEnabled) startAudio(); else bgm.pause(); syncSettingsUI(); });
+    setCycle.addEventListener('change', () => { dayCycle = setCycle.checked; syncSettingsUI(); });
+    setDay.addEventListener('change', () => {
+      if (setDay.checked) { forcedMode = 'day'; setNight.checked = false; dayCycle = false; setCycle.checked = false; }
+      else if (!setNight.checked) { forcedMode = null; }
+      syncSettingsUI();
+    });
+    setNight.addEventListener('change', () => {
+      if (setNight.checked) { forcedMode = 'night'; setDay.checked = false; dayCycle = false; setCycle.checked = false; }
+      else if (!setDay.checked) { forcedMode = null; }
+      syncSettingsUI();
+    });
+    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(1); });
+    goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(0); });
+    feedbackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFeedback(); });
+    feedbackCancel.addEventListener('click', closeFeedback);
+    feedbackSend.addEventListener('click', submitFeedback);
+    feedbackText.addEventListener('input', updateFeedbackMeta);
+    feedbackModal.addEventListener('click', (e) => { if (e.target === feedbackModal) closeFeedback(); });
+
+    window.addEventListener('pointerdown', (e) => { if (e.target.closest('.settings-wrap') || e.target.closest('.modal')) return; startAudio(); }, { passive: true });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { closeFeedback(); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); return; }
+      startAudio();
+    });
+    syncSettingsUI();
+  </script>
+</body>
+</html>
