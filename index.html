@@ -397,14 +397,19 @@
       masterGain.connect(audioCtx.destination);
       masterGain.connect(captureDest);
       try {
-        bgmFilter = audioCtx.createBiquadFilter();
-        bgmFilter.type = 'lowpass';
-        bgmFilter.frequency.value = 14000;
-        bgmFilter.Q.value = 0.7;
-        bgmNode = audioCtx.createMediaElementSource(bgm);
-        bgmNode.connect(bgmFilter);
-        bgmFilter.connect(masterGain);
-      } catch (_) { /* already connected or unsupported */ }
+        if (location.protocol !== 'file:') {
+          bgm.crossOrigin = 'anonymous';
+          bgmFilter = audioCtx.createBiquadFilter();
+          bgmFilter.type = 'lowpass';
+          bgmFilter.frequency.value = 14000;
+          bgmFilter.Q.value = 0.7;
+          bgmNode = audioCtx.createMediaElementSource(bgm);
+          bgmNode.connect(bgmFilter);
+          bgmFilter.connect(masterGain);
+        } else {
+          bgmFilter = null; // avoid file:// cross-origin media silence in WebAudio
+        }
+      } catch (_) { bgmFilter = null; }
       try {
         audioChunks = [];
         mediaRecorder = new MediaRecorder(captureDest.stream);
@@ -474,11 +479,11 @@
     }
     function updateAudioMix() {
       bgm.muted = !soundEnabled;
-      bgm.volume = masterVolume;
+      const under = cameraY;
+      bgm.volume = masterVolume * (bgmFilter ? 1 : lerp(1, 0.32, Math.pow(under, 1.1)));
       if (!audioCtx) return;
       const on = soundEnabled ? 1 : 0;
       masterGain.gain.setTargetAtTime(on * masterVolume, audioCtx.currentTime, 0.08);
-      const under = cameraY;
       const surface = 1 - under;
       const d = dayFactor;
       rainGain.gain.setTargetAtTime(surface * Math.min(1, weatherIntensity) * 0.2, audioCtx.currentTime, 0.25);
@@ -681,9 +686,19 @@
           if (ripples.length > 120) ripples.splice(0, ripples.length - 120);
         }
         d._yRaw = yRaw;
+        const x2 = x - 1.5 * d.s;
+        const y2 = y + d.l;
+        if (y >= waterY) continue; // already under surface
+        let drawY2 = y2;
+        let drawX2 = x2;
+        if (y2 > waterY) {
+          const tHit = (waterY - y) / ((y2 - y) || 1);
+          drawY2 = waterY;
+          drawX2 = x + (x2 - x) * tHit;
+        }
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineTo(x - 1.5 * d.s, y + d.l);
+        ctx.lineTo(drawX2, drawY2);
         ctx.stroke();
       }
       ctx.restore();
