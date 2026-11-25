@@ -250,6 +250,7 @@
     let simTime = 0;
     let animTime = 0;
     let motionMul = 1;
+    let dt = 0;
     let started = false;
     let soundEnabled = true;
     let masterVolume = 0.65;
@@ -456,7 +457,17 @@
 
     const rainDrops = Array.from({ length: 220 }, () => ({ x: Math.random(), y: Math.random(), l: 8 + Math.random()*16, s: 0.6 + Math.random()*1.2 }));
     const birds = Array.from({ length: 5 }, (_, i) => ({ x: Math.random(), y: 0.08 + i*0.03, s: 0.5 + Math.random()*0.6, sp: 0.00001 + Math.random()*0.00001, ph: Math.random()*10 }));
-    const bottle = { x: 0.2, y: 0.64, sp: 0.000012, ph: Math.random()*10, found: discoveries.includes('bottle') };
+    const bottle = {
+      x: -0.2,
+      sp: 0.0000028,
+      ph: Math.random() * 10,
+      bob: 2.2,
+      active: false,
+      found: discoveries.includes('bottle'),
+      next: discoveries.includes('bottle') ? 45000 + Math.random() * 45000 : 20000 + Math.random() * 25000,
+      screenX: -999,
+      screenY: -999
+    };
     const jelly = { x: Math.random(), y: 0.55, sp: 0.000006, ph: Math.random()*10, active: false, next: 15000 + Math.random()*20000 };
 
     function drawSky() {
@@ -592,16 +603,63 @@
         ctx.fillRect(bx-1, by-10, 2, 10);
         ctx.restore();
       }
-      // bottle
-      const bx = ((bottle.x + animTime * bottle.sp * 20) % 1.2 - 0.1) * w;
-      const by = horizon + 34 + Math.sin(animTime*0.0015 + bottle.ph) * 5;
-      bottle.screenX = bx; bottle.screenY = by;
-      ctx.save();
-      ctx.translate(bx, by); ctx.rotate(Math.sin(animTime*0.001 + bottle.ph)*0.2);
-      ctx.fillStyle = bottle.found ? 'rgba(150,200,220,0.25)' : 'rgba(180,225,245,0.7)';
-      ctx.fillRect(-4,-10,8,14); ctx.fillRect(-2,-14,4,4);
-      ctx.strokeStyle = 'rgba(220,245,255,0.5)'; ctx.strokeRect(-4,-10,8,14);
-      ctx.restore();
+      // bottle - rare drifting event
+      if (bottle.active) {
+        bottle.x += bottle.sp * (dt * 1000) * (reducedMotion ? 0.6 : 1);
+        const bx = bottle.x * w;
+        const by = horizon + 26 + Math.sin(animTime * 0.0012 + bottle.ph) * bottle.bob;
+        bottle.screenX = bx; bottle.screenY = by;
+        const bobRot = Math.sin(animTime * 0.0009 + bottle.ph) * 0.18;
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.rotate(bobRot);
+        ctx.globalAlpha = bottle.found ? 0.55 : 0.9;
+        // glass body
+        ctx.fillStyle = 'rgba(170, 225, 210, 0.28)';
+        ctx.strokeStyle = 'rgba(220, 245, 235, 0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-7, -8);
+        ctx.lineTo(-7, 10);
+        ctx.quadraticCurveTo(-7, 14, -3, 14);
+        ctx.lineTo(3, 14);
+        ctx.quadraticCurveTo(7, 14, 7, 10);
+        ctx.lineTo(7, -8);
+        ctx.quadraticCurveTo(7, -11, 3, -11);
+        ctx.lineTo(3, -16);
+        ctx.lineTo(-3, -16);
+        ctx.lineTo(-3, -11);
+        ctx.quadraticCurveTo(-7, -11, -7, -8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // neck lip/cork
+        ctx.fillStyle = 'rgba(120, 85, 55, 0.95)';
+        ctx.fillRect(-3.5, -18, 7, 3.2);
+        // paper message
+        ctx.fillStyle = 'rgba(245, 235, 210, 0.85)';
+        ctx.fillRect(-4, -2, 8, 8);
+        ctx.strokeStyle = 'rgba(180,160,120,0.6)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(-2.5,1); ctx.lineTo(2.5,1); ctx.moveTo(-2.5,3.5); ctx.lineTo(1.5,3.5); ctx.stroke();
+        // highlight
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.beginPath(); ctx.moveTo(-4, -6); ctx.lineTo(-4, 8); ctx.stroke();
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        if (bottle.x > 1.15) {
+          bottle.active = false;
+          bottle.screenX = -999; bottle.screenY = -999;
+          bottle.next = 60000 + Math.random() * 90000;
+        }
+      } else {
+        bottle.next -= dt * 1000;
+        if (cameraY < 0.35 && weatherIntensity < 1.4 && bottle.next <= 0) {
+          bottle.active = true;
+          bottle.x = -0.12;
+          bottle.ph = Math.random() * 10;
+        }
+      }
     }
 
     function drawRipplesAndBubbles() {
@@ -916,7 +974,7 @@
 
     function render(ts) {
       t = ts;
-      const dt = Math.min(0.05, (ts - (lastT || ts)) / 1000);
+      dt = Math.min(0.05, (ts - (lastT || ts)) / 1000);
       lastT = ts;
       simTime += dt * 1000;
       motionMul = reducedMotion ? 0.25 : 1;
@@ -1195,9 +1253,13 @@
         ripples.push({ x, y: worldY, r: 5, age: 0, life: 900 });
         sfxSplash();
         // bottle click?
-        if (bottle.screenX && Math.abs(x - bottle.screenX) < 18 && Math.abs(worldY - bottle.screenY) < 14) {
+        if (bottle.active && Math.abs(x - bottle.screenX) < 22 && Math.abs(worldY - bottle.screenY) < 24) {
           bottle.found = true;
+          bottle.active = false;
+          bottle.screenX = -999; bottle.screenY = -999;
+          bottle.next = 90000 + Math.random() * 120000;
           recordDiscovery('bottle', 'message in a bottle - "the ocean remembers every ripple."');
+          sfxClick();
         }
       } else if (cameraY > 0.2) {
         for (let i=0;i<5;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.5, sp: 0.3+Math.random()*0.6, ph: Math.random()*10, age:0, life: 900+Math.random()*500 });
