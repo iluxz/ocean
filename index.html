@@ -239,7 +239,7 @@
       if (crashed) return;
       crashed = true;
       try { if (rafId) cancelAnimationFrame(rafId); } catch (_) {}
-      try { bgm.pause(); } catch (_) {}
+      try { bgm.loop = true; if (bgm.paused && soundEnabled) bgm.play().catch(() => {}); } catch (_) {}
       try {
         playWiiCrashBuzz();
         const m = document.getElementById('errorModal');
