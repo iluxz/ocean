@@ -1,6 +1,6 @@
 # ocean 🌊
 
-tiny 2d animated ocean page — just vibes.
+tiny 2d animated ocean page — for dark rooms, made this because idk im BORED
 
 - animated sky (day/night cycle, sun/moon, clouds, stars)
 - layered ocean waves + reflection
