@@ -426,6 +426,40 @@
       return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
     }
 
+    const ANGLER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400">
+  <defs>
+    <radialGradient id="body" cx="35%" cy="25%" r="75%">
+      <stop offset="0%" stop-color="#718b89"/>
+      <stop offset="55%" stop-color="#354e52"/>
+      <stop offset="100%" stop-color="#14262e"/>
+    </radialGradient>
+    <radialGradient id="lamp">
+      <stop offset="0%" stop-color="#f4ffd0"/>
+      <stop offset="25%" stop-color="#caff83"/>
+      <stop offset="100%" stop-color="#caff83" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path d="M145 190 L35 105 L65 205 L35 310 L150 255Z" fill="#263f45" stroke="#718e8b" stroke-width="5"/>
+  <ellipse cx="305" cy="220" rx="205" ry="140" fill="url(#body)" stroke="#829c96" stroke-width="5"/>
+  <path d="M220 105 Q175 35 145 75 Q165 125 220 155Z" fill="#263e43" stroke="#829c96" stroke-width="4"/>
+  <path d="M230 325 Q185 380 155 345 Q180 295 230 290Z" fill="#263e43" stroke="#829c96" stroke-width="4"/>
+  <path d="M320 350 Q380 390 420 345" fill="none" stroke="#829c96" stroke-width="5"/>
+  <path d="M250 105 Q255 35 325 28 Q370 25 385 65" fill="none" stroke="#829c96" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="385" cy="65" r="38" fill="url(#lamp)"/>
+  <circle cx="385" cy="65" r="10" fill="#eaffb5"/>
+  <circle cx="382" cy="62" r="4" fill="white"/>
+  <circle cx="420" cy="150" r="17" fill="#07121a" stroke="#a9bdb0" stroke-width="5"/>
+  <circle cx="425" cy="145" r="5" fill="#eaffd2"/>
+  <path d="M410 185 Q520 155 550 220 Q520 285 410 255 Q450 220 410 185Z" fill="#09131a" stroke="#829c96" stroke-width="5"/>
+  <path d="M422 180 L445 205 L442 177 L468 199 L467 174 L493 200 L493 182 L520 211 L535 215" fill="#e0e1c9" stroke="#e0e1c9" stroke-width="3"/>
+  <path d="M420 258 L445 235 L450 260 L475 239 L480 263 L505 235 L510 252" fill="#e0e1c9" stroke="#e0e1c9" stroke-width="3"/>
+  <path d="M175 175 Q150 220 180 265 M195 165 Q170 220 200 275 M215 160 Q190 220 220 280" fill="none" stroke="#91aaa0" stroke-width="4" opacity=".55"/>
+</svg>`;
+    const ANGLER_IMG_URL = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(ANGLER_SVG);
+    const anglerImg = new Image();
+    anglerImg.decoding = 'async';
+    anglerImg.src = ANGLER_IMG_URL;
+
     const DISCOVERY_DEFS = [
       { id:'bottle', name:'Message in a Bottle', desc:'A weathered bottle drifted by with a tiny note inside. "the ocean remembers every ripple."', emoji:'🍾', c1:'#16406a', c2:'#2f7a9e' },
       { id:'jelly', name:'Moon Jelly Drift', desc:'A rare jellyfish pulsed through the deep blue like a living lantern.', emoji:'🪼', c1:'#183a73', c2:'#6e86d6' },
@@ -433,7 +467,7 @@
       { id:'deep', name:'Deep Blue Descent', desc:'You reached the deep. The light thinned, the water darkened, and the ocean got quiet.', emoji:'🌊', c1:'#06203b', c2:'#0f5f89' },
       { id:'aurora', name:'Aurora Night', desc:'The night sky glowed with aurora over calm water.', emoji:'🌌', c1:'#10204a', c2:'#3c8fd1' },
       { id:'abyss', name:'The Abyss', desc:'You went deeper than deep. The water turned black-blue and the ocean started whispering in bioluminescence.', emoji:'🕳️', c1:'#020614', c2:'#1a0f3d' },
-      { id:'angler', name:'Anglerfish Encounter', desc:'A glowing anglerfish drifted out of the dark, curious, creepy, and kinda beautiful.', emoji:'🐡', c1:'#05081a', c2:'#1f5f5a' },
+      { id:'angler', name:'Anglerfish Encounter', desc:'A glowing anglerfish drifted out of the dark, curious, creepy, and kinda beautiful.', emoji:'🐡', c1:'#05081a', c2:'#1f5f5a', img: ANGLER_IMG_URL },
       { id:'vent', name:'Hydrothermal Vent', desc:'A vent on the abyss floor breathed heat and strange light into the crushing dark.', emoji:'♨️', c1:'#120a08', c2:'#7a2d12' }
     ];
     const ACHIEVEMENT_DEFS = [
@@ -531,7 +565,7 @@
       logList.innerHTML = DISCOVERY_DEFS.map(d => {
         const found = discoveries.includes(d.id);
         const equipped = equippedDiscovery === d.id && found;
-        const img = svgThumb(d.name, d.emoji, d.c1, d.c2);
+        const img = d.img || svgThumb(d.name, d.emoji, d.c1, d.c2);
         return `<div class="discover-card ${found ? '' : 'locked'} ${equipped ? 'equipped' : ''}">
           <div class="discover-img"><img src="${img}" alt="${found ? d.name : 'Locked discovery'}">${found ? '' : '<div class="discover-lock">🔒</div>'}</div>
           <div>
@@ -965,7 +999,7 @@
       } else if (equippedDiscovery === 'angler') {
         const x = w * 0.3 + Math.sin(animTime*0.0002)*40;
         const y = h * 0.55 + Math.sin(animTime*0.0007)*18;
-        ctx.save(); ctx.globalAlpha = 0.95; drawAngler(x, y, 0.75); ctx.restore();
+        ctx.save(); ctx.globalAlpha = 0.95; drawAngler(x, y, 0.75, 1); ctx.restore();
       } else if (equippedDiscovery === 'vent') {
         const vx = w * 0.5, fy = h * 0.86;
         ctx.save();
@@ -1368,21 +1402,18 @@
       ctx.fillStyle = abyssHint; ctx.fillRect(0, h - 120, w, 120);
     }
 
-    function drawAngler(x, y, s) {
-      ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
-      ctx.fillStyle = 'rgba(35,45,70,0.95)';
-      ctx.beginPath(); ctx.ellipse(0, 0, 34, 22, 0, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = 'rgba(20,28,45,0.95)';
-      ctx.beginPath(); ctx.moveTo(-30,0); ctx.lineTo(-48,-12); ctx.lineTo(-48,12); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = 'rgba(120,200,180,0.45)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(10,-18); ctx.quadraticCurveTo(22,-36, 34,-28); ctx.stroke();
-      const glow = 0.5 + 0.5*Math.sin(animTime*0.003);
-      ctx.fillStyle = `rgba(170,255,220,${0.25 + glow*0.35})`;
-      ctx.beginPath(); ctx.arc(34,-28, 8 + glow*2, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = 'rgba(220,255,245,0.95)'; ctx.beginPath(); ctx.arc(34,-28, 3.5, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#e9fbff'; ctx.beginPath(); ctx.arc(12,-4, 3, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#1b2b3a'; ctx.beginPath(); ctx.arc(13,-4, 1.4, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = 'rgba(210,240,255,0.35)'; ctx.beginPath(); ctx.moveTo(18,6); ctx.lineTo(28,10); ctx.lineTo(20,14); ctx.stroke();
+    function drawAngler(x, y, s, dir = 1) {
+      const w0 = 220 * s;
+      const h0 = 146 * s;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(dir, 1);
+      if (anglerImg.complete && anglerImg.naturalWidth > 0) {
+        ctx.drawImage(anglerImg, -w0 / 2, -h0 / 2, w0, h0);
+      } else {
+        ctx.fillStyle = 'rgba(35,45,70,0.95)';
+        ctx.beginPath(); ctx.ellipse(0, 0, 34*s, 22*s, 0, 0, Math.PI*2); ctx.fill();
+      }
       ctx.restore();
     }
 
@@ -1436,10 +1467,7 @@
       if (angler.x < -0.15) angler.dir = 1;
       const ax = angler.x * w;
       const ay = h * angler.y + Math.sin(animTime*0.0006 + angler.ph) * 26;
-      ctx.save();
-      if (angler.dir < 0) { ctx.translate(ax, ay); ctx.scale(-1,1); drawAngler(0,0,0.9); }
-      else drawAngler(ax, ay, 0.9);
-      ctx.restore();
+      drawAngler(ax, ay, 0.9, angler.dir);
 
       // abyss creatures (tiny glowing fish)
       for (let i=0;i<8;i++) {
