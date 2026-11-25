@@ -180,6 +180,9 @@
         <button class="btn" id="logBtn" type="button">discoveries</button>
       </div>
       <div class="action-row">
+        <button class="btn" id="achBtn" type="button">achievements</button>
+      </div>
+      <div class="action-row">
         <button class="btn" id="feedbackBtn" type="button">send feedback</button>
       </div>
       <div class="action-row">
@@ -193,20 +196,19 @@
   <button class="btn photo-exit" id="photoExitBtn" type="button">exit photo mode</button>
   <div class="hint ui" id="hint">click anywhere for sound • p = photo mode</div>
   <div class="modal" id="logModal" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Discoveries and achievements" style="width:min(760px,calc(100vw - 32px));">
-      <h2>discoveries / achievements</h2>
-      <div class="tabs">
-        <button class="tab active" id="tabDiscoveries" type="button">discoveries</button>
-        <button class="tab" id="tabAchievements" type="button">achievements</button>
-      </div>
-      <div class="tab-pane active" id="paneDiscoveries">
-        <div class="equipped-banner" id="equippedBanner">equipped: none</div>
-        <div class="discover-grid" id="logList"></div>
-      </div>
-      <div class="tab-pane" id="paneAchievements">
-        <div class="ach-list" id="achList"></div>
-      </div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Discoveries" style="width:min(760px,calc(100vw - 32px));">
+      <h2>discoveries</h2>
+      <div class="equipped-banner" id="equippedBanner">equipped: none</div>
+      <div class="discover-grid" id="logList"></div>
       <div class="modal-actions"><button class="btn" id="logClose" type="button">close</button></div>
+    </div>
+  </div>
+
+  <div class="modal" id="achModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Achievements" style="width:min(560px,calc(100vw - 32px));">
+      <h2>achievements</h2>
+      <div class="ach-list" id="achList" style="max-height:min(58vh,520px);"></div>
+      <div class="modal-actions"><button class="btn" id="achClose" type="button">close</button></div>
     </div>
   </div>
 
@@ -336,6 +338,7 @@
     const goUpBtn = document.getElementById('goUpBtn');
     const photoBtn = document.getElementById('photoBtn');
     const logBtn = document.getElementById('logBtn');
+    const achBtn = document.getElementById('achBtn');
     const feedbackBtn = document.getElementById('feedbackBtn');
     const crashBtn = document.getElementById('crashBtn');
     const feedbackStatus = document.getElementById('feedbackStatus');
@@ -349,10 +352,8 @@
     const logModal = document.getElementById('logModal');
     const logList = document.getElementById('logList');
     const logClose = document.getElementById('logClose');
-    const tabDiscoveries = document.getElementById('tabDiscoveries');
-    const tabAchievements = document.getElementById('tabAchievements');
-    const paneDiscoveries = document.getElementById('paneDiscoveries');
-    const paneAchievements = document.getElementById('paneAchievements');
+    const achModal = document.getElementById('achModal');
+    const achClose = document.getElementById('achClose');
     const achList = document.getElementById('achList');
     const equippedBanner = document.getElementById('equippedBanner');
     const errorRefresh = document.getElementById('errorRefresh');
@@ -833,6 +834,90 @@
       ctx.restore();
     }
 
+    function drawBottleSprite(x, y, rot, alpha=0.9, scale=1) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rot);
+      ctx.scale(scale, scale);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = 'rgba(170, 225, 210, 0.28)';
+      ctx.strokeStyle = 'rgba(220, 245, 235, 0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-7, -8); ctx.lineTo(-7, 10);
+      ctx.quadraticCurveTo(-7, 14, -3, 14); ctx.lineTo(3, 14);
+      ctx.quadraticCurveTo(7, 14, 7, 10); ctx.lineTo(7, -8);
+      ctx.quadraticCurveTo(7, -11, 3, -11); ctx.lineTo(3, -16);
+      ctx.lineTo(-3, -16); ctx.lineTo(-3, -11);
+      ctx.quadraticCurveTo(-7, -11, -7, -8);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(120, 85, 55, 0.95)';
+      ctx.fillRect(-3.5, -18, 7, 3.2);
+      ctx.fillStyle = 'rgba(245, 235, 210, 0.85)';
+      ctx.fillRect(-4, -2, 8, 8);
+      ctx.strokeStyle = 'rgba(180,160,120,0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-2.5,1); ctx.lineTo(2.5,1); ctx.moveTo(-2.5,3.5); ctx.lineTo(1.5,3.5); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath(); ctx.moveTo(-4, -6); ctx.lineTo(-4, 8); ctx.stroke();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawEquippedSurface() {
+      if (!equippedDiscovery || !discoveries.includes(equippedDiscovery)) return;
+      const horizon = h * 0.58;
+      if (equippedDiscovery === 'bottle') {
+        const x = w * 0.18 + Math.sin(animTime * 0.00025) * w * 0.04;
+        const y = horizon + 24 + Math.sin(animTime * 0.0011) * 4;
+        drawBottleSprite(x, y, Math.sin(animTime * 0.0008) * 0.16, 0.95, 1.2);
+      } else if (equippedDiscovery === 'storm') {
+        ctx.save();
+        const cloudX = w * 0.78, cloudY = h * 0.14;
+        ctx.fillStyle = 'rgba(90,110,140,0.35)';
+        ctx.beginPath(); ctx.ellipse(cloudX, cloudY, 46, 18, 0, 0, Math.PI*2); ctx.ellipse(cloudX-34, cloudY+6, 28, 14, 0, 0, Math.PI*2); ctx.ellipse(cloudX+34, cloudY+8, 30, 14, 0, 0, Math.PI*2); ctx.fill();
+        const flick = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(animTime * 0.008));
+        ctx.strokeStyle = `rgba(190,225,255,${flick})`;
+        ctx.lineWidth = 2;
+        const x = cloudX + 6, y = cloudY + 14;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x-8, y+18); ctx.lineTo(x+2, y+18); ctx.lineTo(x-6, y+38); ctx.lineTo(x+10, y+14); ctx.lineTo(x+1, y+14); ctx.closePath();
+        ctx.stroke(); ctx.fillStyle = `rgba(200,235,255,${flick * 0.35})`; ctx.fill();
+        ctx.restore();
+      } else if (equippedDiscovery === 'aurora') {
+        ctx.save(); ctx.globalAlpha = 0.55;
+        const y = h * 0.17;
+        for (let i=0;i<3;i++) {
+          ctx.strokeStyle = `rgba(${100+i*30},${200-i*20},255,${0.14-i*0.025})`;
+          ctx.lineWidth = 10 - i*2;
+          ctx.beginPath();
+          for (let x=0;x<=w;x+=24) {
+            const yy = y + i*14 + Math.sin(x*0.01 + animTime*0.0007 + i) * 10;
+            if (x===0) ctx.moveTo(x,yy); else ctx.lineTo(x,yy);
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    function drawEquippedUnderwater() {
+      if (!equippedDiscovery || !discoveries.includes(equippedDiscovery)) return;
+      if (equippedDiscovery === 'jelly') {
+        const x = w * 0.72 + Math.sin(animTime * 0.0003) * 30;
+        const y = h * 0.48 + Math.sin(animTime * 0.0007) * 18;
+        ctx.save(); ctx.globalAlpha = 0.92; drawJelly(x, y, 1.05); ctx.restore();
+      } else if (equippedDiscovery === 'deep') {
+        const x = w * 0.5, y = h * 0.72 + Math.sin(animTime*0.0008)*8;
+        ctx.save();
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 70);
+        g.addColorStop(0,'rgba(120,220,255,0.22)'); g.addColorStop(1,'rgba(120,220,255,0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,70,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle='rgba(140,220,255,0.45)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y,20+Math.sin(animTime*0.002)*2,0,Math.PI*2); ctx.stroke();
+        ctx.fillStyle='rgba(180,235,255,0.75)'; ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+    }
+
     function drawSurfaceLife() {
       const phase = getCyclePhase();
       const isDay = Math.sin(phase * Math.PI * 2) >= 0;
@@ -865,43 +950,7 @@
         const by = horizon + 26 + Math.sin(animTime * 0.0012 + bottle.ph) * bottle.bob;
         bottle.screenX = bx; bottle.screenY = by;
         const bobRot = Math.sin(animTime * 0.0009 + bottle.ph) * 0.18;
-        ctx.save();
-        ctx.translate(bx, by);
-        ctx.rotate(bobRot);
-        ctx.globalAlpha = bottle.found ? 0.55 : 0.9;
-        // glass body
-        ctx.fillStyle = 'rgba(170, 225, 210, 0.28)';
-        ctx.strokeStyle = 'rgba(220, 245, 235, 0.85)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(-7, -8);
-        ctx.lineTo(-7, 10);
-        ctx.quadraticCurveTo(-7, 14, -3, 14);
-        ctx.lineTo(3, 14);
-        ctx.quadraticCurveTo(7, 14, 7, 10);
-        ctx.lineTo(7, -8);
-        ctx.quadraticCurveTo(7, -11, 3, -11);
-        ctx.lineTo(3, -16);
-        ctx.lineTo(-3, -16);
-        ctx.lineTo(-3, -11);
-        ctx.quadraticCurveTo(-7, -11, -7, -8);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        // neck lip/cork
-        ctx.fillStyle = 'rgba(120, 85, 55, 0.95)';
-        ctx.fillRect(-3.5, -18, 7, 3.2);
-        // paper message
-        ctx.fillStyle = 'rgba(245, 235, 210, 0.85)';
-        ctx.fillRect(-4, -2, 8, 8);
-        ctx.strokeStyle = 'rgba(180,160,120,0.6)';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(-2.5,1); ctx.lineTo(2.5,1); ctx.moveTo(-2.5,3.5); ctx.lineTo(1.5,3.5); ctx.stroke();
-        // highlight
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-        ctx.beginPath(); ctx.moveTo(-4, -6); ctx.lineTo(-4, 8); ctx.stroke();
-        ctx.restore();
-        ctx.globalAlpha = 1;
+        drawBottleSprite(bx, by, bobRot, bottle.found ? 0.55 : 0.9, 1);
         if (bottle.x > 1.15) {
           bottle.active = false;
           bottle.screenX = -999; bottle.screenY = -999;
@@ -1310,12 +1359,14 @@
       drawMist();
       for (const layer of layers) drawWave(layer);
       drawSurfaceLife();
+      drawEquippedSurface();
       drawRipplesAndBubbles();
       drawWeather();
 
       ctx.save();
       ctx.translate(0, h);
       drawUnderwater();
+      drawEquippedUnderwater();
       ctx.restore();
 
       ctx.restore();
@@ -1527,6 +1578,9 @@
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
     logClose.addEventListener('click', () => { logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); });
     logModal.addEventListener('click', (e) => { if (e.target === logModal) logClose.click(); });
+    achBtn.addEventListener('click', (e) => { e.stopPropagation(); renderAchievements(); achModal.classList.add('open'); achModal.setAttribute('aria-hidden','false'); });
+    achClose.addEventListener('click', () => { achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); });
+    achModal.addEventListener('click', (e) => { if (e.target === achModal) achClose.click(); });
     crashBtn.addEventListener('click', (e) => { e.stopPropagation(); unlockAchievement('chaos'); startAudio(); setTimeout(() => { throw new Error('manual ocean crash initiated by user'); }, 30); });
     feedbackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFeedback(); });
     feedbackCancel.addEventListener('click', closeFeedback);
@@ -1565,19 +1619,10 @@
 
     window.addEventListener('pointerdown', (e) => { if (e.target.closest('.settings-wrap') || e.target.closest('.modal') || e.target === canvas) return; startAudio(); }, { passive: true });
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
+      if (e.key === 'Escape') { closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
       if (e.key.toLowerCase() === 'p' && !e.target.closest('textarea,input,select')) { setPhotoMode(!photoMode); return; }
       startAudio();
     });
-    function setTab(which) {
-      const d = which === 'discoveries';
-      tabDiscoveries.classList.toggle('active', d);
-      tabAchievements.classList.toggle('active', !d);
-      paneDiscoveries.classList.toggle('active', d);
-      paneAchievements.classList.toggle('active', !d);
-    }
-    tabDiscoveries.addEventListener('click', () => setTab('discoveries'));
-    tabAchievements.addEventListener('click', () => { renderAchievements(); setTab('achievements'); });
     checkAchievements();
     renderAchievements();
     renderDiscoveries();
