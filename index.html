@@ -235,11 +235,37 @@
         osc1.start(); osc2.start(); lfo.start();
       } catch (_) {}
     }
+    async function playCrashLoopFromCapture() {
+      try {
+        if (!mediaRecorder || audioChunks.length === 0) return;
+        if (mediaRecorder.state !== 'inactive') {
+          await new Promise((resolve) => {
+            mediaRecorder.addEventListener('stop', resolve, { once: true });
+            try { mediaRecorder.stop(); } catch (_) { resolve(); }
+          });
+        }
+        const lastChunks = audioChunks.slice(-2); // ~last 1s
+        const blob = new Blob(lastChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        crashLoopAudio = new Audio(url);
+        crashLoopAudio.loop = true;
+        crashLoopAudio.volume = Math.max(0.2, masterVolume);
+        await crashLoopAudio.play().catch(() => {});
+      } catch (_) {}
+    }
+
     function showFatalError(err) {
       if (crashed) return;
       crashed = true;
       try { if (rafId) cancelAnimationFrame(rafId); } catch (_) {}
-      try { bgm.loop = true; if (bgm.paused && soundEnabled) bgm.play().catch(() => {}); } catch (_) {}
+      // freeze current soundscape into last ~1s loop
+      try {
+        if (masterGain) {
+          masterGain.disconnect(audioCtx.destination); // stop live evolving audio
+        }
+      } catch (_) {}
+      try { bgm.pause(); } catch (_) {}
+      try { playCrashLoopFromCapture(); } catch (_) {}
       try {
         playWiiCrashBuzz();
         const m = document.getElementById('errorModal');
@@ -354,6 +380,7 @@
     // --- audio sfx ---
     let audioCtx = null, masterGain = null, rainGain = null, windGain = null, underwaterGain = null, dayGain = null, nightGain = null;
     let rainNoise = null, windNoise = null, underwaterNoise = null, dayNoise = null, nightNoise = null;
+    let bgmNode = null, captureDest = null, mediaRecorder = null, audioChunks = [], crashLoopAudio = null;
     function ensureAudio() {
       if (audioCtx) return;
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -366,7 +393,25 @@
       dayGain = audioCtx.createGain(); dayGain.gain.value = 0;
       nightGain = audioCtx.createGain(); nightGain.gain.value = 0;
       [rainGain, windGain, underwaterGain, dayGain, nightGain].forEach(g => g.connect(masterGain));
+      captureDest = audioCtx.createMediaStreamDestination();
       masterGain.connect(audioCtx.destination);
+      masterGain.connect(captureDest);
+      try {
+        bgmNode = audioCtx.createMediaElementSource(bgm);
+        bgmNode.connect(masterGain);
+      } catch (_) { /* already connected or unsupported */ }
+      try {
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(captureDest.stream);
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            audioChunks.push(e.data);
+            const maxChunks = 12; // ~6s at 500ms
+            if (audioChunks.length > maxChunks) audioChunks.splice(0, audioChunks.length - maxChunks);
+          }
+        };
+        mediaRecorder.start(500);
+      } catch (_) {}
 
       function noiseBuf() {
         const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
