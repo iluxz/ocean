@@ -171,7 +171,7 @@
         <button class="btn" id="feedbackCancel" type="button">cancel</button>
         <button class="btn" id="feedbackSend" type="button">open github issue</button>
       </div>
-      <div class="modal-note">no email sent. this opens a prefilled GitHub issue draft. spam/harassment/threats get flagged and blocked from issue creation.</div>
+      <div class="modal-note">no email sent. this opens a prefilled GitHub issue draft. spam/harassment/threats get flagged and blocked from issue creation. non-english input is auto-translated internally for detection.</div>
     </div>
   </div>
 
@@ -793,11 +793,39 @@
 
     // --- feedback ---
     const FEEDBACK_REPO = 'iluxz/ocean'; // change when repo exists
-    function classifyFeedback(text) {
+    const PROFANITY = ["arse","arsehole","ass","asses","asshat","asshole","assmunch","bastard","bastards","big black cock","bitch","bitches","blowjob","bollock","bollocks","brainfuck","bugger","bullshit","chicken shit","ching","ching chong","chong","clusterfuck","cock","cocks","cocksucker","coonass","cornhole","cunt","cunted","cunts","dick","dickhead","dicks","dumbass","enshittification","faggot","faggots","feck","fuck","fuck her right in the pussy","fuck joe biden","fuck, marry, kill","fucked","fucker","fuckers","fuckery","fucking","fucks","grab 'em by the pussy","healslut","hori","horseshit","jesus fucking christ","kike","motherfucker","motherfuckers","nigga","niggas","nigger","niggerhead","niggers","pajeet","paki","polaco","poofter","prick","pricks","pussy","ratfucking","retard","retards","russian warship, go fuck yourself","serving cunt","shit","shit happens","shithouse","shitposting","shits","shitter","shitty","shut the fuck up","shut the hell up","slut","sluts","son of a bitch","spic","twat","twats","unclefucker","wank","wanker","wanking","wetback","whore","whores"];
+    const PROFANITY_RE = new RegExp(`\\b(${PROFANITY.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')).join('|')})\\b`, 'i');
+
+    function likelyNonEnglish(text) {
+      const t = (text || '').trim();
+      if (!t) return false;
+      if (/[^\x00-\x7F]/.test(t)) return true;
+      const words = t.toLowerCase().match(/[a-z']+/g) || [];
+      const common = new Set(['the','a','an','is','it','you','i','to','and','for','this','that','not','with','on','of','but','are','was','be','my','me','so','if','or','in','broken','bug','add','please','make','game','sound','music','weather','day','night','water','ocean']);
+      const hits = words.filter(w => common.has(w)).length;
+      return words.length >= 3 && hits === 0;
+    }
+
+    async function translateToEnglish(text) {
       const raw = (text || '').trim();
-      const t = raw.toLowerCase();
+      if (!raw || !likelyNonEnglish(raw)) return raw;
+      try {
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw.slice(0, 500))}&langpair=autodetect|en`;
+        const res = await fetch(url);
+        if (!res.ok) return raw;
+        const data = await res.json();
+        const translated = data && data.responseData && data.responseData.translatedText;
+        if (typeof translated === 'string' && translated.trim()) return translated.trim();
+      } catch (_) {}
+      return raw;
+    }
+
+    async function classifyFeedback(text) {
+      const raw = (text || '').trim();
+      const translated = await translateToEnglish(raw);
+      const t = translated.toLowerCase();
       const rules = {
-        harassment: [/\b(kill|die|kys|suicide|threat|bomb|shoot|stab|rape|nazi|dox)\b/, /\bi know where you live\b/, /\b(fuck(ing)? you|you suck|moron|idiot|stfu|shut up|hate you|dumbass|asshole|bitch)\b/],
+        harassment: [/\b(kill|die|kys|suicide|threat|bomb|shoot|stab|rape|nazi|dox)\b/, /\bi know where you live\b/, /\b(fuck(ing)? you|you suck|moron|idiot|stfu|shut up|hate you|dumbass|asshole|bitch)\b/, PROFANITY_RE],
         spam: [/(.)\1{7,}/, /\b(buy now|free money|crypto|casino|viagra|nft promo)\b/, /^https?:\/\/\S+$/],
         bug: [/\b(bug|broken|crash|error|glitch|not working|doesn'?t work|issue|lag|freeze|stuck|black screen|overlap|flicker|audio bug|sound bug)\b/],
         suggestion: [/\b(add|should|could|please|would be nice|feature|suggest|option|improve|make it|can you|maybe)\b/]
@@ -813,15 +841,20 @@
       }
       if (max === 0) category = 'other';
       const actionMap = { bug: 'prioritize', suggestion: 'less priority', spam: 'filter', harassment: 'flag for review', other: 'needs review' };
-      return { category, action: actionMap[category] };
+      return { category, action: actionMap[category], translated, wasTranslated: translated !== raw };
     }
 
-    function updateFeedbackMeta() {
-      const { category, action } = classifyFeedback(feedbackText.value);
+    let feedbackCheckId = 0;
+    async function updateFeedbackMeta() {
+      const id = ++feedbackCheckId;
+      const text = feedbackText.value;
+      feedbackAction.textContent = 'checking...';
+      const { category, action, wasTranslated } = await classifyFeedback(text);
+      if (id !== feedbackCheckId) return;
       const labelMap = { harassment: 'harassment/threat', other: 'other/uncategorized' };
       feedbackCategory.textContent = labelMap[category] || category;
       feedbackCategory.className = `badge ${category}`;
-      feedbackAction.textContent = action;
+      feedbackAction.textContent = wasTranslated ? `${action} (auto-translated)` : action;
       const blocked = category === 'spam' || category === 'harassment';
       feedbackSend.textContent = blocked ? 'flagged (blocked)' : 'open github issue';
       feedbackSend.disabled = blocked;
@@ -830,21 +863,24 @@
 
     function openFeedback() { feedbackModal.classList.add('open'); feedbackModal.setAttribute('aria-hidden','false'); updateFeedbackMeta(); feedbackText.focus(); }
     function closeFeedback() { feedbackModal.classList.remove('open'); feedbackModal.setAttribute('aria-hidden','true'); }
-    function submitFeedback() {
+    async function submitFeedback() {
       const text = feedbackText.value.trim();
-      const { category, action } = classifyFeedback(text);
       if (!text) { feedbackStatus.textContent = 'feedback: write something first'; return; }
+      feedbackSend.disabled = true; feedbackSend.style.opacity = '0.55'; feedbackSend.textContent = 'checking...';
+      const { category, action, translated, wasTranslated } = await classifyFeedback(text);
       if (category === 'spam' || category === 'harassment') {
         feedbackStatus.textContent = `feedback: ${category} flagged locally, not sent`;
         closeFeedback();
+        updateFeedbackMeta();
         return;
       }
       const title = `[${category}] ${text.slice(0, 60).replace(/\s+/g, ' ')}`;
-      const body = `## Category\n${category}\n\n## Priority/Action\n${action}\n\n## Message\n${text}\n\n## Context\n- page: ocean\n- ua: ${navigator.userAgent}\n- time: ${new Date().toISOString()}`;
+      const body = `## Category\n${category}\n\n## Priority/Action\n${action}\n\n## Message\n${text}\n\n## Auto-translated (internal detector)\n${wasTranslated ? translated : '(not translated)'}\n\n## Context\n- page: ocean\n- ua: ${navigator.userAgent}\n- time: ${new Date().toISOString()}`;
       const url = `https://github.com/${FEEDBACK_REPO}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
       window.open(url, '_blank', 'noopener');
       feedbackStatus.textContent = `feedback: opened ${category} issue draft`;
       closeFeedback();
+      updateFeedbackMeta();
     }
 
     async function startAudio() {
