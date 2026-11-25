@@ -105,6 +105,32 @@
     .modal-card h2 { font-size:14px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; font-weight:500; }
     .modal-card textarea { width:100%; min-height:130px; resize:vertical; background:rgba(255,255,255,0.04); color:var(--text); border:1px solid rgba(126,200,255,0.18); border-radius:10px; padding:10px; font:inherit; font-size:13px; }
     .modal-meta { display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:10px; font-size:12px; color:var(--muted); }
+    .discover-grid { display:grid; gap:10px; max-height:min(58vh,520px); overflow:auto; padding-right:4px; scrollbar-width:thin; }
+    .discover-grid::-webkit-scrollbar { width:8px; }
+    .discover-grid::-webkit-scrollbar-thumb { background: rgba(126,200,255,0.25); border-radius:999px; }
+    .discover-card { display:grid; grid-template-columns:84px 1fr auto; gap:12px; align-items:center; padding:10px; border-radius:12px; border:1px solid rgba(126,200,255,0.12); background:rgba(255,255,255,0.03); }
+    .discover-card.locked { opacity:0.88; }
+    .discover-card.equipped { border-color:rgba(126,200,255,0.45); background:rgba(126,200,255,0.08); box-shadow: inset 0 0 0 1px rgba(126,200,255,0.12); }
+    .discover-img { width:84px; height:84px; border-radius:10px; border:1px solid rgba(126,200,255,0.14); background:rgba(2,10,24,0.5); display:grid; place-items:center; position:relative; overflow:hidden; }
+    .discover-img img { width:100%; height:100%; object-fit:cover; display:block; }
+    .discover-card.locked .discover-img img { filter: grayscale(1) brightness(0.45) blur(0.2px); }
+    .discover-lock { position:absolute; inset:0; display:grid; place-items:center; font-size:28px; color:rgba(236,247,255,0.8); text-shadow:0 2px 10px rgba(0,0,0,0.6); background:linear-gradient(180deg, rgba(2,8,20,0.05), rgba(2,8,20,0.25)); }
+    .discover-name { font-size:13px; color:var(--text); margin-bottom:4px; letter-spacing:.02em; }
+    .discover-desc { font-size:12px; color:var(--muted); line-height:1.4; }
+    .discover-meta { font-size:10px; color:rgba(236,247,255,0.45); text-transform:uppercase; letter-spacing:.1em; margin-top:6px; }
+    .equip-btn { appearance:none; border:1px solid rgba(126,200,255,0.22); background:rgba(8,24,46,0.7); color:var(--text); padding:8px 10px; border-radius:999px; font:inherit; font-size:11px; cursor:pointer; }
+    .equip-btn:disabled { opacity:.45; cursor:default; }
+    .equip-btn.active { background:rgba(126,200,255,0.18); border-color:rgba(126,200,255,0.45); }
+    .ach-list { display:grid; gap:8px; margin-top:10px; max-height:180px; overflow:auto; padding-right:4px; }
+    .ach { padding:8px 10px; border-radius:10px; border:1px solid rgba(126,200,255,0.1); background:rgba(255,255,255,0.02); font-size:12px; color:var(--muted); display:flex; justify-content:space-between; gap:10px; }
+    .ach.unlocked { color:var(--text); border-color:rgba(126,200,255,0.22); }
+    .ach small { color:var(--muted); display:block; font-size:11px; margin-top:2px; }
+    .tabs { display:flex; gap:8px; margin-bottom:10px; }
+    .tab { appearance:none; border:1px solid rgba(126,200,255,0.18); background:rgba(255,255,255,0.03); color:var(--muted); padding:7px 10px; border-radius:999px; font:inherit; font-size:11px; cursor:pointer; }
+    .tab.active { color:var(--text); background:rgba(126,200,255,0.14); border-color:rgba(126,200,255,0.35); }
+    .tab-pane { display:none; }
+    .tab-pane.active { display:block; }
+    .equipped-banner { font-size:12px; color:var(--muted); margin-bottom:10px; padding:8px 10px; border:1px solid rgba(126,200,255,0.1); border-radius:10px; background:rgba(255,255,255,0.02); }
     .badge { padding:4px 8px; border-radius:999px; border:1px solid rgba(126,200,255,0.2); font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
     .badge.bug { color:#9fd0ff; }
     .badge.suggestion { color:#b8e0ff; }
@@ -167,9 +193,19 @@
   <button class="btn photo-exit" id="photoExitBtn" type="button">exit photo mode</button>
   <div class="hint ui" id="hint">click anywhere for sound • p = photo mode</div>
   <div class="modal" id="logModal" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Discoveries">
-      <h2>discoveries</h2>
-      <div id="logList" style="font-size:13px;color:var(--muted);line-height:1.6;max-height:260px;overflow:auto;"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Discoveries and achievements" style="width:min(760px,calc(100vw - 32px));">
+      <h2>discoveries / achievements</h2>
+      <div class="tabs">
+        <button class="tab active" id="tabDiscoveries" type="button">discoveries</button>
+        <button class="tab" id="tabAchievements" type="button">achievements</button>
+      </div>
+      <div class="tab-pane active" id="paneDiscoveries">
+        <div class="equipped-banner" id="equippedBanner">equipped: none</div>
+        <div class="discover-grid" id="logList"></div>
+      </div>
+      <div class="tab-pane" id="paneAchievements">
+        <div class="ach-list" id="achList"></div>
+      </div>
       <div class="modal-actions"><button class="btn" id="logClose" type="button">close</button></div>
     </div>
   </div>
@@ -313,6 +349,12 @@
     const logModal = document.getElementById('logModal');
     const logList = document.getElementById('logList');
     const logClose = document.getElementById('logClose');
+    const tabDiscoveries = document.getElementById('tabDiscoveries');
+    const tabAchievements = document.getElementById('tabAchievements');
+    const paneDiscoveries = document.getElementById('paneDiscoveries');
+    const paneAchievements = document.getElementById('paneAchievements');
+    const achList = document.getElementById('achList');
+    const equippedBanner = document.getElementById('equippedBanner');
     const errorRefresh = document.getElementById('errorRefresh');
     errorRefresh.addEventListener('click', () => location.reload());
 
@@ -344,10 +386,50 @@
     const ripples = [];
     const clickBubbles = [];
     const discoveries = JSON.parse(localStorage.getItem('ocean_discoveries') || '[]');
+    const achievements = JSON.parse(localStorage.getItem('ocean_achievements') || '[]');
+    let equippedDiscovery = localStorage.getItem('ocean_equipped') || '';
+    let clicks = Number(localStorage.getItem('ocean_clicks') || 0);
+    let photoCount = Number(localStorage.getItem('ocean_photos') || 0);
     bgm.volume = masterVolume;
+
+    function svgThumb(title, emoji, c1, c2) {
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'>
+        <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='${c1}'/><stop offset='100%' stop-color='${c2}'/></linearGradient></defs>
+        <rect width='128' height='128' rx='18' fill='url(#g)'/>
+        <circle cx='64' cy='60' r='34' fill='rgba(255,255,255,0.08)'/>
+        <text x='64' y='72' font-size='44' text-anchor='middle'>${emoji}</text>
+        <text x='64' y='112' font-size='10' fill='rgba(236,247,255,0.72)' text-anchor='middle' font-family='Trebuchet MS,Segoe UI,sans-serif' letter-spacing='1'>${title}</text>
+      </svg>`;
+      return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+    }
+
+    const DISCOVERY_DEFS = [
+      { id:'bottle', name:'Message in a Bottle', desc:'A weathered bottle drifted by with a tiny note inside. "the ocean remembers every ripple."', emoji:'🍾', c1:'#16406a', c2:'#2f7a9e' },
+      { id:'jelly', name:'Moon Jelly Drift', desc:'A rare jellyfish pulsed through the deep blue like a living lantern.', emoji:'🪼', c1:'#183a73', c2:'#6e86d6' },
+      { id:'storm', name:'Storm Witness', desc:'You caught lightning splitting the clouds above a restless sea.', emoji:'⚡', c1:'#24304a', c2:'#6e7d96' },
+      { id:'deep', name:'Deep Blue Descent', desc:'You reached the deep. The light thinned, the water darkened, and the ocean got quiet.', emoji:'🌊', c1:'#06203b', c2:'#0f5f89' },
+      { id:'aurora', name:'Aurora Night', desc:'The night sky glowed with aurora over calm water.', emoji:'🌌', c1:'#10204a', c2:'#3c8fd1' }
+    ];
+    const ACHIEVEMENT_DEFS = [
+      { id:'first_find', name:'First Discovery', desc:'Find your first discovery.', check: () => discoveries.length >= 1 },
+      { id:'collector', name:'Collector', desc:'Find 3 discoveries.', check: () => discoveries.length >= 3 },
+      { id:'oceanographer', name:'Oceanographer', desc:'Find all discoveries.', check: () => discoveries.length >= DISCOVERY_DEFS.length },
+      { id:'clicker', name:'Hands On', desc:'Click the ocean 20 times.', check: () => clicks >= 20 },
+      { id:'photographer', name:'Photo Mode', desc:'Save a photo.', check: () => photoCount >= 1 },
+      { id:'chaos', name:'Crash Test Dummy', desc:'Initiate a crash.', check: () => achievements.includes('chaos') }
+    ];
 
     function saveSettings() {
       try { localStorage.setItem('ocean_settings', JSON.stringify({ soundEnabled, dayCycle, cycleSpeed, forcedMode, weatherMode, reducedMotion })); } catch (_) {}
+    }
+    function saveGameState() {
+      try {
+        localStorage.setItem('ocean_discoveries', JSON.stringify(discoveries));
+        localStorage.setItem('ocean_achievements', JSON.stringify(achievements));
+        localStorage.setItem('ocean_equipped', equippedDiscovery || '');
+        localStorage.setItem('ocean_clicks', String(clicks));
+        localStorage.setItem('ocean_photos', String(photoCount));
+      } catch (_) {}
     }
     function loadSettings() {
       try {
@@ -361,23 +443,66 @@
         if (typeof s.reducedMotion === 'boolean') reducedMotion = s.reducedMotion;
       } catch (_) {}
     }
-    function recordDiscovery(key, text) {
-      if (discoveries.includes(key)) return;
-      discoveries.push(key);
-      try { localStorage.setItem('ocean_discoveries', JSON.stringify(discoveries)); } catch (_) {}
-      feedbackStatus.textContent = `discovery: ${text}`;
+    function unlockAchievement(id) {
+      if (achievements.includes(id)) return false;
+      const def = ACHIEVEMENT_DEFS.find(a => a.id === id);
+      achievements.push(id);
+      saveGameState();
+      feedbackStatus.textContent = `achievement unlocked: ${def ? def.name : id}`;
+      renderAchievements();
+      return true;
+    }
+    function checkAchievements() {
+      for (const a of ACHIEVEMENT_DEFS) {
+        if (a.id === 'chaos') continue;
+        if (!achievements.includes(a.id) && a.check()) unlockAchievement(a.id);
+      }
+    }
+    function recordDiscovery(key) {
+      if (!discoveries.includes(key)) {
+        discoveries.push(key);
+        const def = DISCOVERY_DEFS.find(d => d.id === key);
+        feedbackStatus.textContent = `discovery: ${def ? def.name : key}`;
+        saveGameState();
+        checkAchievements();
+      }
       renderDiscoveries();
+      renderAchievements();
+    }
+    function equipDiscovery(id) {
+      if (!discoveries.includes(id)) return;
+      equippedDiscovery = equippedDiscovery === id ? '' : id;
+      saveGameState();
+      renderDiscoveries();
+      syncSettingsUI();
+    }
+    function renderAchievements() {
+      achList.innerHTML = ACHIEVEMENT_DEFS.map(a => {
+        const unlocked = achievements.includes(a.id);
+        return `<div class="ach ${unlocked ? 'unlocked' : ''}"><div><strong>${unlocked ? '✓' : '•'} ${a.name}</strong><small>${a.desc}</small></div><span>${unlocked ? 'unlocked' : 'locked'}</span></div>`;
+      }).join('');
     }
     function renderDiscoveries() {
-      discoverHint.textContent = `discoveries: ${discoveries.length} found`;
-      const labels = {
-        bottle: 'message in a bottle - "the ocean remembers every ripple."',
-        jelly: 'rare jellyfish drifted by',
-        storm: 'caught lightning in a storm',
-        deep: 'reached the deep blue',
-        aurora: 'saw aurora night glow'
-      };
-      logList.innerHTML = discoveries.length ? discoveries.map(k => `<div>• ${labels[k] || k}</div>`).join('') : '<div>nothing found yet. click around, dive, ride storms...</div>';
+      discoverHint.textContent = `discoveries: ${discoveries.length}/${DISCOVERY_DEFS.length} found`;
+      const eq = DISCOVERY_DEFS.find(d => d.id === equippedDiscovery && discoveries.includes(d.id));
+      equippedBanner.textContent = eq ? `equipped: ${eq.emoji} ${eq.name}` : 'equipped: none';
+      logList.innerHTML = DISCOVERY_DEFS.map(d => {
+        const found = discoveries.includes(d.id);
+        const equipped = equippedDiscovery === d.id && found;
+        const img = svgThumb(d.name, d.emoji, d.c1, d.c2);
+        return `<div class="discover-card ${found ? '' : 'locked'} ${equipped ? 'equipped' : ''}">
+          <div class="discover-img"><img src="${img}" alt="${found ? d.name : 'Locked discovery'}">${found ? '' : '<div class="discover-lock">🔒</div>'}</div>
+          <div>
+            <div class="discover-name">${found ? d.name : '??? Locked Discovery'}</div>
+            <div class="discover-desc">${found ? d.desc : 'Keep exploring the ocean to unlock this discovery.'}</div>
+            <div class="discover-meta">${found ? (equipped ? 'equipped' : 'discovered') : 'undiscovered'}</div>
+          </div>
+          <div><button class="equip-btn ${equipped ? 'active' : ''}" data-equip="${d.id}" ${found ? '' : 'disabled'}>${equipped ? 'unequip' : 'equip'}</button></div>
+        </div>`;
+      }).join('');
+      logList.querySelectorAll('[data-equip]').forEach(btn => {
+        btn.addEventListener('click', () => equipDiscovery(btn.getAttribute('data-equip')));
+      });
     }
     loadSettings();
 
@@ -623,7 +748,7 @@
         aurora.addColorStop(0.45, `rgba(70,160,220,${0.04 * moonA})`);
         aurora.addColorStop(1, 'rgba(70,160,220,0)');
         ctx.fillStyle = aurora; ctx.fillRect(0,0,w,h*0.7);
-        if (moonA > 0.5 && weatherIntensity < 0.4) recordDiscovery('aurora', 'saw aurora night glow');
+        if (moonA > 0.5 && weatherIntensity < 0.4) recordDiscovery('aurora');
 
         const moonGlow = ctx.createRadialGradient(moon.x, moon.y, 0, moon.x, moon.y, 140);
         moonGlow.addColorStop(0, `rgba(210,235,255,${0.24*moonA})`);
@@ -1116,7 +1241,7 @@
         if (jx > w + 40) { jelly.active = false; jelly.next = 20000 + Math.random()*30000; }
       } else {
         jelly.next -= 16;
-        if (jelly.next <= 0 && cameraY > 0.25) { jelly.active = true; jelly.x = -0.1; recordDiscovery('jelly','rare jellyfish drifted by'); }
+        if (jelly.next <= 0 && cameraY > 0.25) { jelly.active = true; jelly.x = -0.1; recordDiscovery('jelly'); }
       }
 
       const sg = ctx.createLinearGradient(0, 0, 0, 140);
@@ -1152,13 +1277,13 @@
         lightning = 0.8 + Math.random() * 0.6;
         nextLightning = (3500 + Math.random() * 7000) / Math.max(0.5, weatherIntensity - 0.4);
         sfxThunder();
-        recordDiscovery('storm', 'caught lightning in a storm');
+        recordDiscovery('storm');
       }
 
       if (camAnim) {
         const p = Math.min(1, (ts - camAnim.start) / camAnim.dur);
         cameraY = camAnim.from + (camAnim.to - camAnim.from) * easeInOutCubic(p);
-        if (p >= 1) { camAnim = null; if (cameraY > 0.95) recordDiscovery('deep', 'reached the deep blue'); }
+        if (p >= 1) { camAnim = null; if (cameraY > 0.95) recordDiscovery('deep'); }
       }
 
       ctx.clearRect(0, 0, w, h);
@@ -1332,6 +1457,9 @@
         a.download = `ocean-${Date.now()}.png`;
         a.href = canvas.toDataURL('image/png');
         a.click();
+        photoCount += 1;
+        checkAchievements();
+        saveGameState();
         feedbackStatus.textContent = 'photo: saved png';
       } catch (_) { feedbackStatus.textContent = 'photo: failed'; }
     }
@@ -1399,7 +1527,7 @@
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
     logClose.addEventListener('click', () => { logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); });
     logModal.addEventListener('click', (e) => { if (e.target === logModal) logClose.click(); });
-    crashBtn.addEventListener('click', (e) => { e.stopPropagation(); startAudio(); setTimeout(() => { throw new Error('manual ocean crash initiated by user'); }, 30); });
+    crashBtn.addEventListener('click', (e) => { e.stopPropagation(); unlockAchievement('chaos'); startAudio(); setTimeout(() => { throw new Error('manual ocean crash initiated by user'); }, 30); });
     feedbackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFeedback(); });
     feedbackCancel.addEventListener('click', closeFeedback);
     feedbackSend.addEventListener('click', submitFeedback);
@@ -1409,6 +1537,9 @@
     canvas.addEventListener('click', (e) => {
       if (e.target.closest('.settings-wrap') || e.target.closest('.modal')) return;
       startAudio();
+      clicks += 1;
+      checkAchievements();
+      saveGameState();
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
@@ -1423,7 +1554,7 @@
           bottle.active = false;
           bottle.screenX = -999; bottle.screenY = -999;
           bottle.next = 90000 + Math.random() * 120000;
-          recordDiscovery('bottle', 'message in a bottle - "the ocean remembers every ripple."');
+          recordDiscovery('bottle');
           sfxClick();
         }
       } else if (cameraY > 0.2) {
@@ -1438,6 +1569,17 @@
       if (e.key.toLowerCase() === 'p' && !e.target.closest('textarea,input,select')) { setPhotoMode(!photoMode); return; }
       startAudio();
     });
+    function setTab(which) {
+      const d = which === 'discoveries';
+      tabDiscoveries.classList.toggle('active', d);
+      tabAchievements.classList.toggle('active', !d);
+      paneDiscoveries.classList.toggle('active', d);
+      paneAchievements.classList.toggle('active', !d);
+    }
+    tabDiscoveries.addEventListener('click', () => setTab('discoveries'));
+    tabAchievements.addEventListener('click', () => { renderAchievements(); setTab('achievements'); });
+    checkAchievements();
+    renderAchievements();
     renderDiscoveries();
     syncSettingsUI();
   </script>
