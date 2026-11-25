@@ -154,6 +154,9 @@
       <div class="action-row">
         <button class="btn" id="feedbackBtn" type="button">send feedback</button>
       </div>
+      <div class="action-row">
+        <button class="btn" id="crashBtn" type="button" style="border-color:rgba(255,120,120,0.35);color:#ffb0b0;">initiate crash</button>
+      </div>
       <div class="feedback" id="feedbackStatus">feedback: ready</div>
       <div class="feedback" id="discoverHint" style="padding-top:4px;">discoveries: 0 found</div>
     </div>
@@ -199,8 +202,46 @@
   <audio id="bgm" src="DeepBlue.wav" loop preload="auto"></audio>
 
   <script>
-    function showFatalError(err) {
+    let crashBuzzStarted = false;
+    let crashed = false;
+    let rafId = null;
+    function playWiiCrashBuzz() {
+      if (crashBuzzStarted) return;
+      crashBuzzStarted = true;
       try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        const ac = (window.__oceanAudioCtx && window.__oceanAudioCtx.state !== 'closed') ? window.__oceanAudioCtx : new Ctx();
+        window.__oceanAudioCtx = ac;
+        if (ac.state === 'suspended') ac.resume().catch(() => {});
+        const gain = ac.createGain();
+        gain.gain.value = 0.085;
+        gain.connect(ac.destination);
+        // Wii/GC "horn of death" style crash buzz: stuck buffer-like harsh tone
+        const osc1 = ac.createOscillator();
+        const osc2 = ac.createOscillator();
+        const lfo = ac.createOscillator();
+        const lfoGain = ac.createGain();
+        osc1.type = 'square';
+        osc2.type = 'sawtooth';
+        osc1.frequency.value = 330; // around E4, the infamous buzz pitch
+        osc2.frequency.value = 660;
+        lfo.type = 'square';
+        lfo.frequency.value = 28;
+        lfoGain.gain.value = 0.03;
+        lfo.connect(lfoGain);
+        lfoGain.connect(gain.gain);
+        osc1.connect(gain);
+        osc2.connect(gain);
+        osc1.start(); osc2.start(); lfo.start();
+      } catch (_) {}
+    }
+    function showFatalError(err) {
+      if (crashed) return;
+      crashed = true;
+      try { if (rafId) cancelAnimationFrame(rafId); } catch (_) {}
+      try { bgm.pause(); } catch (_) {}
+      try {
+        playWiiCrashBuzz();
         const m = document.getElementById('errorModal');
         const d = document.getElementById('errorDetail');
         if (d) d.textContent = (err && (err.stack || err.message || String(err))) || 'unknown error';
@@ -230,6 +271,7 @@
     const photoBtn = document.getElementById('photoBtn');
     const logBtn = document.getElementById('logBtn');
     const feedbackBtn = document.getElementById('feedbackBtn');
+    const crashBtn = document.getElementById('crashBtn');
     const feedbackStatus = document.getElementById('feedbackStatus');
     const discoverHint = document.getElementById('discoverHint');
     const feedbackModal = document.getElementById('feedbackModal');
@@ -316,6 +358,7 @@
       if (audioCtx) return;
       const Ctx = window.AudioContext || window.webkitAudioContext;
       audioCtx = new Ctx();
+      window.__oceanAudioCtx = audioCtx;
       masterGain = audioCtx.createGain(); masterGain.gain.value = soundEnabled ? masterVolume : 0;
       rainGain = audioCtx.createGain(); rainGain.gain.value = 0;
       windGain = audioCtx.createGain(); windGain.gain.value = 0;
@@ -562,12 +605,13 @@
 
     function drawWeather() {
       if (weatherIntensity <= 0.01) return;
-      const count = Math.floor((reducedMotion ? 20 : 40) + weatherIntensity * (reducedMotion ? 70 : 140));
+      const count = Math.min(rainDrops.length, Math.floor((reducedMotion ? 20 : 40) + weatherIntensity * (reducedMotion ? 70 : 140)));
       ctx.save();
       ctx.strokeStyle = `rgba(170,205,230,${0.18 + weatherIntensity*0.18})`;
       ctx.lineWidth = 1;
       for (let i=0; i<count; i++) {
         const d = rainDrops[i];
+        if (!d) continue;
         const x = ((d.x * w) + animTime * 0.03 * d.s) % w;
         const y = ((d.y * h + animTime * (0.35 + weatherIntensity*0.35) * d.s) % (h + 30)) - 20;
         ctx.beginPath();
@@ -1050,7 +1094,7 @@
       ctx.fillRect(0, 0, w, h);
 
       updateAudioMix();
-      requestAnimationFrame(render);
+      if (!crashed) rafId = requestAnimationFrame(render);
     }
     requestAnimationFrame(render);
 
@@ -1235,6 +1279,7 @@
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
     logClose.addEventListener('click', () => { logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); });
     logModal.addEventListener('click', (e) => { if (e.target === logModal) logClose.click(); });
+    crashBtn.addEventListener('click', (e) => { e.stopPropagation(); startAudio(); setTimeout(() => { throw new Error('manual ocean crash initiated by user'); }, 30); });
     feedbackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFeedback(); });
     feedbackCancel.addEventListener('click', closeFeedback);
     feedbackSend.addEventListener('click', submitFeedback);
