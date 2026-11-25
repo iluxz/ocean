@@ -33,7 +33,9 @@
     }
     .hint.hidden { opacity: 0; }
     body.photo-mode .ui { opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+    body.photo-mode .photo-exit { opacity: 1; pointer-events: auto; }
     .ui { transition: opacity .2s ease; }
+    .photo-exit { position: fixed; top: 18px; right: 18px; z-index: 13; opacity: 0; pointer-events: none; transition: opacity .2s ease; }
     .btn {
       appearance: none;
       border: 1px solid rgba(126, 200, 255, 0.22);
@@ -162,6 +164,7 @@
     </div>
   </div>
 
+  <button class="btn photo-exit" id="photoExitBtn" type="button">exit photo mode</button>
   <div class="hint ui" id="hint">click anywhere for sound • p = photo mode</div>
   <div class="modal" id="logModal" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-label="Discoveries">
@@ -292,6 +295,7 @@
     const setWeather = document.getElementById('setWeather');
     const setMotion = document.getElementById('setMotion');
     const setPhoto = document.getElementById('setPhoto');
+    const photoExitBtn = document.getElementById('photoExitBtn');
     const goDownBtn = document.getElementById('goDownBtn');
     const goUpBtn = document.getElementById('goUpBtn');
     const photoBtn = document.getElementById('photoBtn');
@@ -1377,7 +1381,18 @@
     });
     setWeather.addEventListener('change', () => { weatherMode = setWeather.value; sfxClick(); saveSettings(); });
     setMotion.addEventListener('change', () => { reducedMotion = setMotion.checked; sfxClick(); saveSettings(); });
-    setPhoto.addEventListener('change', () => { photoMode = setPhoto.checked; document.body.classList.toggle('photo-mode', photoMode); sfxClick(); saveSettings(); });
+    function setPhotoMode(on) {
+      photoMode = !!on;
+      setPhoto.checked = photoMode;
+      document.body.classList.toggle('photo-mode', photoMode);
+      if (photoMode) {
+        settingsPanel.classList.remove('open');
+        settingsBtn.setAttribute('aria-expanded', 'false');
+      }
+      saveSettings();
+    }
+    setPhoto.addEventListener('change', () => { setPhotoMode(setPhoto.checked); sfxClick(); });
+    photoExitBtn.addEventListener('click', (e) => { e.stopPropagation(); setPhotoMode(false); sfxClick(); });
     goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(1); sfxDive(true); });
     goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(0); sfxDive(false); });
     photoBtn.addEventListener('click', (e) => { e.stopPropagation(); savePhoto(); });
@@ -1419,8 +1434,8 @@
 
     window.addEventListener('pointerdown', (e) => { if (e.target.closest('.settings-wrap') || e.target.closest('.modal') || e.target === canvas) return; startAudio(); }, { passive: true });
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); document.body.classList.remove('photo-mode'); photoMode=false; setPhoto.checked=false; return; }
-      if (e.key.toLowerCase() === 'p' && !e.target.closest('textarea,input,select')) { photoMode = !photoMode; setPhoto.checked = photoMode; document.body.classList.toggle('photo-mode', photoMode); saveSettings(); return; }
+      if (e.key === 'Escape') { closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
+      if (e.key.toLowerCase() === 'p' && !e.target.closest('textarea,input,select')) { setPhotoMode(!photoMode); return; }
       startAudio();
     });
     renderDiscoveries();
