@@ -71,7 +71,26 @@
     .action-row { display:flex; gap:8px; padding-top:10px; border-top:1px solid rgba(126,200,255,0.08); }
     .action-row .btn { flex:1; text-align:center; padding:9px 10px; }
     .setting-row input[type="range"] { width: 120px; accent-color: #7ec8ff; }
-    .setting-row select { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid rgba(126,200,255,0.18); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12px; }
+    .setting-row select {
+      appearance: none;
+      background: rgba(8, 24, 46, 0.85);
+      color: var(--text);
+      border: 1px solid rgba(126,200,255,0.22);
+      border-radius: 10px;
+      padding: 7px 30px 7px 10px;
+      font: inherit;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      outline: none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+      background-image: linear-gradient(45deg, transparent 50%, #7ec8ff 50%), linear-gradient(135deg, #7ec8ff 50%, transparent 50%);
+      background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
+    }
+    .setting-row select:focus { border-color: rgba(126,200,255,0.45); box-shadow: 0 0 0 2px rgba(126,200,255,0.12); }
+    .setting-row select option { background: #08182e; color: #ecf7ff; }
     .modal { position:fixed; inset:0; display:none; place-items:center; z-index:20; background:rgba(2,8,20,0.45); backdrop-filter: blur(4px); }
     .modal.open { display:grid; }
     .modal-card { width:min(560px, calc(100vw - 32px)); background:rgba(3,16,34,0.88); border:1px solid rgba(126,200,255,0.2); border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,0.45); }
