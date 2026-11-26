@@ -366,31 +366,34 @@
     const SAVE_SECRET = 'ocean::deep-blue::save::v2';
     let corrupted = false;
     let corruptRaf = 0;
-    const CORRUPT_SVGS = [
-      { src: 'assets/fish-shearfin.svg', vw: 350, vh: 200 },
-      { src: 'assets/fish-ribbon-pike.svg', vw: 350, vh: 200 },
-      { src: 'assets/fish-stoneback.svg', vw: 350, vh: 200 },
-      { src: 'assets/fish-scarlet-veil.svg', vw: 350, vh: 200 },
-      { src: 'assets/fish-basin-lantern.svg', vw: 350, vh: 200 },
-      { src: 'assets/fish-ember-whip.svg', vw: 350, vh: 200 },
-      { src: 'assets/fish-pale-sentinel.svg', vw: 350, vh: 200 },
-      { src: 'assets/fish-the-watcher.svg', vw: 350, vh: 200 }
-    ];
+    const CORRUPT_SVGS = ["data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2Y2YjNjZCIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS03NyAwIFEtNDggLTI4IDIgLTI0IFE0MCAtMjAgNjkgMCBRMzkgMjQgLTIgMjUgUS00OCAyOCAtNzcgMFoiIGZpbGw9IiNiYjU1N2UiIC8+PHBhdGggZD0iTS03MiAwIC0xMjIgLTM5IC0xMTAgMCAtMTIyIDM4WiIgZmlsbD0iIzcxMzk1ZiIgLz48cGF0aCBkPSJNLTMwIC0yMiAwIC01MCAyOCAtMjBaIiBmaWxsPSIjZTc4MzliIiAvPjxwYXRoIGQ9Ik0tMjUgMjIgNCA0NyAyMCAyMFoiIGZpbGw9IiM4NzNmNzAiIC8+PGNpcmNsZSBjeD0iNDIiIGN5PSItNSIgcj0iNSIgZmlsbD0iI2ZmZTZjYyIgc3Ryb2tlPSJub25lIiAvPjxwYXRoIGQ9Ik0tNDUgLTE3djM0IE0tMjIgLTIzdjQ1IE0xIC0yM3Y0NCBNMjMgLTE3djM0IiBmaWxsPSJub25lIiBvcGFjaXR5PSIuNzUiIC8+PHBhdGggZD0iTS03IDBoNDgiIHN0cm9rZT0iI2ZmZDJkOCIgb3BhY2l0eT0iLjU1IiAvPg0KIDwvZz4=","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2ZmYzVhOSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS02NSAwIFEtMzkgLTI0IDQgLTIxIFEzNiAtMTggNTggMCBRMzUgMjIgMiAyMyBRLTQwIDI0IC02NSAwWiIgZmlsbD0iI2NmNmQ2OCIgLz48cGF0aCBkPSJNLTYyIDAgLTEwOSAtMzIgLTk5IDAgLTEwOSAzMVoiIGZpbGw9IiM4MDNkNTgiIC8+PHBhdGggZD0iTS0yMiAtMjAgNiAtNDggMjggLTE3WiIgZmlsbD0iI2VmOWI4MCIgLz48Y2lyY2xlIGN4PSIzNyIgY3k9Ii01IiByPSI1IiBmaWxsPSIjZmZmMWQwIiBzdHJva2U9Im5vbmUiIC8+PHBhdGggZD0iTS0zMCAtMTV2MzAgTS03IC0yMHY0MCBNMTYgLTE4djM1IiBmaWxsPSJub25lIiAvPjxwYXRoIGQ9Ik01OCAycTI2IDEgMjUgMThxLTIgMTItMTMgMTQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmOTM4ZSIgc3Ryb2tlLXdpZHRoPSI0IiAvPjxjaXJjbGUgY3g9IjcwIiBjeT0iMjAiIHI9IjMiIGZpbGw9IiNmZmYwY2EiIHN0cm9rZT0ibm9uZSIgLz4NCiA8L2c+","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnaG9zdCIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjYzNkOWZmIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjNTU2NmE1Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PGcgIHN0cm9rZT0iI2M1ZDhmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS05MSAwIFEtNTcgLTM1IC0yIC0yOSBRNDMgLTI2IDc2IDAgUTQyIDI5IC00IDMxIFEtNjAgMzQgLTkxIDBaIiBmaWxsPSJ1cmwoI2dob3N0KSIgLz48cGF0aCBkPSJNLTg3IDAgLTEzNyAtMzggLTEyNSAwIC0xMzcgMzdaIiBmaWxsPSIjMzc0NTc5IiAvPjxwYXRoIGQ9Ik0tMzEgLTI4IDIgLTU1IDI3IC0yNVoiIGZpbGw9IiM3NzhhYzEiIC8+PHBhdGggZD0iTS0yOCAyOCA4IDQ3IDI3IDI1WiIgZmlsbD0iIzNjNGM4NSIgLz48cGF0aCBkPSJNNzYgMHEyMCAtMjAgMzYgLTdxLTcgOCAwIDE1UTk2IDIwIDc2IDBaIiBmaWxsPSIjNjM3N2I1IiAvPjxjaXJjbGUgY3g9IjQ4IiBjeT0iLTYiIHI9IjQuNSIgZmlsbD0iI2I5ZjhmZiIgc3Ryb2tlPSJub25lIiAvPjxjaXJjbGUgY3g9IjQ4IiBjeT0iLTYiIHI9IjEwIiBmaWxsPSJub25lIiBzdHJva2U9IiM4N2RmZmYiIG9wYWNpdHk9Ii42NSIgLz48cGF0aCBkPSJNLTU0IC0xM3ExNSAxNCAwIDI3IE0tMjAgLTI1cTEyIDI1IDAgNDkgTTEyIC0yNXExMiAyNSAwIDUwIiBmaWxsPSJub25lIiBvcGFjaXR5PSIuNjUiIC8+DQogPC9nPg==","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2I5ZThlZCIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS04NyAwIFEtNTcgLTI4IC0yIC0yNCBRMzYgLTIxIDY5IDAgUTM4IDI1IC00IDI1IFEtNTYgMjggLTg3IDBaIiBmaWxsPSIjNDk4YzljIiAvPjxwYXRoIGQ9Ik0tODIgMCAtMTI4IC0zMiAtMTE5IDAgLTEyOCAzMVoiIGZpbGw9IiMyODYwNzUiIC8+PHBhdGggZD0iTS0zNCAtMjIgMyAtNDggMjYgLTIwWiIgZmlsbD0iIzZmYjliYiIgLz48cGF0aCBkPSJNLTMwIDIxIDkgNDIgMjYgMjBaIiBmaWxsPSIjMmI3MTgxIiAvPjxjaXJjbGUgY3g9IjQzIiBjeT0iLTUiIHI9IjUiIGZpbGw9IiNmZmYwYjgiIHN0cm9rZT0ibm9uZSIgLz48cGF0aCBkPSJNLTUzIC0xM2w4IDEzIC04IDEzIE0tMjggLTE5bDggMTkgLTggMTggTS0zIC0yMiA1IDAgLTMgMjIiIGZpbGw9Im5vbmUiIG9wYWNpdHk9Ii42IiAvPg0KIDwvZz4=","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJyb3NlIiB4Mj0iMCIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNmZmIxYWUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNhOTQwNjYiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48ZyAgc3Ryb2tlPSIjZmZiNGJjIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPg0KICA8cGF0aCBkPSJNLTk4IDAgUS02NSAtMzkgLTQgLTMxIFE0NSAtMjYgNzggMCBRNDUgMjggLTcgMzIgUS03MCAzOCAtOTggMFoiIGZpbGw9InVybCgjcm9zZSkiIC8+PHBhdGggZD0iTS05NSAwIC0xNDQgLTM0IC0xMzMgMCAtMTQ0IDM0WiIgZmlsbD0iIzhmMzk1YyIgLz48cGF0aCBkPSJNLTM2IC0zMCBRLTggLTYyIDI0IC0yOVoiIGZpbGw9IiNkMjY3ODAiIC8+PHBhdGggZD0iTS0yNCAyOSA4IDUzIDI5IDI3WiIgZmlsbD0iIzkxM2Q2NCIgLz48Y2lyY2xlIGN4PSI1MiIgY3k9Ii02IiByPSI1IiBmaWxsPSIjZmZmMWQ0IiBzdHJva2U9Im5vbmUiIC8+PHBhdGggZD0iTS01MyAtMTVxMTIgMTUgMCAzMCBNLTIyIC0yNXExNSAyNSAwIDUwIE05IC0yOHExNCAyOCAwIDU1IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmMwYmEiIG9wYWNpdHk9Ii43IiAvPjxjaXJjbGUgY3g9Ii0yMCIgY3k9Ii0yIiByPSIzIiBmaWxsPSIjZmZlM2M5IiBzdHJva2U9Im5vbmUiIC8+DQogPC9nPg==","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJzaWx2ZXIiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzllZTZlMSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzMxN2Y5MSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxnICBzdHJva2U9IiNiOGY0ZWQiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+DQogIDxwYXRoIGQ9Ik0tMTAwIDAgUS02MyAtNDIgMCAtMzQgUTQ1IC0yOCA3NyAwIFE0MiAzMSAtNyAzNCBRLTY2IDM4IC0xMDAgMFoiIGZpbGw9InVybCgjc2lsdmVyKSIgLz48cGF0aCBkPSJNLTk2IDAgLTE0MiAtMzQgLTEzMiAwIC0xNDIgMzRaIiBmaWxsPSIjMmY3ODhkIiAvPjxwYXRoIGQ9Ik0tMzAgLTMyIFEtOCAtNTggMjQgLTM0IiBmaWxsPSIjNGFhNmFmIiAvPjxwYXRoIGQ9Ik0tMjQgMzEgUS01IDUxIDI0IDMyIiBmaWxsPSIjMjY2NDdhIiAvPjxjaXJjbGUgY3g9IjUzIiBjeT0iLTUiIHI9IjUiIGZpbGw9IiNmZmYwYjgiIHN0cm9rZT0ibm9uZSIgLz48cGF0aCBkPSJNNzMgNWwxNCAzIiBmaWxsPSJub25lIiBzdHJva2U9IiNkMGZmZjYiIC8+DQogIDxwYXRoIGQ9Ik0tNTggLTEyIFEtOCAwIC0zNSAxOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOWNlNWRjIiBvcGFjaXR5PSIuOCIgLz48Y2lyY2xlIGN4PSItNTAiIGN5PSIwIiByPSIzIiBmaWxsPSIjZDlmZmZhIiBzdHJva2U9Im5vbmUiIC8+DQogPC9nPg==","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2VlZDJhNiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS04MiAwIFEtNTEgLTI0IDEgLTIyIFE0MCAtMTggNjUgMCBRMzYgMjIgLTUgMjMgUS01NSAyNSAtODIgMFoiIGZpbGw9IiNkMjliNjIiIC8+PHBhdGggZD0iTS03OCAwIC0xMjUgLTMxIC0xMTUgMCAtMTI1IDMwWiIgZmlsbD0iI2E5NjI1NSIgLz48cGF0aCBkPSJNLTMyIC0yMCAwIC00NCAyNCAtMThaIiBmaWxsPSIjZThiNjc2IiAvPjxjaXJjbGUgY3g9IjQyIiBjeT0iLTQiIHI9IjUiIGZpbGw9IiNmZmY0YzQiIHN0cm9rZT0ibm9uZSIgLz48cGF0aCBkPSJNLTQxIC0xN3YzNCBNLTE4IC0yMXY0MSBNNSAtMjB2NDAgTTI4IC0xNHYyOSIgZmlsbD0ibm9uZSIgb3BhY2l0eT0iLjY1IiAvPg0KIDwvZz4=","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2M1Y2FmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS05MiAwIFEtNTggLTM0IC03IC0yOSBRNDEgLTI1IDc3IDAgUTQ0IDI5IC02IDMxIFEtNjAgMzMgLTkyIDBaIiBmaWxsPSIjNTU1OTg4IiAvPjxwYXRoIGQ9Ik0tODggMCAtMTQxIC0zNyAtMTI4IDAgLTE0MSAzN1oiIGZpbGw9IiMyOTJlNTAiIC8+PHBhdGggZD0iTS0zMiAtMjcgMSAtNTUgMjggLTI0WiIgZmlsbD0iIzc3NzdhNSIgLz48cGF0aCBkPSJNLTMwIDI3IDggNDcgMjggMjRaIiBmaWxsPSIjMzYzYjY4IiAvPjxjaXJjbGUgY3g9IjQ3IiBjeT0iLTYiIHI9IjUiIGZpbGw9IiNlZGZmZmYiIHN0cm9rZT0ibm9uZSIgLz48Y2lyY2xlIGN4PSI0NyIgY3k9Ii02IiByPSIxMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTRlZWZmIiAvPjxwYXRoIGQ9Ik0tNTAgLTE0cTEyIDEzIDAgMjggTS0yMSAtMjVxMTMgMjUgMCA0OSBNOSAtMjVxMTMgMjUgMCA0OSIgZmlsbD0ibm9uZSIgb3BhY2l0eT0iLjU1IiAvPjxwYXRoIGQ9Ik03NyAwcTIwIC0xNiAyOCAtNHEtOCA4IDAgMTRxLTE0IDgtMjgtMTBaIiBmaWxsPSIjNmE3MDliIiAvPg0KIDwvZz4="];
     const corruptImages = [];
     let corruptImagesReady = false;
-    // preload early so corruption has assets ready
     (function preloadCorruptSvgs(){
       let loaded = 0;
-      CORRUPT_SVGS.forEach((entry, i) => {
+      CORRUPT_SVGS.forEach((src, i) => {
         const img = new Image();
         img.decoding = 'async';
-        img._vw = entry.vw; img._vh = entry.vh;
+        img._vw = 350; img._vh = 200;
         const done = () => { loaded++; if (loaded >= CORRUPT_SVGS.length) corruptImagesReady = true; };
         img.onload = done; img.onerror = done;
-        img.src = entry.src;
+        img.src = src;
+        if (img.complete) done();
         corruptImages[i] = img;
       });
+      if (!CORRUPT_SVGS.length) corruptImagesReady = true;
     })();
+    (function preloadCorruptSvgs(){
+      let loaded = 0;
+      CORRUPT_SVGS.forEach((src, i) => {
+        const img = new Image();
+        img.decoding = "async";
+        img._vw=350;img._vh=200;const done = () => { loaded++; if (loaded >= CORRUPT_SVGS.length) corruptImagesReady = true; };
+        img.onload = done; img.onerror = done;
+        img.src = src;
+        corruptImages[i] = img;
+      });
+    })
 
     function ocsvBytesToB64(bytes) {
       let bin = '';
@@ -583,20 +586,7 @@
       resizeCorrupt();
       window.addEventListener('resize', resizeCorrupt);
 
-      // preload SVGs as images
-      if (!corruptImagesReady) {
-        let loaded = 0;
-        CORRUPT_SVGS.forEach((entry, i) => {
-          const img = new Image();
-          img.decoding = 'async';
-          img._vw = entry.vw; img._vh = entry.vh;
-          const done = () => { loaded++; if (loaded >= CORRUPT_SVGS.length) corruptImagesReady = true; };
-          img.onload = done;
-          img.onerror = done;
-          img.src = entry.src;
-          corruptImages[i] = img;
-        });
-      }
+      corruptImagesReady = corruptImages.length >= CORRUPT_SVGS.length;
 
       const rand = (a, b) => a + Math.random() * (b - a);
       let lastSpawn = -99999;
@@ -623,7 +613,7 @@
           const count = 1 + Math.floor(Math.random() * 3);
           for (let n = 0; n < count; n++) {
             const img = corruptImages[Math.floor(Math.random() * corruptImages.length)];
-            if (!img || !img.complete) continue;
+            if (!img) continue;
             const nw = img.naturalWidth || img._vw || 350;
             const nh = img.naturalHeight || img._vh || 200;
             const size = rand(40, Math.min(w, h) * 0.35);
