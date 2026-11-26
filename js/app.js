@@ -279,7 +279,15 @@
       { id:'pufferfish', name:'Pufferfish', desc:'A spiky pufferfish. click it and it puffs up... but it stings. no clicking for 1 minute.', emoji:'🐡', c1:'#6b4a12', c2:'#e9b94c', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.pufferfish) },
       { id:'shark', name:'Great White Shark', desc:'A great white shark cruising the deeper water. respect the king.', emoji:'🦈', c1:'#1f3440', c2:'#718e9b', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.shark) },
       { id:'betta', name:'Betta Fish', desc:'A flowy betta fish showing off its dramatic fins.', emoji:'🐟', c1:'#204b8b', c2:'#d84e79', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.betta) },
-      { id:'koi', name:'Koi Fish', desc:'A calm koi drifting through the upper deep.', emoji:'🎏', c1:'#5a4330', c2:'#e76d34', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.koi) }
+      { id:'koi', name:'Koi Fish', desc:'A calm koi drifting through the upper deep.', emoji:'🎏', c1:'#5a4330', c2:'#e76d34', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.koi) },
+      { id:'shearfin', name:'Shearfin', desc:'A sharp, silver-blue trench hunter slicing through the violet dark.', emoji:'🐟', c1:'#0a2436', c2:'#4aa6af', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.shearfin) },
+      { id:'ribbonpike', name:'Ribbon Pike', desc:'A long, ribbed pike drifting along the trench walls like a living ribbon.', emoji:'🐟', c1:'#102c40', c2:'#6fb9bb', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.ribbonpike) },
+      { id:'stoneback', name:'Stoneback', desc:'A heavy, armored trench fish that looks like it swallowed the rocks.', emoji:'🪨', c1:'#3a2418', c2:'#d29b62', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.stoneback) },
+      { id:'scarletveil', name:'Scarlet Veil', desc:'A red hadal drifter with fins like torn silk in crushing pressure.', emoji:'🩸', c1:'#2a0a18', c2:'#d26780', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.scarletveil) },
+      { id:'basinlantern', name:'Basin Lantern', desc:'A lantern-lit hadal fish, glowing softly where light shouldn\'t exist.', emoji:'🏮', c1:'#2a1230', c2:'#e7839b', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.basinlantern) },
+      { id:'emberwhip', name:'Ember Whip', desc:'A hot-tailed hadal fish with an ember glow trailing behind it.', emoji:'🔥', c1:'#301018', c2:'#ef9b80', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.emberwhip) },
+      { id:'palesentinel', name:'Pale Sentinel', desc:'A pale void watcher, drifting silently through the black like a ghost.', emoji:'👻', c1:'#0b1028', c2:'#778ac1', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.palesentinel) },
+      { id:'thewatcher', name:'The Watcher', desc:'It doesn\'t swim so much as observe. the void stares back.', emoji:'👁️', c1:'#050510', c2:'#7777a5', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.thewatcher) }
     ];
     const ACHIEVEMENT_DEFS = [
       { id:'first_find', name:'First Discovery', desc:'Find your first discovery.', check: () => discoveries.length >= 1 },
@@ -294,8 +302,12 @@
       { id:'hadal_diver', name:'Hadal Diver', desc:'Reach the hadal zone.', check: () => discoveries.includes('hadal') },
       { id:'void_diver', name:'Void Diver', desc:'Reach the void. why would you do that.', check: () => discoveries.includes('void') },
       { id:'deepest_secrets', name:'Deepest Secrets', desc:'Find every deep-layer discovery.', check: () => ['trenches','crack','hadal','ribcage','void','void_eye'].every(id => discoveries.includes(id)) },
-      { id:'fish_friend', name:'Fish Friend', desc:'Discover your first fish species.', check: () => ['clownfish','pufferfish','shark','betta','koi'].some(id => discoveries.includes(id)) },
+      { id:'fish_friend', name:'Fish Friend', desc:'Discover your first fish species.', check: () => ALL_FISH_IDS.some(id => discoveries.includes(id)) },
       { id:'ichthyologist', name:'Ichthyologist', desc:'Discover all fish species from the great fish expansion.', check: () => ['clownfish','pufferfish','shark','betta','koi'].every(id => discoveries.includes(id)) },
+      { id:'trench_fauna', name:'Trench Fauna', desc:'Discover all trench fish: Shearfin, Ribbon Pike, and Stoneback.', check: () => ['shearfin','ribbonpike','stoneback'].every(id => discoveries.includes(id)) },
+      { id:'hadal_fauna', name:'Hadal Fauna', desc:'Discover all hadal fish: Scarlet Veil, Basin Lantern, and Ember Whip.', check: () => ['scarletveil','basinlantern','emberwhip'].every(id => discoveries.includes(id)) },
+      { id:'void_fauna', name:'Void Fauna', desc:'Discover the void fish: Pale Sentinel and The Watcher.', check: () => ['palesentinel','thewatcher'].every(id => discoveries.includes(id)) },
+      { id:'abyssal_biologist', name:'Abyssal Biologist', desc:'Discover every fish species in the ocean, from surface to void.', check: () => ALL_FISH_IDS.every(id => discoveries.includes(id)) },
       { id:'puff_puff', name:'Puff Puff', desc:'Click a pufferfish and make it puff up.', check: () => achievements.includes('puff_puff') },
       { id:'deep_blue', name:'Deep Blue', desc:'Stop the wipeout supply in The Deep Blue facility.', check: () => achievements.includes('deep_blue') }
     ];
@@ -364,6 +376,7 @@
       syncSettingsUI();
     }
     const UPDATE_LOG = [
+      { date: '2026-11-27', title: 'deep layer fish', detail: 'added 8 new deep-sea fish across trenches, hadal, and the void: Shearfin, Ribbon Pike, Stoneback, Scarlet Veil, Basin Lantern, Ember Whip, Pale Sentinel, and The Watcher. each has its own discovery card and new layer-fauna achievements.' },
       { date: '2026-11-27', title: 'the deep blue facility', detail: 'the deepest layer is now The Deep Blue: a submarine-ish facility guarded by Deep Blue. solve 3 encounters (seal valve, enter BLUE code, bypass guard) to stop the scientists\' ocean wipeout supply. added forward/back perspectives for every non-deepest layer, including tappable arctic icebergs on the surface. facility and perspective state now persist.' },
       { date: '2026-11-26', title: 'lux studios splash', detail: 'every load now opens with the lux studios intro: a wireframe cube rolls in, speeds up, explodes into lines, and reveals the wordmark before fading into the ocean.' },
       { date: '2026-11-25', title: 'deep dive minigame', detail: 'added a side arrow that opens a 10-move minigame. answer with the most underground picks to sink deeper and score higher.' },
@@ -552,8 +565,9 @@
     }
 
     function easeInOutCubic(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+    const ALL_FISH_IDS = ['clownfish','pufferfish','shark','betta','koi','shearfin','ribbonpike','stoneback','scarletveil','basinlantern','emberwhip','palesentinel','thewatcher'];
     function fishDiscoveryCount() {
-      return discoveries.filter(id => ['clownfish','pufferfish','shark','betta','koi'].includes(id)).length;
+      return discoveries.filter(id => ALL_FISH_IDS.includes(id)).length;
     }
     function questProgress() {
       return {
@@ -1040,7 +1054,7 @@
           ctx.beginPath(); ctx.ellipse(ex+8, ey, 4, 2.2, 0, 0, Math.PI*2); ctx.fill();
         }
         ctx.restore();
-      } else if (['clownfish','pufferfish','shark','betta','koi'].includes(equippedDiscovery) && window.OceanFish) {
+      } else if (ALL_FISH_IDS.includes(equippedDiscovery) && window.OceanFish) {
         const t = window.OceanFish.TYPES.find(x => x.id === equippedDiscovery);
         if (t) {
           const x = w * 0.5 + Math.sin(animTime*0.00025) * 40;
@@ -2477,8 +2491,7 @@
     adminFinishQuest.addEventListener('click', () => {
       bottlesFound = Math.max(bottlesFound, (quest.bottlesAtAccept || 0) + 3);
       bottomTrips = Math.max(bottomTrips, (quest.tripsAtAccept || 0) + 3);
-      const fishIds = ['clownfish','pufferfish','shark','betta','koi'];
-      for (const id of fishIds) if (!discoveries.includes(id)) discoveries.push(id);
+      for (const id of ALL_FISH_IDS) if (!discoveries.includes(id)) discoveries.push(id);
       quest.offered = true;
       quest.accepted = true;
       quest.completed = true;
