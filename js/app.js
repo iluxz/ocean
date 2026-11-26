@@ -1499,7 +1499,11 @@
     function drawAbyss() {
       fillBandGradient(0, h, [[0,2,7,19],[0.35,1,3,11],[1,0,1,5]], 2.8);
 
-      // subtle deep glow, no orb/halo artifact
+      const ag = ctx.createRadialGradient(w*0.5, h*0.45, 10, w*0.5, h*0.45, w*0.55);
+      ag.addColorStop(0, 'rgba(120,90,210,0.08)');
+      ag.addColorStop(0.5, 'rgba(70,50,140,0.03)');
+      ag.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = ag; ctx.fillRect(0,0,w,h);
 
       for (const p of abyssParticles) {
         const px = (p.x * w + Math.sin(animTime*0.00015 + p.ph) * 18) % w;
