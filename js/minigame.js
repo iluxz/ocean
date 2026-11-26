@@ -367,7 +367,11 @@
     function openGame() { modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); resizeCanvas(); renderState(); setTimeout(() => input.focus(), 50); }
 
     const mgBtn = document.getElementById('minigameBtn');
-    if (mgBtn) mgBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openGame(); });
+    if (mgBtn) mgBtn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (mgBtn.disabled || mgBtn.classList.contains('locked')) return;
+      openGame();
+    });
     close.addEventListener('click', (e) => { e.preventDefault(); closeGame(); });
     quit.addEventListener('click', (e) => { e.preventDefault(); closeGame(); });
     restart.addEventListener('click', (e) => { e.preventDefault(); reset(); });

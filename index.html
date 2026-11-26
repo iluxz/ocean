@@ -52,6 +52,24 @@
     }
     .btn:hover { transform: translateY(-1px); background: rgba(10, 36, 68, 0.55); border-color: rgba(126, 200, 255, 0.38); }
     .btn:active { transform: translateY(0); }
+    .btn.locked {
+      position:relative; cursor:not-allowed; opacity:0.86;
+      background: linear-gradient(180deg, rgba(58,66,78,0.42), rgba(24,28,36,0.58)) !important;
+      border-color: rgba(170,180,195,0.28) !important; color: rgba(236,247,255,0.72) !important;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.45); overflow:hidden; transform:none !important;
+    }
+    .btn.locked::before, .btn.locked::after {
+      content:''; position:absolute; left:-20%; right:-20%; height:8px;
+      background: repeating-linear-gradient(90deg, rgba(198,206,218,0.88) 0 10px, rgba(112,122,138,0.92) 10px 20px);
+      border-top:1px solid rgba(235,242,255,0.35); border-bottom:1px solid rgba(40,48,60,0.7);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.35); pointer-events:none; z-index:2;
+    }
+    .btn.locked::before { top:30%; transform:rotate(-12deg); }
+    .btn.locked::after { top:58%; transform:rotate(10deg); }
+    .btn.locked .lock-badge {
+      position:absolute; right:10px; top:50%; transform:translateY(-50%);
+      font-size:14px; z-index:3; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.6));
+    }
     .settings-wrap { position: fixed; top: 18px; right: 18px; z-index: 12; }
     .settings-panel {
       position: absolute; top: 46px; right: 0; width: min(320px, calc(100vw - 36px));
@@ -192,7 +210,7 @@
         <button class="btn" id="feedbackBtn" type="button">send feedback</button>
       </div>
       <div class="action-row">
-        <button class="btn" id="minigameBtn" type="button">deep dive</button>
+        <button class="btn locked" id="minigameBtn" type="button" disabled aria-disabled="true" title="deep dive is locked down for now">🔒 deep dive<span class="lock-badge">⛓️</span></button>
       </div>
       <div class="action-row">
         <button class="btn" id="crashBtn" type="button" style="border-color:rgba(255,120,120,0.35);color:#ffb0b0;">initiate crash</button>
