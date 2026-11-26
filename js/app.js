@@ -367,9 +367,14 @@
     let corrupted = false;
     let corruptRaf = 0;
     const CORRUPT_SVGS = [
-      'assets/fish-shearfin.svg','assets/fish-ribbon-pike.svg','assets/fish-stoneback.svg',
-      'assets/fish-scarlet-veil.svg','assets/fish-basin-lantern.svg','assets/fish-ember-whip.svg',
-      'assets/fish-pale-sentinel.svg','assets/fish-the-watcher.svg'
+      { src: 'assets/fish-shearfin.svg', vw: 350, vh: 200 },
+      { src: 'assets/fish-ribbon-pike.svg', vw: 350, vh: 200 },
+      { src: 'assets/fish-stoneback.svg', vw: 350, vh: 200 },
+      { src: 'assets/fish-scarlet-veil.svg', vw: 350, vh: 200 },
+      { src: 'assets/fish-basin-lantern.svg', vw: 350, vh: 200 },
+      { src: 'assets/fish-ember-whip.svg', vw: 350, vh: 200 },
+      { src: 'assets/fish-pale-sentinel.svg', vw: 350, vh: 200 },
+      { src: 'assets/fish-the-watcher.svg', vw: 350, vh: 200 }
     ];
     const corruptImages = [];
     let corruptImagesReady = false;
@@ -565,11 +570,12 @@
       // preload SVGs as images
       if (!corruptImagesReady) {
         let loaded = 0;
-        CORRUPT_SVGS.forEach((src, i) => {
+        CORRUPT_SVGS.forEach((entry, i) => {
           const img = new Image();
           img.decoding = 'async';
+          img._vw = entry.vw; img._vh = entry.vh;
           img.onload = img.onerror = () => { loaded++; if (loaded >= CORRUPT_SVGS.length) corruptImagesReady = true; };
-          img.src = src;
+          img.src = entry.src;
           corruptImages[i] = img;
         });
       }
@@ -599,16 +605,17 @@
           const count = 1 + Math.floor(Math.random() * 3);
           for (let n = 0; n < count; n++) {
             const img = corruptImages[Math.floor(Math.random() * corruptImages.length)];
-            if (!img || !img.complete || !img.naturalWidth) continue;
+            if (!img || !img.complete) continue;
+            const nw = img.naturalWidth || img._vw || 350;
+            const nh = img.naturalHeight || img._vh || 200;
             const size = rand(40, Math.min(w, h) * 0.35);
-            const aspect = img.naturalWidth / img.naturalHeight || 1;
+            const aspect = nw / nh;
             const dw = size * aspect;
             const dh = size;
             cx.save();
             cx.translate(rand(-dw * 0.3, w + dw * 0.3), rand(-dh * 0.3, h + dh * 0.3));
             cx.rotate(rand(-Math.PI, Math.PI));
             cx.globalAlpha = rand(0.35, 0.95);
-            // random tint via composite trick
             cx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
             cx.restore();
           }
