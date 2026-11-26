@@ -211,7 +211,7 @@
       const sf = JSON.parse(localStorage.getItem('ocean_facility') || 'null');
       if (sf && typeof sf === 'object') facility = { ...facility, ...sf, code:'BLUE' };
     } catch (_) {}
-    let perspectiveAnim = 0; // 0..1 visual transition for forward/back view
+    let viewPush = 0; // forward/back camera push animation
     // lore: Deep Blue (guard) protects The Deep Blue, a submarine-ish facility controlling the ocean.
     bgm.volume = masterVolume;
 
@@ -735,7 +735,7 @@
       const darken = (c) => [Math.round(c[0]*(1-stormDark)), Math.round(c[1]*(1-stormDark)), Math.round(c[2]*(1-stormDark))];
       const t0=darken(mixArr(nightTop,dayTop,d)), t1=darken(mixArr(nightMid,dayMid,d)), t2=darken(mixArr(nightLow,dayLow,d)), t3=darken(mixArr(nightBot,dayBot,d));
       fillBandGradient(0, h, [[0,...t0],[0.35,...t1],[0.6,...t2],[1,...t3]], 4.2);
-      if (perspectiveAnim > 0.01) { ctx.fillStyle=`rgba(180,230,255,${0.08*perspectiveAnim})`; ctx.fillRect(0,0,w,h); }
+      if (perspective === 1) { ctx.fillStyle='rgba(180,230,255,0.08)'; ctx.fillRect(0,0,w,h); }
       drawLightning();
 
       const sun = bodyPos(phase);
@@ -1816,8 +1816,7 @@
         weatherTarget = night * 0.45 + wave * 0.9;
       }
       weatherIntensity += (weatherTarget - weatherIntensity) * Math.min(1, dt * 0.8);
-      const pTarget = (perspective === 1 && !isFacilityLayer()) ? 1 : 0;
-      perspectiveAnim += (pTarget - perspectiveAnim) * Math.min(1, dt * 5);
+      viewPush *= Math.pow(0.001, dt); // decay fast
 
       // lightning
       lightning = Math.max(0, lightning - dt * 2.2);
@@ -1846,7 +1845,11 @@
       ctx.clearRect(0, 0, w, h);
       const camPx = cameraY * h;
       ctx.save();
-      ctx.translate(0, -camPx);
+      const pushScale = 1 + viewPush * 0.035;
+      const pushX = (w / 2) * (1 - pushScale);
+      const pushY = (h * 0.55) * (1 - pushScale) - viewPush * h * 0.015;
+      ctx.translate(pushX, pushY - camPx);
+      ctx.scale(pushScale, pushScale);
 
       drawSky();
 
@@ -1876,23 +1879,16 @@
       for (const layer of layers) drawWave(layer);
       drawSurfaceLife();
       drawEquippedSurface();
-      if (perspectiveAnim > 0.01) { ctx.save(); ctx.globalAlpha = perspectiveAnim; drawIcebergs(); ctx.restore(); }
+      if (perspective === 1) drawIcebergs();
       drawRipplesAndBubbles();
       drawWeather();
-      if (perspectiveAnim > 0.01) {
-        ctx.save();
-        ctx.globalAlpha = perspectiveAnim;
-        ctx.fillStyle='rgba(200,235,255,0.10)'; ctx.fillRect(0,0,w,h*0.58);
-        for (let i=0;i<7;i++){ const fx=(i/6)*w; ctx.fillStyle='rgba(230,245,255,0.35)'; ctx.beginPath(); ctx.ellipse(fx,h*0.585,55,8,0,0,Math.PI*2); ctx.fill(); }
-        ctx.restore();
-      }
 
       ctx.save();
       ctx.translate(0, h);
       drawUnderwater();
       if (cameraY < 1.5) drawEquippedUnderwater();
-      if (perspectiveAnim > 0.01) {
-        ctx.save(); ctx.globalAlpha = perspectiveAnim;
+      if (perspective === 1) {
+        ctx.save();
         ctx.fillStyle='rgba(80,180,140,0.07)'; ctx.fillRect(0,0,w,h);
         for (let i=0;i<14;i++){ const kx=i*w/13; const sway=Math.sin(animTime*0.0008+i)*18; ctx.strokeStyle='rgba(60,170,110,0.35)'; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(kx,h); ctx.quadraticCurveTo(kx+sway,h*0.65,kx-sway*0.6,h*0.28); ctx.stroke(); }
         ctx.restore();
@@ -1903,8 +1899,8 @@
       ctx.translate(0, h * 2);
       drawAbyss();
       if (cameraY >= 1.5 && cameraY < 2.5) drawEquippedUnderwater();
-      if (perspectiveAnim > 0.01) {
-        ctx.save(); ctx.globalAlpha = perspectiveAnim;
+      if (perspective === 1) {
+        ctx.save();
         ctx.fillStyle='rgba(255,80,30,0.04)'; ctx.fillRect(0,0,w,h);
         for (let i=0;i<6;i++){ const vx=w*(0.1+i*0.16), vy=h*0.78; const g=ctx.createRadialGradient(vx,vy-h*0.1,0,vx,vy-h*0.1,80); g.addColorStop(0,`rgba(255,120,50,${0.12+0.05*Math.sin(animTime*0.003+i)})`); g.addColorStop(1,'rgba(255,120,50,0)'); ctx.fillStyle=g; ctx.fillRect(vx-80,vy-160,160,160); ctx.strokeStyle='rgba(120,220,255,0.1)'; ctx.beginPath(); ctx.arc(vx,vy-h*0.2,60+i*8,0,Math.PI*2); ctx.stroke(); }
         ctx.restore();
@@ -1915,8 +1911,8 @@
       ctx.translate(0, h * 3);
       drawTrenches();
       if (cameraY >= 2.5 && cameraY < 3.5) drawEquippedUnderwater();
-      if (perspectiveAnim > 0.01) {
-        ctx.save(); ctx.globalAlpha = perspectiveAnim;
+      if (perspective === 1) {
+        ctx.save();
         ctx.fillStyle='rgba(60,40,110,0.15)'; ctx.fillRect(0,0,w,h);
         ctx.fillStyle='rgba(10,8,30,0.55)';
         ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(w*0.18,0); ctx.lineTo(w*0.28,h*0.5); ctx.lineTo(w*0.16,h); ctx.lineTo(0,h); ctx.closePath(); ctx.fill();
@@ -1930,8 +1926,8 @@
       ctx.translate(0, h * 4);
       drawHadal();
       if (cameraY >= 3.5 && cameraY < 4.5) drawEquippedUnderwater();
-      if (perspectiveAnim > 0.01) {
-        ctx.save(); ctx.globalAlpha = perspectiveAnim;
+      if (perspective === 1) {
+        ctx.save();
         ctx.fillStyle='rgba(255,40,100,0.05)'; ctx.fillRect(0,0,w,h);
         ctx.strokeStyle='rgba(255,100,150,0.18)'; ctx.lineWidth=2;
         for(let i=0;i<5;i++){ const fx=w*(0.15+i*0.18); ctx.beginPath(); ctx.moveTo(fx,h*0.9); ctx.lineTo(fx+20,h*0.65); ctx.lineTo(fx-10,h*0.45); ctx.stroke(); }
@@ -1944,8 +1940,8 @@
       ctx.translate(0, h * 5);
       drawVoid();
       if (cameraY >= 4.5 && cameraY < 5.5) drawEquippedUnderwater();
-      if (perspectiveAnim > 0.01) {
-        ctx.save(); ctx.globalAlpha = perspectiveAnim;
+      if (perspective === 1) {
+        ctx.save();
         ctx.fillStyle='rgba(100,140,255,0.05)'; ctx.fillRect(0,0,w,h);
         ctx.strokeStyle='rgba(120,180,255,0.14)'; ctx.lineWidth=1;
         for(let y=h*0.2;y<h;y+=60){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
@@ -2182,8 +2178,8 @@
     photoExitBtn.addEventListener('click', (e) => { e.stopPropagation(); setPhotoMode(false); sfxClick(); });
     goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.min(currentBottomDepth(), cameraTarget + 1)); sfxDive(true); });
     goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.max(0, cameraTarget - 1)); sfxDive(false); });
-    goForwardBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!canUsePerspective()) return; perspective = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
-    goBackBtn.addEventListener('click', (e) => { e.stopPropagation(); perspective = 0; saveGameState(); syncSettingsUI(); sfxClick(); });
+    goForwardBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!canUsePerspective()) return; perspective = 1; viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
+    goBackBtn.addEventListener('click', (e) => { e.stopPropagation(); perspective = 0; viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
     photoBtn.addEventListener('click', (e) => { e.stopPropagation(); savePhoto(); });
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
     logClose.addEventListener('click', () => { logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); });
@@ -2269,7 +2265,7 @@
       checkAchievements();
       saveGameState();
 
-      if (perspectiveAnim > 0.5 && cameraY < 0.5) {
+      if (perspective === 1 && cameraY < 0.5) {
         const bergs = getIcebergs();
         for (const b of bergs) { if (Math.abs(x-b.x)<b.w*0.45 && Math.abs(y-b.y)<b.h*0.6) { sfxClick(); feedbackStatus.textContent='you tapped an iceberg. it does nothing. majestic.'; return; } }
       }
