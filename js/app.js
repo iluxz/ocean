@@ -583,19 +583,28 @@
         ctx.fillStyle = aurora; ctx.fillRect(0,0,w,h*0.7);
         if (moonA > 0.5 && weatherIntensity < 0.4) recordDiscovery('aurora');
 
-        const moonGlow = ctx.createRadialGradient(moon.x, moon.y, 0, moon.x, moon.y, 140);
-        moonGlow.addColorStop(0, `rgba(210,235,255,${0.24*moonA})`);
-        moonGlow.addColorStop(0.4, `rgba(120,180,235,${0.09*moonA})`);
+        const moonGlow = ctx.createRadialGradient(moon.x, moon.y, 0, moon.x, moon.y, 220);
+        moonGlow.addColorStop(0, `rgba(225,242,255,${0.34*moonA})`);
+        moonGlow.addColorStop(0.28, `rgba(150,205,255,${0.14*moonA})`);
+        moonGlow.addColorStop(0.6, `rgba(110,170,235,${0.05*moonA})`);
         moonGlow.addColorStop(1, 'rgba(120,180,235,0)');
-        ctx.fillStyle = moonGlow; ctx.fillRect(0,0,w,h*0.7);
+        ctx.fillStyle = moonGlow; ctx.fillRect(0,0,w,h*0.72);
         ctx.save();
         ctx.globalAlpha = moonA;
-        ctx.fillStyle = 'rgba(230,244,255,0.94)';
-        ctx.shadowColor = 'rgba(180,225,255,0.85)';
-        ctx.shadowBlur = 28;
-        ctx.beginPath(); ctx.arc(moon.x, moon.y, Math.min(w,h)*0.028, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(240,250,255,0.97)';
+        ctx.shadowColor = 'rgba(190,232,255,0.95)';
+        ctx.shadowBlur = 46;
+        ctx.beginPath(); ctx.arc(moon.x, moon.y, Math.min(w,h)*0.034, 0, Math.PI*2); ctx.fill();
         ctx.restore();
       }
+
+      // thin upper cloud strips (reference: dark layered bands)
+      const stripG = ctx.createLinearGradient(0, 0, 0, h * 0.5);
+      stripG.addColorStop(0, `rgba(1,5,16,${0.4 * (1 - d * 0.55)})`);
+      stripG.addColorStop(0.55, `rgba(3,14,32,${0.12 * (1 - d * 0.4)})`);
+      stripG.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = stripG;
+      ctx.fillRect(0, 0, w, h * 0.5);
 
       if (moonA > 0.01) {
         for (const s of stars) {
@@ -630,8 +639,11 @@
       const count = Math.min(rainDrops.length, Math.floor((reducedMotion ? 20 : 40) + weatherIntensity * (reducedMotion ? 70 : 140)));
       const horizon = h * 0.58;
       ctx.save();
-      ctx.strokeStyle = `rgba(170,205,230,${0.18 + weatherIntensity*0.18})`;
-      ctx.lineWidth = 1;
+      ctx.lineCap = 'round';
+      ctx.shadowColor = 'rgba(200,235,255,0.55)';
+      ctx.shadowBlur = 4;
+      ctx.strokeStyle = `rgba(215,238,255,${0.30 + weatherIntensity*0.24})`;
+      ctx.lineWidth = 1.15;
       for (let i=0; i<count; i++) {
         const d = rainDrops[i];
         if (!d) continue;
@@ -915,6 +927,90 @@
       if (stroke) {
         ctx.strokeStyle = stroke;
         ctx.lineWidth = 1.2;
+        ctx.shadowColor = 'rgba(150,220,255,0.55)';
+        ctx.shadowBlur = 7;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+      ctx.restore();
+    }
+
+    // stacked luminous wave lines (reference look: many thin glowing crests)
+    function drawCrestLines() {
+      const horizon = h * 0.58;
+      const d = dayFactor;
+      const waveT = simTime * motionMul;
+      const cR = Math.round(lerp(150, 255, d));
+      const cG = Math.round(lerp(225, 255, d));
+      const cB = Math.round(lerp(255, 255, d));
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      const count = 16;
+      const step = 6;
+      for (let i = 0; i < count; i++) {
+        const p = i / (count - 1);
+        const base = horizon + 12 + Math.pow(p, 1.35) * (h - horizon - 16);
+        const amp = 5 + p * 30;
+        const freq = 0.0115 - p * 0.0045;
+        const dir = i % 2 ? 1 : -1;
+        const phase = waveT * 0.00045 * dir * (0.7 + p * 0.8) + i * 1.9;
+        const a = (0.30 - p * 0.15) * (0.75 + 0.25 * Math.sin(animTime * 0.0004 + i));
+        if (a <= 0.02) continue;
+        ctx.beginPath();
+        for (let x = 0; x <= w + step; x += step) {
+          const y = waveY(base, amp, freq, phase, x);
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = `rgba(${cR},${cG},${cB},${(a * 0.26).toFixed(3)})`;
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(${cR},${cG},${cB},${a.toFixed(3)})`;
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // broken moonlight shimmer dancing on the water
+    const shimmerDashes = Array.from({ length: 46 }, () => ({
+      xf: Math.random(),
+      yf: Math.random(),
+      sp: 0.4 + Math.random() * 1.2,
+      len: 6 + Math.random() * 26,
+      fl: Math.random() * Math.PI * 2
+    }));
+
+    function drawMoonShimmer() {
+      const phase = getCyclePhase();
+      const sun = bodyPos(phase);
+      const moon = bodyPos((phase + 0.5) % 1);
+      const isDay = Math.sin(phase * Math.PI * 2) >= 0;
+      const d = dayFactor;
+      const b = isDay ? sun : moon;
+      const vis = isDay ? Math.max(0, Math.min(1, (d - 0.15) / 0.35)) : Math.max(0, Math.min(1, (0.45 - d) / 0.35));
+      if (vis <= 0.01) return;
+      const top = h * 0.58 + 6;
+      const bottom = h * 0.97;
+      const rc = isDay ? '255,244,205' : '215,240,255';
+      ctx.save();
+      ctx.lineCap = 'round';
+      const speed = reducedMotion ? 0.15 : 1;
+      for (const s of shimmerDashes) {
+        const prog = (s.yf + animTime * 0.000045 * s.sp * speed) % 1;
+        const y = top + prog * (bottom - top);
+        const spread = 12 + prog * 95;
+        const wob = Math.sin(animTime * 0.0016 * s.sp + s.fl) * (2 + prog * 10);
+        const x = b.x + (s.xf - 0.5) * 2 * spread + wob;
+        const flicker = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(animTime * 0.003 * s.sp + s.fl * 3));
+        const a = flicker * (0.5 - prog * 0.25) * vis * (1 - weatherIntensity * 0.6);
+        if (a < 0.02) continue;
+        const len = s.len * (0.5 + prog * 1.3);
+        ctx.strokeStyle = `rgba(${rc},${a.toFixed(3)})`;
+        ctx.lineWidth = prog > 0.5 ? 1.6 : 1.1;
+        ctx.beginPath();
+        ctx.moveTo(x - len / 2, y);
+        ctx.lineTo(x + len / 2, y);
         ctx.stroke();
       }
       ctx.restore();
@@ -933,7 +1029,7 @@
       const top = h * 0.58;
       const bottom = h * 0.95;
       ctx.save();
-      ctx.globalAlpha = (isDay ? lerp(0.08, 0.16, d) : 0.1) * vis * (1 - weatherIntensity * 0.5);
+      ctx.globalAlpha = (isDay ? lerp(0.13, 0.26, d) : 0.17) * vis * (1 - weatherIntensity * 0.5);
       const g = ctx.createLinearGradient(0, top, 0, bottom);
       const rc = isDay ? '255,245,200' : '190,230,255';
       g.addColorStop(0, `rgba(${rc},0.65)`);
@@ -1227,6 +1323,15 @@
       drawSky();
 
       const horizon = h * 0.58;
+      // soft horizon light band (reference: bright seam where sky meets water)
+      const hb = ctx.createLinearGradient(0, horizon - 70, 0, horizon + 46);
+      const hcol = dayFactor > 0.4 ? '190,225,255' : '120,175,235';
+      hb.addColorStop(0, `rgba(${hcol},0)`);
+      hb.addColorStop(0.62, `rgba(${hcol},${(0.16 + dayFactor * 0.16) * (1 - weatherIntensity * 0.35)})`);
+      hb.addColorStop(1, `rgba(${hcol},0)`);
+      ctx.fillStyle = hb;
+      ctx.fillRect(0, horizon - 70, w, 116);
+
       const d = dayFactor;
       const dark = Math.min(0.35, weatherIntensity * 0.12);
       const wc = (r,g,b,a) => `rgba(${Math.round(r*(1-dark))}, ${Math.round(g*(1-dark))}, ${Math.round(b*(1-dark))}, ${a})`;
@@ -1242,6 +1347,8 @@
       drawReflection();
       drawMist();
       for (const layer of layers) drawWave(layer);
+      drawCrestLines();
+      drawMoonShimmer();
       drawSurfaceLife();
       drawEquippedSurface();
       drawRipplesAndBubbles();
