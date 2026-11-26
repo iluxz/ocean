@@ -620,7 +620,7 @@
             if (questComplete()) { quest.completed = true; quest.unlockedDeep = true; saveGameState(); showVoidDialogue('passage granted. below is The Deep Blue facility. stop the scientists before they deploy the ocean wipeout supply.', 9000); }
             else showVoidDialogue(`quest: bottles ${Math.min(3,p.bottles)}/3, fish ${Math.min(3,p.fish)}/3, trips ${Math.min(3,p.trips)}/3`, 4500);
           } else if (isFacilityLayer()) {
-            showVoidDialogue(facility.complete ? 'the ocean is safe... for now.' : 'stop the wipeout supply.', 4000);
+            if (!facility.complete) showVoidDialogue('stop the wipeout supply.', 4000);
           } else {
             showVoidDialogue('The Deep Blue is below. stop the scientists. the ocean depends on it.', 4500);
           }
@@ -2320,7 +2320,7 @@
           if (facility.puzzleA && facility.puzzleB && facility.encounterDone && !facility.complete) {
             facility.complete = true;
             unlockAchievement('deep_blue');
-            showVoidDialogue('supply stopped. the ocean is safe... for now.', 5000);
+            showVoidDialogue('supply stopped.', 3000);
           }
           saveGameState();
           return;
