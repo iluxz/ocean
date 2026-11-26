@@ -941,40 +941,32 @@
       const horizon = h * 0.58;
       const d = dayFactor;
       const waveT = simTime * motionMul;
-      const count = 22;
-      const step = 10;
+      const count = 10;
+      const step = 12;
       ctx.save();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       for (let i = 0; i < count; i++) {
-        const p = i / (count - 1); // 0=horizon, 1=near
-        const base = horizon + 10 + Math.pow(p, 1.25) * (h - horizon - 14);
-        const amp = 4 + p * 18;
-        const freq = 0.0105 - p * 0.0042;
-        const phase = waveT * 0.00038 + p * 2.4;
-        const phase2 = -waveT * 0.00022 + p * 1.1;
-        const breathe = 0.78 + 0.22 * Math.sin(animTime * 0.00035 + i * 0.55);
-        const alpha = (0.28 - p * 0.16) * breathe * (1 - weatherIntensity * 0.25);
-        if (alpha <= 0.015) continue;
-        const r = 170;
-        const g = Math.round(lerp(215, 235, d));
-        const bcol = 255;
+        const p = i / (count - 1);
+        const base = horizon + 14 + Math.pow(p, 1.25) * (h - horizon - 18);
+        const amp = 4 + p * 14;
+        const freq = 0.010 - p * 0.0038;
+        const phase = waveT * 0.00036 + p * 2.0;
+        const phase2 = -waveT * 0.00022 + p * 1.0;
+        const breathe = 0.8 + 0.2 * Math.sin(animTime * 0.0003 + i * 0.6);
+        const alpha = (0.12 - p * 0.06) * breathe * (1 - weatherIntensity * 0.35);
+        if (alpha <= 0.01) continue;
+        const r = 165, g = Math.round(lerp(210, 230, d)), bcol = 255;
 
         ctx.beginPath();
         for (let x = -step; x <= w + step; x += step) {
           const y = base
             + Math.sin(x * freq + phase) * amp
-            + Math.sin(x * freq * 0.55 + phase2) * amp * 0.45
-            + Math.sin(x * freq * 1.7 - phase * 0.6) * amp * 0.12;
+            + Math.sin(x * freq * 0.55 + phase2) * amp * 0.45;
           if (x === -step) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        // fake glow: wide faint pass, no shadowBlur
-        ctx.strokeStyle = `rgba(${r},${g},${bcol},${(alpha * 0.18).toFixed(3)})`;
-        ctx.lineWidth = 3.2 - p * 1.0;
-        ctx.stroke();
-        // bright core
-        ctx.strokeStyle = `rgba(210,242,255,${alpha.toFixed(3)})`;
-        ctx.lineWidth = 1.0 - p * 0.25;
+        ctx.strokeStyle = `rgba(${r},${g},${bcol},${alpha.toFixed(3)})`;
+        ctx.lineWidth = 1.1 - p * 0.2;
         ctx.stroke();
       }
       ctx.restore();
@@ -1373,11 +1365,10 @@
         { base: horizon + 118,amp: 30, freq: 0.0064, phase: -waveT * 0.00056 + 3.4,colorTop: wc(lerp(3,12,d),  lerp(20,60,d),  lerp(52,122,d), 0.98),  colorBottom: wc(lerp(1,4,d),  lerp(7,30,d),  lerp(22,68,d), 1),     alpha: 1, stroke: `rgba(185,238,255,${lerp(0.10,0.16,d)})` }
       ];
 
-      drawReflection();
       drawMist();
       for (const layer of layers) drawWave(layer);
-      drawCrestLines();
       drawMoonShimmer();
+      drawCrestLines();
       drawSurfaceLife();
       drawEquippedSurface();
       drawRipplesAndBubbles();
