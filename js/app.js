@@ -162,7 +162,7 @@
         <rect width='128' height='128' rx='18' fill='url(#g)'/>
         <circle cx='64' cy='60' r='34' fill='rgba(255,255,255,0.08)'/>
         <text x='64' y='72' font-size='44' text-anchor='middle'>${emoji}</text>
-        <text x='64' y='112' font-size='10' fill='rgba(236,247,255,0.72)' text-anchor='middle' font-family='Trebuchet MS,Segoe UI,sans-serif' letter-spacing='1'>${title}</text>
+        <text x='64' y='112' font-size='10' fill='rgba(236,247,255,0.72)' text-anchor='middle' font-family='Consolas,Lucida Console,Courier New,monospace' letter-spacing='1'>${title}</text>
       </svg>`;
       return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
     }
