@@ -2659,6 +2659,8 @@
 
       ctx.restore();
 
+      drawBossFight();
+
       // photo mode frame (none) + vignette
       const vg = ctx.createRadialGradient(w * 0.5, h * 0.55, Math.min(w,h) * 0.2, w * 0.5, h * 0.6, Math.max(w,h) * 0.8);
       vg.addColorStop(0, 'rgba(0,0,0,0)');
