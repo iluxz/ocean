@@ -362,7 +362,8 @@
       'ocean_click_lock_until','ocean_void_quest','ocean_facility','ocean_perspective'
     ];
     const SAVE_FORMAT = 'ocsv';
-    const SAVE_VERSION = 1;
+    const SAVE_VERSION = 2;
+    const SAVE_SECRET = 'ocean::deep-blue::save::v2';
     let corrupted = false;
     let corruptRaf = 0;
     const CORRUPT_SVGS = [
@@ -372,6 +373,55 @@
     ];
     const corruptImages = [];
     let corruptImagesReady = false;
+
+    function ocsvBytesToB64(bytes) {
+      let bin = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      return btoa(bin);
+    }
+    function ocsvB64ToBytes(b64) {
+      const bin = atob(String(b64 || '').replace(/\s+/g, ''));
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+    function ocsvStrBytes(str) { return new TextEncoder().encode(String(str)); }
+    function ocsvBytesStr(bytes) { return new TextDecoder().decode(bytes); }
+    function ocsvFnv1a(bytes, seed = 2166136261) {
+      let h = seed >>> 0;
+      for (let i = 0; i < bytes.length; i++) { h ^= bytes[i]; h = Math.imul(h, 16777619) >>> 0; }
+      return h >>> 0;
+    }
+    function ocsvMac(saltB64, payloadB64) {
+      const a = ocsvFnv1a(ocsvStrBytes(SAVE_SECRET + '|' + saltB64 + '|' + payloadB64 + '|A'), 2166136261);
+      const b = ocsvFnv1a(ocsvStrBytes(SAVE_SECRET + '|' + payloadB64 + '|' + saltB64 + '|B'), 338324690);
+      const c = ocsvFnv1a(ocsvStrBytes(payloadB64 + '|' + SAVE_SECRET + '|' + saltB64 + '|C'), 0x811c9dc5);
+      return [a, b, c].map(n => n.toString(16).padStart(8, '0')).join('');
+    }
+    function ocsvKeystreamByte(keyBytes, saltBytes, counter, i) {
+      let x = keyBytes[i % keyBytes.length] ^ saltBytes[i % saltBytes.length];
+      x = (x + ((counter * 131) & 255) + i * 17) & 255;
+      x ^= (x << 3) & 255;
+      x ^= (x >>> 2) & 255;
+      x ^= (keyBytes[(i + counter) % keyBytes.length] + saltBytes[(counter + i * 7) % saltBytes.length]) & 255;
+      return x & 255;
+    }
+    function ocsvCrypt(bytes, saltBytes) {
+      const keyBytes = ocsvStrBytes(SAVE_SECRET);
+      const out = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) {
+        const k = ocsvKeystreamByte(keyBytes, saltBytes, (i / 16) | 0, i);
+        out[i] = bytes[i] ^ k;
+      }
+      return out;
+    }
+    function ocsvRandomBytes(n) {
+      const out = new Uint8Array(n);
+      if (crypto && crypto.getRandomValues) crypto.getRandomValues(out);
+      else for (let i = 0; i < n; i++) out[i] = Math.floor(Math.random() * 256);
+      return out;
+    }
 
     function buildSavePayload() {
       const data = {};
@@ -393,7 +443,21 @@
     function exportSave() {
       try {
         const payload = buildSavePayload();
-        const text = JSON.stringify(payload, null, 2);
+        const plain = ocsvStrBytes(JSON.stringify(payload));
+        const salt = ocsvRandomBytes(16);
+        const cipher = ocsvCrypt(plain, salt);
+        const saltB64 = ocsvBytesToB64(salt);
+        const payloadB64 = ocsvBytesToB64(cipher);
+        const envelope = {
+          format: SAVE_FORMAT,
+          version: SAVE_VERSION,
+          game: 'ocean',
+          alg: 'ocsv-xor-v2',
+          salt: saltB64,
+          payload: payloadB64,
+          mac: ocsvMac(saltB64, payloadB64)
+        };
+        const text = JSON.stringify(envelope);
         const blob = new Blob([text], { type: 'application/octet-stream' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -404,7 +468,7 @@
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        feedbackStatus.textContent = 'save: exported .ocsv';
+        feedbackStatus.textContent = 'save: exported encrypted .ocsv';
         sfxClick();
       } catch (e) {
         console.warn('export failed', e);
@@ -417,8 +481,29 @@
       if (obj.format !== SAVE_FORMAT) return false;
       if (obj.game !== 'ocean') return false;
       if (!obj.data || typeof obj.data !== 'object' || Array.isArray(obj.data)) return false;
-      // accept if it has at least the format markers; data keys validated softly
       return true;
+    }
+
+    function decryptOceanSave(obj) {
+      if (!obj || typeof obj !== 'object') return null;
+      if (obj.format !== SAVE_FORMAT || obj.game !== 'ocean') return null;
+      // legacy plain v1 (previous format)
+      if (obj.version === 1 && obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) {
+        return obj;
+      }
+      if (obj.version !== SAVE_VERSION || obj.alg !== 'ocsv-xor-v2') return null;
+      if (typeof obj.salt !== 'string' || typeof obj.payload !== 'string' || typeof obj.mac !== 'string') return null;
+      if (obj.mac !== ocsvMac(obj.salt, obj.payload)) return null;
+      try {
+        const salt = ocsvB64ToBytes(obj.salt);
+        const cipher = ocsvB64ToBytes(obj.payload);
+        const plain = ocsvCrypt(cipher, salt);
+        const decoded = JSON.parse(ocsvBytesStr(plain));
+        if (!isValidOceanSave(decoded)) return null;
+        return decoded;
+      } catch (_) {
+        return null;
+      }
     }
 
     function applyImportedSave(obj) {
@@ -547,11 +632,12 @@
           triggerCorruption();
           return;
         }
-        if (!isValidOceanSave(obj)) {
+        const decoded = decryptOceanSave(obj);
+        if (!decoded) {
           triggerCorruption();
           return;
         }
-        applyImportedSave(obj);
+        applyImportedSave(decoded);
       } catch (_) {
         triggerCorruption();
       }
