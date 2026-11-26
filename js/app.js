@@ -407,9 +407,9 @@
       }
       syncBossUi();
       if (boss.hp <= 0) { endVoidOctopus(true); return; }
-      setTimeout(() => { if (boss.active && boss.phase === 'player') bossEnemyTurn(); }, 420);
       boss.phase = 'wait';
       syncBossUi();
+      setTimeout(() => { if (boss.active && boss.phase === 'wait') bossEnemyTurn(); }, 420);
     }
 
     function updateBoss(dtMs) {
