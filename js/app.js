@@ -622,22 +622,30 @@
         }
       }
 
+      // clouds: dark layered bands (reference style), not puffy cotton candy
       for (const c of clouds) {
-        const cx = ((c.x + animTime * c.sp * (1 + weatherIntensity*0.8)) % 1.4 - 0.2) * w;
-        const cy = c.y * h + Math.sin(animTime * 0.0002 + c.off) * 6;
-        const cw = 180 * c.s, ch = 38 * c.s;
-        const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cw);
-        const baseA = c.a * (d > 0.5 ? (0.9 + d*0.8) : (1.2-d));
-        const grey = lerp(255, 120, Math.min(1, weatherIntensity*0.7));
-        const cloudCol = `rgba(${grey},${grey},${Math.min(255,grey+20)},${baseA + weatherIntensity*0.03})`;
-        cg.addColorStop(0, cloudCol);
-        cg.addColorStop(1, 'rgba(150,190,230,0)');
+        const cx = ((c.x + animTime * c.sp * (1 + weatherIntensity*0.6)) % 1.6 - 0.3) * w;
+        const cy = c.y * h + Math.sin(animTime * 0.00015 + c.off) * 4;
+        const cw = 260 * c.s;
+        const ch = 22 * c.s;
+        const baseA = (d > 0.5 ? 0.08 : 0.22) * c.a * 3.2 + weatherIntensity * 0.08;
+        const grey = Math.round(lerp(40, 18, Math.min(1, weatherIntensity * 0.6)));
+        const cg = ctx.createLinearGradient(cx - cw, cy, cx + cw, cy);
+        cg.addColorStop(0, `rgba(${grey},${grey+8},${grey+20},0)`);
+        cg.addColorStop(0.2, `rgba(${grey},${grey+8},${grey+20},${baseA})`);
+        cg.addColorStop(0.5, `rgba(${grey+10},${grey+18},${grey+32},${baseA * 1.15})`);
+        cg.addColorStop(0.8, `rgba(${grey},${grey+8},${grey+20},${baseA})`);
+        cg.addColorStop(1, `rgba(${grey},${grey+8},${grey+20},0)`);
         ctx.fillStyle = cg;
         ctx.beginPath();
         ctx.ellipse(cx, cy, cw, ch, 0, 0, Math.PI * 2);
-        ctx.ellipse(cx - cw * 0.45, cy + ch * 0.15, cw * 0.55, ch * 0.7, 0, 0, Math.PI * 2);
-        ctx.ellipse(cx + cw * 0.45, cy + ch * 0.1, cw * 0.5, ch * 0.65, 0, 0, Math.PI * 2);
         ctx.fill();
+        // soft underside haze
+        const hg = ctx.createLinearGradient(0, cy, 0, cy + ch * 2.2);
+        hg.addColorStop(0, `rgba(${grey},${grey+10},${grey+25},${baseA * 0.35})`);
+        hg.addColorStop(1, `rgba(${grey},${grey+10},${grey+25},0)`);
+        ctx.fillStyle = hg;
+        ctx.fillRect(cx - cw, cy, cw * 2, ch * 2.2);
       }
     }
 
@@ -972,7 +980,7 @@
       ctx.restore();
     }
 
-    // broken moonlight shimmer dancing on the water
+    // broken moonlight shimmer dancing on the water - anchored to moon x
     const shimmerDashes = Array.from({ length: 55 }, () => ({
       xf: (Math.random() - 0.5),
       yf: Math.random(),
@@ -991,39 +999,50 @@
       const b = isDay ? sun : moon;
       const vis = isDay ? Math.max(0, Math.min(1, (d - 0.15) / 0.35)) : Math.max(0, Math.min(1, (0.45 - d) / 0.35));
       if (vis <= 0.01) return;
-      const top = h * 0.58 + 2;
+      const horizon = h * 0.58;
+      const top = horizon + 2;
       const bottom = h * 0.99;
       const rc = isDay ? '255,248,220' : '220,242,255';
+      const mx = b.x; // directly under moon/sun
 
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
+      // main reflection column under the body
       const col = ctx.createLinearGradient(0, top, 0, bottom);
-      col.addColorStop(0, `rgba(${rc},${0.24 * vis})`);
-      col.addColorStop(0.3, `rgba(${rc},${0.10 * vis})`);
+      col.addColorStop(0, `rgba(${rc},${0.30 * vis})`);
+      col.addColorStop(0.25, `rgba(${rc},${0.12 * vis})`);
       col.addColorStop(1, `rgba(${rc},0)`);
       ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.moveTo(b.x - 14, top);
-      ctx.lineTo(b.x + 14, top);
-      ctx.lineTo(b.x + 120, bottom);
-      ctx.lineTo(b.x - 120, bottom);
+      ctx.moveTo(mx - 12, top);
+      ctx.lineTo(mx + 12, top);
+      ctx.lineTo(mx + 110, bottom);
+      ctx.lineTo(mx - 110, bottom);
       ctx.closePath();
       ctx.fill();
+
+      // bright source hit at horizon
+      const hit = ctx.createRadialGradient(mx, horizon + 6, 0, mx, horizon + 6, 42);
+      hit.addColorStop(0, `rgba(255,255,255,${0.45 * vis})`);
+      hit.addColorStop(0.4, `rgba(${rc},${0.12 * vis})`);
+      hit.addColorStop(1, `rgba(${rc},0)`);
+      ctx.fillStyle = hit;
+      ctx.fillRect(mx - 60, horizon - 10, 120, 80);
 
       ctx.lineCap = 'round';
       const speed = reducedMotion ? 0.15 : 1;
       for (const s of shimmerDashes) {
         const prog = (s.yf + animTime * 0.000045 * s.sp * speed) % 1;
         const y = top + prog * (bottom - top);
-        const spread = 8 + prog * 110;
-        const wob = Math.sin(animTime * 0.0015 * s.sp + s.fl) * (1.5 + prog * 9);
-        const x = b.x + s.xf * spread + wob;
+        const spread = 6 + prog * 95;
+        const wob = Math.sin(animTime * 0.0015 * s.sp + s.fl) * (1.2 + prog * 8);
+        const x = mx + s.xf * spread + wob;
         const flicker = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(animTime * 0.003 * s.sp + s.fl * 3.5));
         const fade = Math.pow(1 - prog, 0.85);
-        const a = flicker * fade * vis * (0.7 - weatherIntensity * 0.35);
+        const a = flicker * fade * vis * (0.75 - weatherIntensity * 0.35);
         if (a < 0.02) continue;
         const len = s.len * (0.45 + prog * 1.4);
-        ctx.strokeStyle = `rgba(235,248,255,${(a * 0.9).toFixed(3)})`;
+        ctx.strokeStyle = `rgba(235,248,255,${(a * 0.95).toFixed(3)})`;
         ctx.lineWidth = s.thick * (1 - prog * 0.25);
         ctx.beginPath();
         ctx.moveTo(x - len / 2, y);
@@ -1368,7 +1387,6 @@
       drawMist();
       for (const layer of layers) drawWave(layer);
       drawMoonShimmer();
-      drawCrestLines();
       drawSurfaceLife();
       drawEquippedSurface();
       drawRipplesAndBubbles();
