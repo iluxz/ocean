@@ -155,6 +155,7 @@
       .minigame-input-row{display:flex;gap:8px;margin-bottom:10px;}
       .minigame-input-row input{flex:1;min-width:0;background:rgba(255,255,255,0.04);color:var(--text);border:1px solid rgba(126,200,255,0.18);border-radius:10px;padding:11px 12px;font:inherit;font-size:14px;}
       .minigame-input-row input:focus{outline:none;border-color:rgba(126,200,255,0.45);}
+      .minigame-input-row .btn{min-width:96px;justify-content:center;}
       .minigame-input-row input:disabled,.btn:disabled{opacity:.55;cursor:not-allowed;}
       .minigame-result{min-height:58px;font-size:13px;line-height:1.55;color:var(--muted);margin-bottom:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(126,200,255,0.08);}
       .minigame-result strong{color:#9fd3ff;}
@@ -162,7 +163,8 @@
       .minigame-history::-webkit-scrollbar{width:8px;}.minigame-history::-webkit-scrollbar-thumb{background:rgba(126,200,255,0.25);border-radius:999px;}
       .mg-item{font-size:12px;color:var(--muted);padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(126,200,255,0.08);display:flex;justify-content:space-between;gap:10px;}
       .mg-item b{color:var(--text);font-weight:500;}
-      .minigame-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:auto;flex-wrap:wrap;}
+      .minigame-actions{display:flex;gap:10px;justify-content:stretch;margin-top:12px;flex-wrap:wrap;}
+      .minigame-actions .btn{flex:1;min-width:120px;justify-content:center;padding:12px 14px;font-size:13px;}
       @media (max-width:860px){.minigame-layout{grid-template-columns:1fr;}.minigame-visual{min-height:280px;height:320px;}.minigame-question{font-size:20px;}}
     `;
     document.head.appendChild(style);
@@ -189,6 +191,7 @@
 
     let move = 0, total = 0, depth = 0, used = [], finished = false, busy = false;
     let targetDepth = 0, displayDepth = 0, bubbles = [], popups = [], particles = [], lastTs = 0;
+    let runId = 0;
 
     function pickQuestion() {
       const pool = QUESTIONS.filter(q => !used.includes(q.q));
@@ -345,11 +348,18 @@
       if (finished || busy) return;
       const val = input.value.trim();
       if (!val) { result.textContent = 'type an answer first.'; return; }
+      const myRun = runId;
       busy = true; renderState();
-      result.innerHTML = `<strong>checking wikipedia...</strong> measuring how underground "${val}" is.`;
-      const r = await wikiScore(val);
+      result.innerHTML = `<strong>checking wikipedia...</strong> measuring how underground "${escapeHtml(val)}" is.`;
+      let r;
+      try {
+        r = await wikiScore(val);
+      } catch (_) {
+        r = { score: 40, label: 'offline guess', note: 'lookup failed, fallback score used.', title: val, views: null };
+      }
+      if (myRun !== runId) return;
       busy = false;
-      if (finished) return; // modal closed/reset edge case
+      if (finished) { renderState(); return; }
       move += 1;
       total += r.score;
       depth = Math.min(1000, depth + r.score);
@@ -371,11 +381,12 @@
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
     function reset() {
+      runId += 1;
       move = 0; total = 0; depth = 0; targetDepth = 0; displayDepth = 0; used = []; finished = false; busy = false;
       bubbles = []; popups = []; history.innerHTML = ''; result.textContent = 'the deeper you go, the rarer your answer needs to be.';
       current = pickQuestion();
       renderState();
-      input.focus();
+      setTimeout(() => input.focus(), 20);
     }
 
     function closeGame() { modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
