@@ -1701,7 +1701,8 @@
         const boxW = Math.min(maxW, Math.max(120, ...lines.map(l => ctx.measureText(l).width)) + padX * 2);
         const boxH = lines.length * lh + padY * 2;
         const bx = Math.max(12, Math.min(w - boxW - 12, cx - boxW / 2));
-        const by = Math.max(12, Math.min(h - boxH - 12, h * 0.08));
+        const topSafe = isFacilityLayer() ? h * 0.18 : h * 0.08;
+        const by = Math.max(12, Math.min(h - boxH - 12, topSafe));
         ctx.fillStyle = 'rgba(5,14,30,0.88)';
         ctx.strokeStyle = 'rgba(120,180,255,0.35)';
         ctx.lineWidth = 1;
@@ -1761,13 +1762,13 @@
 
       // main hull
       const hullY = h*0.56, hullH = h*0.24;
-      ctx.fillStyle = 'rgba(18,38,62,0.92)';
+      ctx.fillStyle = 'rgba(18,38,62,0.78)';
       roundRectPath(ctx, w*0.06, hullY, w*0.88, hullH, 28); ctx.fill();
-      ctx.strokeStyle = 'rgba(100,170,220,0.25)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.strokeStyle = 'rgba(100,170,220,0.2)'; ctx.lineWidth = 1.5; ctx.stroke();
       // top conning structure
-      ctx.fillStyle = 'rgba(24,46,72,0.95)';
+      ctx.fillStyle = 'rgba(24,46,72,0.82)';
       roundRectPath(ctx, w*0.28, h*0.44, w*0.44, h*0.16, 20); ctx.fill();
-      ctx.strokeStyle = 'rgba(120,190,240,0.22)'; ctx.stroke();
+      ctx.strokeStyle = 'rgba(120,190,240,0.18)'; ctx.stroke();
 
       // porthole lights
       for (let i=0;i<14;i++){
