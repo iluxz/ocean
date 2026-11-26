@@ -378,6 +378,19 @@
     ];
     const corruptImages = [];
     let corruptImagesReady = false;
+    // preload early so corruption has assets ready
+    (function preloadCorruptSvgs(){
+      let loaded = 0;
+      CORRUPT_SVGS.forEach((entry, i) => {
+        const img = new Image();
+        img.decoding = 'async';
+        img._vw = entry.vw; img._vh = entry.vh;
+        const done = () => { loaded++; if (loaded >= CORRUPT_SVGS.length) corruptImagesReady = true; };
+        img.onload = done; img.onerror = done;
+        img.src = entry.src;
+        corruptImages[i] = img;
+      });
+    })();
 
     function ocsvBytesToB64(bytes) {
       let bin = '';
@@ -529,8 +542,11 @@
       if (corrupted) return;
       corrupted = true;
       try { if (rafId) cancelAnimationFrame(rafId); } catch (_) {}
-      try { bgm.pause(); } catch (_) {}
-      try { if (audioCtx && audioCtx.state !== 'closed') { /* keep for no-op; we use audio element */ } } catch (_) {}
+      try { bgm.pause(); bgm.muted = true; bgm.volume = 0; bgm.src = ''; } catch (_) {}
+      try { if (masterGain) masterGain.gain.value = 0; } catch (_) {}
+      try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch (_) {}
+      try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.suspend().catch(()=>{}); } catch (_) {}
+      try { document.querySelectorAll('audio').forEach(a => { if (a.id !== 'corruptAudio') { try { a.pause(); a.muted = true; a.volume = 0; } catch(_){} } }); } catch (_) {}
 
       // hide all UI
       document.querySelectorAll('.ui, .modal, .hint, .settings-wrap, .photo-exit, .toast, #toast').forEach(el => {
@@ -574,14 +590,16 @@
           const img = new Image();
           img.decoding = 'async';
           img._vw = entry.vw; img._vh = entry.vh;
-          img.onload = img.onerror = () => { loaded++; if (loaded >= CORRUPT_SVGS.length) corruptImagesReady = true; };
+          const done = () => { loaded++; if (loaded >= CORRUPT_SVGS.length) corruptImagesReady = true; };
+          img.onload = done;
+          img.onerror = done;
           img.src = entry.src;
           corruptImages[i] = img;
         });
       }
 
       const rand = (a, b) => a + Math.random() * (b - a);
-      let lastSpawn = 0;
+      let lastSpawn = -99999;
       function corruptFrame(ts) {
         const w = window.innerWidth, h = window.innerHeight;
         // HoM smear: draw canvas onto itself with offsets/scaling
@@ -616,7 +634,7 @@
             cx.translate(rand(-dw * 0.3, w + dw * 0.3), rand(-dh * 0.3, h + dh * 0.3));
             cx.rotate(rand(-Math.PI, Math.PI));
             cx.globalAlpha = rand(0.35, 0.95);
-            cx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+            try { cx.drawImage(img, -dw / 2, -dh / 2, dw, dh); } catch (_) {}
             cx.restore();
           }
         }
@@ -746,6 +764,7 @@
     let rainNoise = null, windNoise = null, underwaterNoise = null, dayNoise = null, nightNoise = null;
     let bgmNode = null, bgmFilter = null, captureDest = null, mediaRecorder = null, audioChunks = [], crashLoopAudio = null;
     function ensureAudio() {
+      if (corrupted) return;
       if (audioCtx) return;
       const Ctx = window.AudioContext || window.webkitAudioContext;
       audioCtx = new Ctx();
@@ -806,32 +825,32 @@
       nightNoise = loopNoise('bandpass', 1800, 1.2, nightGain); // soft chirp/nocturnal texture
     }
     function sfxClick() {
-      if (!audioCtx || !soundEnabled) return;
+      if (corrupted || !audioCtx || !soundEnabled) return;
       const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
       o.type = 'sine'; o.frequency.value = 520; g.gain.value = 0.02;
       o.connect(g); g.connect(masterGain); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08); o.stop(audioCtx.currentTime + 0.09);
     }
     function sfxDive(down) {
-      if (!audioCtx || !soundEnabled) return;
+      if (corrupted || !audioCtx || !soundEnabled) return;
       const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
       o.type = 'sine'; o.frequency.setValueAtTime(down ? 420 : 220, audioCtx.currentTime);
       o.frequency.exponentialRampToValueAtTime(down ? 180 : 480, audioCtx.currentTime + 0.35);
       g.gain.value = 0.025; o.connect(g); g.connect(masterGain); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.4); o.stop(audioCtx.currentTime + 0.41);
     }
     function sfxSplash() {
-      if (!audioCtx || !soundEnabled) return;
+      if (corrupted || !audioCtx || !soundEnabled) return;
       const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
       o.type='triangle'; o.frequency.setValueAtTime(240, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(90, audioCtx.currentTime+0.18);
       g.gain.value=0.03; o.connect(g); g.connect(masterGain); o.start(); g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+0.2); o.stop(audioCtx.currentTime+0.21);
     }
     function sfxBubble() {
-      if (!audioCtx || !soundEnabled) return;
+      if (corrupted || !audioCtx || !soundEnabled) return;
       const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
       o.type='sine'; o.frequency.setValueAtTime(520, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime+0.08);
       g.gain.value=0.012; o.connect(g); g.connect(masterGain); o.start(); g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+0.1); o.stop(audioCtx.currentTime+0.11);
     }
     function sfxThunder() {
-      if (!audioCtx || !soundEnabled) return;
+      if (corrupted || !audioCtx || !soundEnabled) return;
       const len = audioCtx.sampleRate * 1.2;
       const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
       const data = buf.getChannelData(0);
@@ -848,6 +867,7 @@
     function isAtBottom() { return cameraY >= currentBottomDepth() - 0.05; }
 
     function updateAudioMix() {
+      if (corrupted) { try { bgm.pause(); } catch(_) {} return; }
       bgm.muted = !soundEnabled;
       const bottomDepth = currentBottomDepth();
       const depthRaw = Number.isFinite(cameraY) ? Math.max(0, Math.min(bottomDepth, cameraY)) : 0;
@@ -2531,6 +2551,7 @@
     }
 
     async function startAudio() {
+      if (corrupted) return;
       if (!soundEnabled) return;
       ensureAudio();
       if (audioCtx && audioCtx.state === 'suspended') {
