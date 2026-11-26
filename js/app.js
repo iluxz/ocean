@@ -69,6 +69,22 @@
         if (d) d.textContent = (err && (err.stack || err.message || String(err))) || 'unknown error';
         if (m) { m.classList.add('open'); m.setAttribute('aria-hidden','false'); }
       } catch (_) {}
+
+      // overkill mode: nuke all JS so nothing else can run
+      try { window.onerror = null; window.onunhandledrejection = null; } catch (_) {}
+      try {
+        window.addEventListener('error', (e) => { e.stopImmediatePropagation(); e.preventDefault(); }, true);
+        window.addEventListener('unhandledrejection', (e) => { e.stopImmediatePropagation(); e.preventDefault(); }, true);
+      } catch (_) {}
+      try {
+        document.querySelectorAll('script').forEach((s) => {
+          const dead = document.createElement('script');
+          dead.type = 'text/disabled';
+          if (s.src) dead.setAttribute('data-src', s.src); else dead.textContent = '// js disabled by crash';
+          s.replaceWith(dead);
+        });
+      } catch (_) {}
+      try { const kill = document.createElement('script'); kill.textContent = 'setTimeout(function(){throw new Error("ocean js nuked")},0);'; document.body.appendChild(kill); } catch (_) {}
     }
     window.addEventListener('error', (e) => showFatalError(e.error || e.message));
     window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason));
@@ -116,7 +132,6 @@
     const updateList = document.getElementById('updateList');
     const equippedBanner = document.getElementById('equippedBanner');
     const errorRefresh = document.getElementById('errorRefresh');
-    errorRefresh.addEventListener('click', () => location.reload());
 
     let w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
     let t = 0;
