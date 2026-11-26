@@ -1447,11 +1447,12 @@
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
 
-      // faint bioluminescent haze
-      const haze = ctx.createRadialGradient(w*0.5, h*0.35, 20, w*0.5, h*0.45, w*0.7);
-      haze.addColorStop(0, 'rgba(40,80,140,0.08)');
-      haze.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = haze; ctx.fillRect(0,0,w,h);
+      // purple background orb/light (like zone before, but purple)
+      const orb = ctx.createRadialGradient(w*0.5, h*0.45, 10, w*0.5, h*0.45, w*0.55);
+      orb.addColorStop(0, 'rgba(150,100,255,0.10)');
+      orb.addColorStop(0.4, 'rgba(110,70,220,0.05)');
+      orb.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = orb; ctx.fillRect(0,0,w,h);
 
       for (const p of abyssParticles) {
         const px = (p.x * w + Math.sin(animTime*0.00015 + p.ph) * 18) % w;
@@ -1599,31 +1600,23 @@
     }
 
     function drawVoidEntityAndDialogue() {
+      // Soft purple background orb/light (no solid circle, no halos)
       const cx = w * voidEntity.x;
       const cy = h * voidEntity.y;
       voidEntity.screenX = cx;
       voidEntity.screenY = cy;
-      voidEntity.pulse = 0.5 + 0.5 * Math.sin(animTime * 0.0015);
+      voidEntity.pulse = 0.5 + 0.5 * Math.sin(animTime * 0.0012);
       const pulse = voidEntity.pulse;
-      const baseR = Math.min(w,h) * 0.055;
-      voidEntity.r = baseR;
-      const glow = ctx.createRadialGradient(cx, cy, baseR*0.2, cx, cy, baseR*4.2);
-      glow.addColorStop(0, `rgba(170,120,255,${0.18 + pulse*0.08})`);
-      glow.addColorStop(0.35, `rgba(120,70,220,${0.08 + pulse*0.04})`);
+      const baseR = Math.min(w, h) * 0.18;
+      voidEntity.r = baseR * 0.45; // keep click area
+
+      const glow = ctx.createRadialGradient(cx, cy, baseR * 0.05, cx, cy, baseR * (1.1 + pulse * 0.08));
+      glow.addColorStop(0, `rgba(175,120,255,${0.16 + pulse * 0.06})`);
+      glow.addColorStop(0.35, `rgba(125,75,230,${0.09 + pulse * 0.03})`);
+      glow.addColorStop(0.7, `rgba(80,40,170,${0.04 + pulse * 0.015})`);
       glow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, baseR*4.2, 0, Math.PI*2); ctx.fill();
-      for (let i=0;i<3;i++) {
-        const rr = baseR * (1.5 + i*0.55 + pulse*0.08);
-        ctx.strokeStyle = `rgba(180,140,255,${0.22 - i*0.05})`;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI*2); ctx.stroke();
-      }
-      const core = ctx.createRadialGradient(cx-baseR*0.2, cy-baseR*0.2, baseR*0.2, cx, cy, baseR);
-      core.addColorStop(0, 'rgba(230,210,255,0.95)');
-      core.addColorStop(0.45, 'rgba(160,100,255,0.95)');
-      core.addColorStop(1, 'rgba(90,40,170,0.95)');
-      ctx.fillStyle = core;
-      ctx.beginPath(); ctx.arc(cx, cy, baseR, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = glow;
+      ctx.fillRect(cx - baseR * 1.5, cy - baseR * 1.5, baseR * 3, baseR * 3);
 
       if (voidDialogue && isAtBottom()) {
         const text = voidDialogue.text;
@@ -1636,22 +1629,22 @@
         let line = '';
         for (const word of words) {
           const test = line ? line + ' ' + word : word;
-          if (ctx.measureText(test).width > maxW - padX*2 && line) { lines.push(line); line = word; }
+          if (ctx.measureText(test).width > maxW - padX * 2 && line) { lines.push(line); line = word; }
           else line = test;
         }
         if (line) lines.push(line);
         const lh = 20;
-        const boxW = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width), 120) + padX*2);
-        const boxH = lines.length * lh + padY*2;
-        const bx = Math.max(12, Math.min(w - boxW - 12, cx - boxW/2));
-        const by = Math.max(12, cy - baseR*2.8 - boxH);
+        const boxW = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width), 120) + padX * 2);
+        const boxH = lines.length * lh + padY * 2;
+        const bx = Math.max(12, Math.min(w - boxW - 12, cx - boxW / 2));
+        const by = Math.max(12, cy - baseR * 0.9 - boxH);
         ctx.fillStyle = 'rgba(8,4,20,0.82)';
         ctx.strokeStyle = 'rgba(170,130,255,0.45)';
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.roundRect(bx, by, boxW, boxH, 10); ctx.fill(); ctx.stroke();
         ctx.fillStyle = 'rgba(236,224,255,0.95)';
         ctx.textBaseline = 'top';
-        lines.forEach((l,i) => ctx.fillText(l, bx + padX, by + padY + i*lh));
+        lines.forEach((l, i) => ctx.fillText(l, bx + padX, by + padY + i * lh));
         ctx.restore();
       }
     }
