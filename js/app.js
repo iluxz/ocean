@@ -566,10 +566,13 @@
         ctx.fillStyle = sg; ctx.fillRect(0,0,w,h*0.75);
         ctx.save();
         ctx.globalAlpha = sunA;
-        ctx.fillStyle = 'rgba(255,244,210,0.98)';
-        ctx.shadowColor = 'rgba(255,220,150,0.9)';
-        ctx.shadowBlur = 40;
-        ctx.beginPath(); ctx.arc(sun.x, sun.y, Math.min(w,h)*0.034, 0, Math.PI*2); ctx.fill();
+        const sr = Math.min(w,h)*0.034;
+        ctx.beginPath(); ctx.arc(sun.x, sun.y, sr * 2.1, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,230,160,0.13)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(sun.x, sun.y, sr * 1.45, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,240,190,0.22)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(sun.x, sun.y, sr, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,244,210,0.98)'; ctx.fill();
         ctx.restore();
       }
 
@@ -592,9 +595,13 @@
         ctx.save();
         ctx.globalAlpha = moonA;
         ctx.fillStyle = 'rgba(240,250,255,0.97)';
-        ctx.shadowColor = 'rgba(190,232,255,0.95)';
-        ctx.shadowBlur = 46;
-        ctx.beginPath(); ctx.arc(moon.x, moon.y, Math.min(w,h)*0.034, 0, Math.PI*2); ctx.fill();
+        const mr = Math.min(w,h)*0.034;
+        ctx.beginPath(); ctx.arc(moon.x, moon.y, mr * 1.9, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(215,240,255,0.14)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(moon.x, moon.y, mr * 1.35, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(225,245,255,0.24)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(moon.x, moon.y, mr, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(240,250,255,0.97)'; ctx.fill();
         ctx.restore();
       }
 
@@ -640,8 +647,6 @@
       const horizon = h * 0.58;
       ctx.save();
       ctx.lineCap = 'round';
-      ctx.shadowColor = 'rgba(200,235,255,0.55)';
-      ctx.shadowBlur = 4;
       ctx.strokeStyle = `rgba(215,238,255,${0.30 + weatherIntensity*0.24})`;
       ctx.lineWidth = 1.15;
       for (let i=0; i<count; i++) {
@@ -927,10 +932,7 @@
       if (stroke) {
         ctx.strokeStyle = stroke;
         ctx.lineWidth = 1.2;
-        ctx.shadowColor = 'rgba(150,220,255,0.55)';
-        ctx.shadowBlur = 7;
         ctx.stroke();
-        ctx.shadowBlur = 0;
       }
       ctx.restore();
     }
@@ -946,8 +948,8 @@
       ctx.save();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      const count = 16;
-      const step = 6;
+      const count = 9;
+      const step = 18;
       for (let i = 0; i < count; i++) {
         const p = i / (count - 1);
         const base = horizon + 12 + Math.pow(p, 1.35) * (h - horizon - 16);
@@ -962,11 +964,8 @@
           const y = waveY(base, amp, freq, phase, x);
           if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        ctx.strokeStyle = `rgba(${cR},${cG},${cB},${(a * 0.26).toFixed(3)})`;
-        ctx.lineWidth = 3.5;
-        ctx.stroke();
         ctx.strokeStyle = `rgba(${cR},${cG},${cB},${a.toFixed(3)})`;
-        ctx.lineWidth = 1.1;
+        ctx.lineWidth = 1.4;
         ctx.stroke();
       }
       ctx.restore();
