@@ -90,7 +90,26 @@
     window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason));
 
     const canvas = document.getElementById('ocean');
-    const ctx = canvas.getContext('2d');
+    function createOceanContext(c) {
+      // Prefer higher-precision canvas color buffers when the browser supports them.
+      // This reduces gradient banding on capable displays/browsers; falls back to default 8-bit RGBA.
+      const tries = [
+        { colorType: 'float16' },
+        { pixelFormat: 'float16' },
+        { storageFormat: 'float16' },
+        { colorSpace: 'display-p3' },
+        {}
+      ];
+      for (const opt of tries) {
+        try {
+          const c2 = c.getContext('2d', opt);
+          if (c2) { c2.__oceanColorOpt = opt; return c2; }
+        } catch (_) {}
+      }
+      return c.getContext('2d');
+    }
+    const ctx = createOceanContext(canvas);
+    window.__oceanCanvasColorOpt = ctx && ctx.__oceanColorOpt ? ctx.__oceanColorOpt : { default: true };
     const bgm = document.getElementById('bgm');
     const hint = document.getElementById('hint');
     const settingsBtn = document.getElementById('settingsBtn');
@@ -1011,11 +1030,12 @@
     }));
 
     function lerp(a,b,p){ return a + (b-a)*p; }
-    function mixArr(c1,c2,p){ return [Math.round(lerp(c1[0],c2[0],p)), Math.round(lerp(c1[1],c2[1],p)), Math.round(lerp(c1[2],c2[2],p))]; }
-    function mix(c1,c2,p){ const c=mixArr(c1,c2,p); return `rgb(${c[0]},${c[1]},${c[2]})`; }
+    function mixArr(c1,c2,p){ return [lerp(c1[0],c2[0],p), lerp(c1[1],c2[1],p), lerp(c1[2],c2[2],p)]; }
+    function rgbStr(c){ return `rgb(${c[0].toFixed(2)},${c[1].toFixed(2)},${c[2].toFixed(2)})`; }
+    function mix(c1,c2,p){ return rgbStr(mixArr(c1,c2,p)); }
     function fillBandGradient(y0, y1, stops) {
       const g = ctx.createLinearGradient(0, y0, 0, y1);
-      for (const s of stops) g.addColorStop(s[0], `rgb(${s[1]},${s[2]},${s[3]})`);
+      for (const s of stops) g.addColorStop(s[0], `rgb(${(+s[1]).toFixed(2)},${(+s[2]).toFixed(2)},${(+s[3]).toFixed(2)})`);
       ctx.fillStyle = g;
       ctx.fillRect(0, y0, w, y1 - y0);
     }
