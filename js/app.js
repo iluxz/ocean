@@ -23,8 +23,12 @@
       const pat = ensureDither();
       if (!pat) return;
       ctx.save();
+      ctx.globalCompositeOperation = 'soft-light';
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, w, h);
       ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = 0.045;
+      ctx.globalAlpha = 0.08;
       ctx.fillStyle = pat;
       ctx.fillRect(0, 0, w, h);
       ctx.restore();
@@ -118,13 +122,7 @@
     window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason));
 
     const canvas = document.getElementById('ocean');
-    let ctx = null;
-    try { ctx = canvas.getContext('2d', { colorSpace: 'display-p3', pixelFormat: 'float16' }); } catch (_) {}
-    if (!ctx) try { ctx = canvas.getContext('2d', { pixelFormat: 'float16' }); } catch (_) {}
-    if (!ctx) try { ctx = canvas.getContext('2d', { colorSpace: 'display-p3' }); } catch (_) {}
-    if (!ctx) ctx = canvas.getContext('2d');
-    window.__oceanCtxInfo = { pixelFormat: ctx.getContextAttributes?.().pixelFormat || 'unorm8', colorSpace: ctx.getContextAttributes?.().colorSpace || 'srgb' };
-    console.log('[ocean] canvas', window.__oceanCtxInfo);
+    const ctx = canvas.getContext('2d');
     const bgm = document.getElementById('bgm');
     const hint = document.getElementById('hint');
     const settingsBtn = document.getElementById('settingsBtn');
