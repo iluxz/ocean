@@ -2182,7 +2182,7 @@
           triggerHurt(60000);
           feedbackStatus.textContent = 'pufferfish got you! no clicking for 1 minute.';
           for (let i=0;i<14;i++) clickBubbles.push({ x, y: worldY, r: 1.5+Math.random()*3.5, sp: 0.3+Math.random()*0.9, ph: Math.random()*10, age:0, life: 900+Math.random()*900 });
-          for (let i=0;i<10;i++) clickRipples.push({ x, y, r: 4+i*3, maxR: 30+i*8, age: 0, life: 500+i*40, alpha: 0.35 });
+          for (let i=0;i<10;i++) ripples.push({ x, y: worldY, r: 4+i*3, age: 0, life: 500+i*40 });
         } else {
           for (let i=0;i<4;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.2, sp: 0.25+Math.random()*0.5, ph: Math.random()*10, age:0, life: 700+Math.random()*500 });
         }
