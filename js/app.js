@@ -1007,27 +1007,49 @@
 
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
+
+      // connecting beam from moon/sun down to horizon hit
+      const beam = ctx.createLinearGradient(0, b.y, 0, horizon + 8);
+      beam.addColorStop(0, `rgba(${rc},${0.10 * vis})`);
+      beam.addColorStop(0.65, `rgba(${rc},${0.05 * vis})`);
+      beam.addColorStop(1, `rgba(255,255,255,${0.22 * vis})`);
+      ctx.strokeStyle = beam;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y + 10);
+      ctx.lineTo(mx, horizon + 4);
+      ctx.stroke();
+      // soft beam haze
+      ctx.fillStyle = `rgba(${rc},${0.035 * vis})`;
+      ctx.beginPath();
+      ctx.moveTo(b.x - 10, b.y + 10);
+      ctx.lineTo(b.x + 10, b.y + 10);
+      ctx.lineTo(mx + 22, horizon + 4);
+      ctx.lineTo(mx - 22, horizon + 4);
+      ctx.closePath();
+      ctx.fill();
+
       // main reflection column under the body
       const col = ctx.createLinearGradient(0, top, 0, bottom);
-      col.addColorStop(0, `rgba(${rc},${0.30 * vis})`);
-      col.addColorStop(0.25, `rgba(${rc},${0.12 * vis})`);
+      col.addColorStop(0, `rgba(${rc},${0.34 * vis})`);
+      col.addColorStop(0.2, `rgba(${rc},${0.14 * vis})`);
       col.addColorStop(1, `rgba(${rc},0)`);
       ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.moveTo(mx - 12, top);
-      ctx.lineTo(mx + 12, top);
+      ctx.moveTo(mx - 10, top);
+      ctx.lineTo(mx + 10, top);
       ctx.lineTo(mx + 110, bottom);
       ctx.lineTo(mx - 110, bottom);
       ctx.closePath();
       ctx.fill();
 
       // bright source hit at horizon
-      const hit = ctx.createRadialGradient(mx, horizon + 6, 0, mx, horizon + 6, 42);
-      hit.addColorStop(0, `rgba(255,255,255,${0.45 * vis})`);
-      hit.addColorStop(0.4, `rgba(${rc},${0.12 * vis})`);
+      const hit = ctx.createRadialGradient(mx, horizon + 8, 0, mx, horizon + 8, 46);
+      hit.addColorStop(0, `rgba(255,255,255,${0.55 * vis})`);
+      hit.addColorStop(0.35, `rgba(${rc},${0.18 * vis})`);
       hit.addColorStop(1, `rgba(${rc},0)`);
       ctx.fillStyle = hit;
-      ctx.fillRect(mx - 60, horizon - 10, 120, 80);
+      ctx.fillRect(mx - 70, horizon - 12, 140, 90);
 
       ctx.lineCap = 'round';
       const speed = reducedMotion ? 0.15 : 1;
