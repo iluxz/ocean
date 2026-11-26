@@ -471,7 +471,7 @@
         oxygen = Math.min(oxygenMax, oxygen + dt * 28);
         oxygenWarned = false;
       } else if (!inFacility) {
-        const drain = boss.active ? 0.45 : (3.1 + Math.max(0, cameraY - 1) * 0.28);
+        const drain = boss.active ? 0.35 : (1.15 + Math.max(0, cameraY - 0.5) * 0.16);
         oxygen = Math.max(0, oxygen - dt * drain);
         if (oxygen <= 25 && !oxygenWarned && !boss.active) { oxygenWarned = true; showToast('oxygen low', 'head up before you run out of air.', 2400); }
         if (oxygen <= 0) {
