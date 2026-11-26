@@ -317,33 +317,40 @@
     }
 
     async function submitAnswer() {
-      if (finished || busy) return;
+      if (busy) return;
+      if (finished) { result.textContent = 'game over - hit restart.'; return; }
       const val = input.value.trim();
       if (!val) { result.textContent = 'type an answer first.'; input.focus(); return; }
       const myRun = runId;
       busy = true; renderState();
       result.innerHTML = `<strong>checking wikipedia...</strong> measuring how underground "${escapeHtml(val)}" is.`;
-      let r;
-      try { r = await wikiScore(val); }
-      catch (_) { r = { score: 40, label: 'offline guess', note: 'lookup failed, fallback score used.', title: val, views: null }; }
-      if (myRun !== runId) return;
-      busy = false;
-      move += 1;
-      total += r.score;
-      depth = Math.min(1000, depth + r.score);
-      targetDepth = depth;
-      spawnBubbles(Math.max(4, Math.floor(r.score / 8)), 30 + (displayDepth / 1000) * (canvas.getBoundingClientRect().height - 80));
-      addPopup(`+${r.score}m`, r.score >= 55);
-      const item = document.createElement('div');
-      item.className = 'mg-item';
-      item.innerHTML = `<span><b>${escapeHtml(val)}</b> → ${escapeHtml(r.title || val)}</span><span>${r.score} • ${escapeHtml(r.label)}</span>`;
-      history.prepend(item);
-      result.innerHTML = `<strong>+${r.score} depth</strong> (${escapeHtml(r.label)})<br>${escapeHtml(r.note)}`;
-      input.value = '';
-      if (move >= 10) { endGame(); return; }
-      current = pickQuestion();
-      renderState();
-      input.focus();
+      try {
+        const r = await Promise.race([
+          wikiScore(val),
+          new Promise(resolve => setTimeout(() => resolve({ score: 45, label: 'signal timeout', note: 'wikipedia took too long, used a fallback score.', title: val, views: null }), 6000))
+        ]);
+        if (myRun !== runId) return;
+        move += 1;
+        total += r.score;
+        depth = Math.min(1000, depth + r.score);
+        targetDepth = depth;
+        spawnBubbles(Math.max(4, Math.floor(r.score / 8)), 30 + (displayDepth / 1000) * (canvas.getBoundingClientRect().height - 80));
+        addPopup(`+${r.score}m`, r.score >= 55);
+        const item = document.createElement('div');
+        item.className = 'mg-item';
+        item.innerHTML = `<span><b>${escapeHtml(val)}</b> → ${escapeHtml(r.title || val)}</span><span>${r.score} • ${escapeHtml(r.label)}</span>`;
+        history.prepend(item);
+        result.innerHTML = `<strong>+${r.score} depth</strong> (${escapeHtml(r.label)})<br>${escapeHtml(r.note)}`;
+        input.value = '';
+        if (move >= 10) { endGame(); return; }
+        current = pickQuestion();
+        input.focus();
+      } catch (err) {
+        console.warn('deep dive submit failed', err);
+        if (myRun === runId) result.textContent = 'something broke checking that answer. try again.';
+      } finally {
+        if (myRun === runId) { busy = false; renderState(); }
+      }
     }
 
     function reset() {
