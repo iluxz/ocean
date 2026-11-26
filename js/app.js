@@ -1997,11 +1997,7 @@
         ctx.strokeStyle='rgba(140,210,255,0.25)'; ctx.strokeRect(w*0.1,h*0.35,w*0.8,h*0.35);
         ctx.restore();
       } else if (perspective === 2) {
-        ctx.save();
-        ctx.fillStyle='rgba(30,20,60,0.12)'; ctx.fillRect(0,0,w,h);
-        ctx.strokeStyle='rgba(120,160,255,0.08)'; ctx.lineWidth=1;
-        for (let i=0; i<12; i++) { const y=h*0.25 + i*h*0.055; ctx.beginPath(); ctx.moveTo(w*0.1,y); ctx.lineTo(w*0.9,y+Math.sin(i+animTime*0.0004)*12); ctx.stroke(); }
-        ctx.restore();
+        // no extra lines/artifacts
       }
       ctx.restore();
 
