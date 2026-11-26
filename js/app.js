@@ -116,6 +116,15 @@
     const feedbackBtn = document.getElementById('feedbackBtn');
     const crashBtn = document.getElementById('crashBtn');
     const feedbackStatus = document.getElementById('feedbackStatus');
+    const toastEl = document.getElementById('toast');
+    let toastTimer = 0;
+    function showToast(title, msg, ms = 2800) {
+      if (!toastEl) return;
+      toastEl.innerHTML = `<span class="toast-title">${title}</span>${msg}`;
+      toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+    }
     const discoverHint = document.getElementById('discoverHint');
     const hurtVignette = document.getElementById('hurtVignette');
     const hurtTimer = document.getElementById('hurtTimer');
@@ -361,7 +370,13 @@
       if (!discoveries.includes(key)) {
         discoveries.push(key);
         const def = DISCOVERY_DEFS.find(d => d.id === key);
-        feedbackStatus.textContent = `discovery: ${def ? def.name : key}`;
+        const name = def ? def.name : key;
+        feedbackStatus.textContent = `discovery: ${name}`;
+        const isFish = ALL_FISH_IDS.includes(key);
+        if (isFish) {
+          sfxClick();
+          showToast('new fish discovered', name);
+        }
         saveGameState();
         checkAchievements();
       }
