@@ -1664,18 +1664,30 @@
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
 
+      // distant void glow (restored)
+      const glow = ctx.createRadialGradient(w*0.5, h*0.5, 10, w*0.5, h*0.5, w*0.6);
+      glow.addColorStop(0, 'rgba(120,90,255,0.06)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow; ctx.fillRect(0,0,w,h);
+
       for (const e of voidEyes) {
         const blink = Math.sin(animTime*0.0008 + e.blink);
         if (blink < -0.92) continue;
         const ex = e.x * w + Math.sin(animTime*0.00005 + e.ph)*20;
         const ey = e.y * h + Math.sin(animTime*0.00012 + e.ph)*8;
-        const a = 0.1 + 0.2 * (0.5 + 0.5 * Math.sin(animTime*0.001 + e.ph));
+        const a = 0.15 + 0.25 * (0.5 + 0.5 * Math.sin(animTime*0.001 + e.ph));
         ctx.fillStyle = `rgba(180,140,255,${a})`;
         ctx.beginPath(); ctx.ellipse(ex-4, ey, 2.2, 1.2, 0, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(ex+4, ey, 2.2, 1.2, 0, 0, Math.PI*2); ctx.fill();
       }
 
       drawVoidEntityAndDialogue();
+
+      // bottom nothingness (restored)
+      const fade = ctx.createLinearGradient(0,h-120,0,h);
+      fade.addColorStop(0,'rgba(0,0,0,0)');
+      fade.addColorStop(1,'rgba(0,0,0,0.7)');
+      ctx.fillStyle = fade; ctx.fillRect(0,h-120,w,120);
 
       const topFade = ctx.createLinearGradient(0,0,0,120);
       topFade.addColorStop(0,'rgba(0,0,0,0.95)');
@@ -1686,21 +1698,30 @@
     function drawBeyond() {
       const g = ctx.createLinearGradient(0, 0, 0, h);
       g.addColorStop(0, '#000000');
-      g.addColorStop(0.5, '#020008');
+      g.addColorStop(0.5, '#010002');
       g.addColorStop(1, '#000000');
       ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-      const cg = ctx.createRadialGradient(w*0.5, h*0.55, 10, w*0.5, h*0.55, w*0.5);
-      cg.addColorStop(0, 'rgba(150,110,255,0.09)');
-      cg.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = cg; ctx.fillRect(0,0,w,h);
-      for (let i=0;i<30;i++) {
+
+      const glow = ctx.createRadialGradient(w*0.5, h*0.5, 10, w*0.5, h*0.5, w*0.65);
+      glow.addColorStop(0, 'rgba(140,100,255,0.08)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow; ctx.fillRect(0,0,w,h);
+
+      for (let i=0;i<24;i++) {
         const x = (i*97 % 1000) / 1000 * w;
         const y = (i*53 % 1000) / 1000 * h;
-        const a = 0.05 + 0.15*(0.5+0.5*Math.sin(animTime*0.0006+i));
-        ctx.fillStyle = `rgba(200,180,255,${a})`;
-        ctx.fillRect(x, y, 2, 2);
+        const a = 0.03 + 0.08*(0.5+0.5*Math.sin(animTime*0.0006+i));
+        ctx.fillStyle = `rgba(190,170,255,${a})`;
+        ctx.fillRect(x, y, 1.5, 1.5);
       }
+
       drawVoidEntityAndDialogue();
+
+      const fade = ctx.createLinearGradient(0,h-120,0,h);
+      fade.addColorStop(0,'rgba(0,0,0,0)');
+      fade.addColorStop(1,'rgba(0,0,0,0.75)');
+      ctx.fillStyle = fade; ctx.fillRect(0,h-120,w,120);
+
       const topFade = ctx.createLinearGradient(0,0,0,120);
       topFade.addColorStop(0,'rgba(0,0,0,0.95)');
       topFade.addColorStop(1,'rgba(0,0,0,0)');
