@@ -1403,12 +1403,7 @@
       const topCol = [dc(lerp(5, 15, d)), dc(lerp(28, 75, d)), dc(lerp(58, 140, d))];
       const midCol = [dc(lerp(3, 10, d)), dc(lerp(18, 50, d)), dc(lerp(40, 100, d))];
       const deepCol = [dc(lerp(1, 5, d)), dc(lerp(8, 30, d)), dc(lerp(22, 70, d))];
-      const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, `rgb(${topCol[0]},${topCol[1]},${topCol[2]})`);
-      g.addColorStop(0.45, `rgb(${midCol[0]},${midCol[1]},${midCol[2]})`);
-      g.addColorStop(1, `rgb(${deepCol[0]},${deepCol[1]},${deepCol[2]})`);
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
+      fillBandGradient(0, h, [[0,...topCol],[0.45,...midCol],[1,...deepCol]], 3.8);
 
       ctx.save();
       ctx.globalAlpha = lerp(0.02, 0.06, d) * (1 - Math.min(1,cameraY) * 0.8);
@@ -1486,12 +1481,7 @@
     }
 
     function drawAbyss() {
-      const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, '#020713');
-      g.addColorStop(0.35, '#01030b');
-      g.addColorStop(1, '#000105');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
+      fillBandGradient(0, h, [[0,2,7,19],[0.35,1,3,11],[1,0,1,5]], 2.8);
 
       // purple background orb/light (like zone before, but purple)
       const orb = ctx.createRadialGradient(w*0.5, h*0.45, 10, w*0.5, h*0.45, w*0.55);
@@ -1555,12 +1545,7 @@
     }
 
     function drawTrenches() {
-      const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, '#000308');
-      g.addColorStop(0.4, '#01010a');
-      g.addColorStop(1, '#000003');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
+      fillBandGradient(0, h, [[0,0,3,8],[0.4,1,1,10],[1,0,0,3]], 2.5);
 
       const haze = ctx.createRadialGradient(w*0.5, h*0.5, 20, w*0.5, h*0.5, w*0.75);
       haze.addColorStop(0, 'rgba(70,60,140,0.08)');
@@ -1601,12 +1586,7 @@
     }
 
     function drawHadal() {
-      const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, '#000005');
-      g.addColorStop(0.5, '#020006');
-      g.addColorStop(1, '#000000');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
+      fillBandGradient(0, h, [[0,0,0,5],[0.5,2,0,6],[1,0,0,0]], 2.5);
 
       const haze = ctx.createRadialGradient(w*0.5, h*0.6, 20, w*0.5, h*0.6, w*0.8);
       haze.addColorStop(0, 'rgba(130,40,80,0.07)');
@@ -1696,12 +1676,7 @@
     }
 
     function drawVoid() {
-      const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, '#000000');
-      g.addColorStop(0.5, '#010002');
-      g.addColorStop(1, '#000000');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
+      fillBandGradient(0, h, [[0,0,0,0],[0.5,1,0,2],[1,0,0,0]], 2.2);
 
       // distant void glow (restored)
       const glow = ctx.createRadialGradient(w*0.5, h*0.5, 10, w*0.5, h*0.5, w*0.6);
@@ -1735,11 +1710,7 @@
     }
 
     function drawBeyond() {
-      const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, '#000000');
-      g.addColorStop(0.5, '#010002');
-      g.addColorStop(1, '#000000');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      fillBandGradient(0, h, [[0,0,0,0],[0.5,1,0,2],[1,0,0,0]], 2.2);
 
       const glow = ctx.createRadialGradient(w*0.5, h*0.5, 10, w*0.5, h*0.5, w*0.65);
       glow.addColorStop(0, 'rgba(140,100,255,0.08)');
