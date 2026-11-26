@@ -1,6 +1,34 @@
     let crashBuzzStarted = false;
     let crashed = false;
     let rafId = null;
+    let ditherCanvas = null;
+    let ditherPattern = null;
+    function ensureDither() {
+      if (ditherPattern) return ditherPattern;
+      const size = 128;
+      ditherCanvas = document.createElement('canvas');
+      ditherCanvas.width = size; ditherCanvas.height = size;
+      const dctx = ditherCanvas.getContext('2d');
+      const img = dctx.createImageData(size, size);
+      const data = img.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const v = Math.random() * 255;
+        data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+      }
+      dctx.putImageData(img, 0, 0);
+      ditherPattern = ctx.createPattern(ditherCanvas, 'repeat');
+      return ditherPattern;
+    }
+    function drawDither() {
+      const pat = ensureDither();
+      if (!pat) return;
+      ctx.save();
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.globalAlpha = 0.045;
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
     function playWiiCrashBuzz() {
       if (crashBuzzStarted) return;
       crashBuzzStarted = true;
@@ -1888,6 +1916,8 @@
       vg.addColorStop(1, `rgba(0,0,0,${lerp(0.28,0.14,d) + cameraY*0.18 + weatherIntensity*0.05})`);
       ctx.fillStyle = vg;
       ctx.fillRect(0, 0, w, h);
+
+      drawDither();
 
       updateAudioMix();
       if (!crashed) rafId = requestAnimationFrame(render);
