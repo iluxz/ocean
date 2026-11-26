@@ -515,7 +515,7 @@
       const g = audioCtx.createGain(); g.gain.value = 0.18;
       src.connect(f); f.connect(g); g.connect(masterGain); src.start();
     }
-    function isFacilityLayer() { return quest && quest.unlockedDeep && cameraY >= 5.5; }
+    function isFacilityLayer() { return quest && quest.unlockedDeep && cameraY >= currentBottomDepth() - 0.15; }
     const MAX_PERSPECTIVE = 2;
     function canUsePerspective() { return !isFacilityLayer(); }
     function currentBottomDepth() { return quest && quest.unlockedDeep ? 6 : 5; }
@@ -1676,18 +1676,39 @@
       if (voidDialogue && isAtBottom()) {
         const text = voidDialogue.text;
         ctx.save();
-        ctx.font = '14px Consolas, monospace';
-        const padX = 14, padY = 10, maxW = Math.min(w * 0.72, 620);
-        const words = text.split(' '); const lines = []; let line = '';
-        for (const word of words) { const test = line ? line + ' ' + word : word; if (ctx.measureText(test).width > maxW - padX*2 && line) { lines.push(line); line = word; } else line = test; }
+        const fontSize = w < 520 ? 12 : 14;
+        ctx.font = fontSize + 'px Consolas, monospace';
+        const padX = 12, padY = 10, maxW = Math.min(w - 24, 620);
+        const words = text.split(' ');
+        const lines = [];
+        let line = '';
+        for (const word of words) {
+          const test = line ? line + ' ' + word : word;
+          if (ctx.measureText(test).width > maxW - padX * 2 && line) { lines.push(line); line = word; }
+          else line = test;
+        }
         if (line) lines.push(line);
-        const lh = 20; const boxW = Math.min(maxW, Math.max(...lines.map(l=>ctx.measureText(l).width),120)+padX*2); const boxH = lines.length*lh+padY*2;
-        const bx = Math.max(12, Math.min(w-boxW-12, cx-boxW/2));
-        const by = Math.max(12, Math.min(h-boxH-12, h*0.08));
-        ctx.fillStyle = 'rgba(5,14,30,0.88)'; ctx.strokeStyle = 'rgba(120,180,255,0.35)'; ctx.lineWidth = 1;
+        // hard-wrap any single long token
+        for (let i = 0; i < lines.length; i++) {
+          while (ctx.measureText(lines[i]).width > maxW - padX * 2 && lines[i].length > 8) {
+            let cut = lines[i].length - 1;
+            while (cut > 1 && ctx.measureText(lines[i].slice(0, cut)).width > maxW - padX * 2) cut--;
+            lines.splice(i + 1, 0, lines[i].slice(cut));
+            lines[i] = lines[i].slice(0, cut);
+          }
+        }
+        const lh = fontSize + 5;
+        const boxW = Math.min(maxW, Math.max(120, ...lines.map(l => ctx.measureText(l).width)) + padX * 2);
+        const boxH = lines.length * lh + padY * 2;
+        const bx = Math.max(12, Math.min(w - boxW - 12, cx - boxW / 2));
+        const by = Math.max(12, Math.min(h - boxH - 12, h * 0.08));
+        ctx.fillStyle = 'rgba(5,14,30,0.88)';
+        ctx.strokeStyle = 'rgba(120,180,255,0.35)';
+        ctx.lineWidth = 1;
         ctx.beginPath(); ctx.roundRect(bx, by, boxW, boxH, 10); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = 'rgba(220,240,255,0.95)'; ctx.textBaseline = 'top';
-        lines.forEach((l,i)=>ctx.fillText(l,bx+padX,by+padY+i*lh));
+        ctx.fillStyle = 'rgba(220,240,255,0.95)';
+        ctx.textBaseline = 'top';
+        lines.forEach((l, i) => ctx.fillText(l, bx + padX, by + padY + i * lh));
         ctx.restore();
       }
     }
@@ -1787,28 +1808,37 @@
 
       // puzzle/encounter UI
       ctx.save();
-      ctx.fillStyle='rgba(210,235,255,0.95)'; ctx.font='16px Consolas, monospace'; ctx.textAlign='center';
-      ctx.fillText('THE DEEP BLUE — facility core', w*0.5, h*0.12);
-      ctx.font='12px Consolas, monospace'; ctx.fillStyle='rgba(170,200,225,0.75)';
+      const small = w < 560;
+      ctx.fillStyle='rgba(210,235,255,0.95)';
+      ctx.font=(small ? '13px' : '16px') + ' Consolas, monospace';
+      ctx.textAlign='center';
+      ctx.fillText(small ? 'DEEP BLUE CORE' : 'THE DEEP BLUE — facility core', w*0.5, h*0.12);
+      ctx.font=(small ? '11px' : '12px') + ' Consolas, monospace';
       ctx.fillStyle = facility.complete ? 'rgba(140,255,190,0.9)' : 'rgba(255,190,140,0.85)';
       ctx.fillText(facility.complete ? 'supply neutralized' : 'stop the wipeout supply', w*0.5, h*0.15);
 
       const py = h*0.86;
+      const boxW = Math.min(140, Math.max(84, w * 0.28));
+      const boxH = small ? 30 : 32;
+      const gap = Math.max(8, w * 0.02);
+      const total = boxW * 3 + gap * 2;
+      const startX = (w - total) / 2 + boxW / 2;
       const boxes = [
-        {x:w*0.22, done:facility.puzzleA, label:facility.puzzleA?'✓ sealed':'valve'},
-        {x:w*0.5, done:facility.puzzleB, label:facility.puzzleB?'✓ code':'code'},
-        {x:w*0.78, done:facility.encounterDone, label:facility.encounterDone?'✓ bypassed':'guard'}
+        {x:startX, done:facility.puzzleA, label:facility.puzzleA?'✓ sealed':'valve'},
+        {x:startX + boxW + gap, done:facility.puzzleB, label:facility.puzzleB?'✓ code':'code'},
+        {x:startX + (boxW + gap) * 2, done:facility.encounterDone, label:facility.encounterDone?'✓ bypassed':'guard'}
       ];
       for (const b of boxes){
         ctx.fillStyle = b.done ? 'rgba(40,120,80,0.25)' : 'rgba(20,50,80,0.45)';
         ctx.strokeStyle = b.done ? 'rgba(120,255,170,0.55)' : 'rgba(130,200,255,0.45)';
         ctx.lineWidth = 1.5;
-        roundRectPath(ctx, b.x-70, py, 140, 32, 8); ctx.fill(); ctx.stroke();
+        roundRectPath(ctx, b.x - boxW/2, py, boxW, boxH, 8); ctx.fill(); ctx.stroke();
         ctx.fillStyle = b.done ? 'rgba(170,255,200,0.95)' : 'rgba(210,235,255,0.9)';
-        ctx.font='12px Consolas, monospace'; ctx.fillText(b.label, b.x, py+20);
+        ctx.font = (small ? '11px' : '12px') + ' Consolas, monospace';
+        ctx.fillText(b.label, b.x, py + (small ? 19 : 20));
       }
       if (facility.complete) {
-        ctx.fillStyle='rgba(140,255,190,0.95)'; ctx.font='14px Consolas, monospace';
+        ctx.fillStyle='rgba(140,255,190,0.95)'; ctx.font=(small ? '12px' : '14px') + ' Consolas, monospace';
         ctx.fillText('the ocean is safe... for now.', w*0.5, h*0.95);
       }
       ctx.restore();
@@ -2255,24 +2285,30 @@
       const worldY = y + cameraY * h;
       const horizon = h * 0.58;
 
-      if (isAtBottom()) {
+      if (isAtBottom() || isFacilityLayer()) {
         const bottomLayer = Math.floor(currentBottomDepth());
         const localY = worldY - h * bottomLayer;
         if (isFacilityLayer()) {
-          const py = h*0.74;
-          const hitBox = (bx)=> x > bx-80 && x < bx+80 && localY > py && localY < py+34;
-          if (hitBox(w*0.22)) {
+          const py = h*0.86;
+          const boxW = Math.min(140, Math.max(84, w * 0.28));
+          const boxH = w < 560 ? 30 : 32;
+          const gap = Math.max(8, w * 0.02);
+          const total = boxW * 3 + gap * 2;
+          const startX = (w - total) / 2 + boxW / 2;
+          const bxs = [startX, startX + boxW + gap, startX + (boxW + gap) * 2];
+          const hitBox = (bx)=> x > bx - boxW/2 && x < bx + boxW/2 && localY > py && localY < py + boxH;
+          if (hitBox(bxs[0])) {
             if (!facility.puzzleA) { facility.puzzleA = true; sfxClick(); showVoidDialogue('valve sealed. pressure stabilizing. one system down.', 3500); }
             else { sfxClick(); showVoidDialogue('valve already sealed.', 1800); }
           }
-          else if (hitBox(w*0.5)) {
+          else if (hitBox(bxs[1])) {
             if (!facility.puzzleB) {
               const code = prompt('enter facility code:','');
               if ((code||'').trim().toUpperCase() === 'BLUE') { facility.puzzleB = true; sfxClick(); showVoidDialogue('code accepted. BLUE protocol unlocked.', 3500); }
               else if (code !== null) { sfxClick(); showVoidDialogue('wrong code.', 1800); }
             } else { sfxClick(); showVoidDialogue('code terminal already green.', 1800); }
           }
-          else if (hitBox(w*0.78)) {
+          else if (hitBox(bxs[2])) {
             if (!facility.encounterDone) { facility.encounterDone = true; sfxClick(); showVoidDialogue('guard bypassed.', 2200); }
             else { sfxClick(); showVoidDialogue('guard already bypassed.', 1800); }
           }
