@@ -338,7 +338,7 @@
       oxygen = Math.max(oxygen, 72); // enough oxygen to finish fight
       setBossLog('a void octopus rises from the hadal dark...');
       syncBossUi();
-      sfxDiscovery();
+      sfxBubble();
     }
 
     function endVoidOctopus(win) {
@@ -403,7 +403,7 @@
         boss.playerHp = Math.min(boss.playerMaxHp, boss.playerHp + heal);
         oxygen = Math.min(oxygenMax, oxygen + 8);
         setBossLog(`you recharge ${heal} hp and a bit of oxygen.`);
-        sfxDiscovery();
+        sfxBubble();
       }
       syncBossUi();
       if (boss.hp <= 0) { endVoidOctopus(true); return; }
