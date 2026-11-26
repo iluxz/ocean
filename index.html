@@ -261,6 +261,21 @@
     </div>
   </div>
 
+  <div class="modal" id="adminModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Admin panel" style="width:min(520px,calc(100vw - 32px));">
+      <h2>admin panel</h2>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;">secret ocean controls. use responsibly, or don't, i'm not your mom.</div>
+      <div style="display:grid;gap:8px;">
+        <button class="btn" id="adminSpawnBottle" type="button">spawn bottle</button>
+        <button class="btn" id="adminAllDiscoveries" type="button">get all discoveries</button>
+        <button class="btn" id="adminAllAchievements" type="button">get all achievements</button>
+        <button class="btn" id="adminFinishQuest" type="button">finish quest</button>
+      </div>
+      <div id="adminStatus" style="margin-top:12px;font-size:12px;color:var(--muted);min-height:18px;">status: waiting...</div>
+      <div class="modal-actions"><button class="btn" id="adminClose" type="button">close</button></div>
+    </div>
+  </div>
+
   <div class="modal" id="feedbackModal" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-label="Send feedback">
       <h2>feedback</h2>

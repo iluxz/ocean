@@ -135,6 +135,13 @@
     const updateList = document.getElementById('updateList');
     const equippedBanner = document.getElementById('equippedBanner');
     const errorRefresh = document.getElementById('errorRefresh');
+    const adminModal = document.getElementById('adminModal');
+    const adminClose = document.getElementById('adminClose');
+    const adminSpawnBottle = document.getElementById('adminSpawnBottle');
+    const adminAllDiscoveries = document.getElementById('adminAllDiscoveries');
+    const adminAllAchievements = document.getElementById('adminAllAchievements');
+    const adminFinishQuest = document.getElementById('adminFinishQuest');
+    const adminStatus = document.getElementById('adminStatus');
 
     let w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
     let t = 0;
@@ -2201,9 +2208,77 @@
     });
 
     window.addEventListener('pointerdown', (e) => { if (e.target.closest('.settings-wrap') || e.target.closest('.modal') || e.target === canvas) return; startAudio(); }, { passive: true });
+    const adminCode = ['arrowup','arrowup','arrowdown','arrowdown','arrowleft','arrowright','arrowleft','arrowright','arrowright','arrowleft','.','b','a','b','a'];
+    let adminIdx = 0;
+    function openAdmin() {
+      adminModal.classList.add('open');
+      adminModal.setAttribute('aria-hidden', 'false');
+      adminStatus.textContent = 'status: admin panel unlocked';
+    }
+    function closeAdmin() {
+      adminModal.classList.remove('open');
+      adminModal.setAttribute('aria-hidden', 'true');
+    }
+    adminClose.addEventListener('click', closeAdmin);
+    adminModal.addEventListener('click', (e) => { if (e.target === adminModal) closeAdmin(); });
+
+    adminSpawnBottle.addEventListener('click', () => {
+      bottle.active = true;
+      bottle.found = false;
+      bottle.x = 0.08 + Math.random() * 0.25;
+      bottle.ph = Math.random() * 10;
+      bottle.next = 999999;
+      bottle.screenX = -999; bottle.screenY = -999;
+      adminStatus.textContent = 'status: bottle spawned near the surface';
+      sfxClick();
+    });
+
+    adminAllDiscoveries.addEventListener('click', () => {
+      for (const d of DISCOVERY_DEFS) if (!discoveries.includes(d.id)) discoveries.push(d.id);
+      saveGameState();
+      renderDiscoveries();
+      checkAchievements();
+      adminStatus.textContent = `status: all discoveries unlocked (${discoveries.length}/${DISCOVERY_DEFS.length})`;
+      sfxClick();
+    });
+
+    adminAllAchievements.addEventListener('click', () => {
+      for (const a of ACHIEVEMENT_DEFS) if (!achievements.includes(a.id)) achievements.push(a.id);
+      saveGameState();
+      renderAchievements();
+      adminStatus.textContent = `status: all achievements unlocked (${achievements.length}/${ACHIEVEMENT_DEFS.length})`;
+      sfxClick();
+    });
+
+    adminFinishQuest.addEventListener('click', () => {
+      bottlesFound = Math.max(bottlesFound, (quest.bottlesAtAccept || 0) + 3);
+      bottomTrips = Math.max(bottomTrips, (quest.tripsAtAccept || 0) + 3);
+      const fishIds = ['clownfish','pufferfish','shark','betta','koi'];
+      for (const id of fishIds) if (!discoveries.includes(id)) discoveries.push(id);
+      quest.offered = true;
+      quest.accepted = true;
+      quest.completed = true;
+      quest.unlockedDeep = true;
+      saveGameState();
+      renderDiscoveries();
+      checkAchievements();
+      adminStatus.textContent = 'status: quest finished, deeper layer unlocked';
+      showVoidDialogue('admin override accepted. the deep opens.', 5000);
+      sfxClick();
+    });
+
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
-      if (e.key.toLowerCase() === 'p' && !e.target.closest('textarea,input,select')) { setPhotoMode(!photoMode); return; }
+      const k = e.key.toLowerCase();
+      if (e.key === 'Escape') { closeAdmin(); closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
+      if (e.target.closest('textarea,input,select')) { adminIdx = 0; return; }
+      const expected = adminCode[adminIdx];
+      if (k === expected) {
+        adminIdx += 1;
+        if (adminIdx >= adminCode.length) { adminIdx = 0; openAdmin(); }
+      } else {
+        adminIdx = k === adminCode[0] ? 1 : 0;
+      }
+      if (k === 'p') { setPhotoMode(!photoMode); return; }
       startAudio();
     });
     checkAchievements();
