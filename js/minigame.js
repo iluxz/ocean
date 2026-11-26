@@ -96,9 +96,10 @@
       .mg-stat-label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:rgba(236,247,255,.62);margin-bottom:4px;}
       .mg-question{font-size:24px;color:#ecf7ff;margin-bottom:4px;line-height:1.3;}
       .mg-hint{font-size:12px;color:rgba(236,247,255,.62);margin-bottom:12px;min-height:18px;}
-      .mg-input-row{display:flex;gap:8px;margin-bottom:10px;}
-      .mg-input-row input{flex:1;min-width:0;background:rgba(255,255,255,0.04);color:#ecf7ff;border:1px solid rgba(126,200,255,0.18);border-radius:10px;padding:11px 12px;font:inherit;font-size:14px;}
+      .mg-input-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+      .mg-input-row input{flex:1 1 220px;min-width:0;background:rgba(255,255,255,0.04);color:#ecf7ff;border:1px solid rgba(126,200,255,0.18);border-radius:10px;padding:11px 12px;font:inherit;font-size:14px;}
       .mg-input-row input:focus{outline:none;border-color:rgba(126,200,255,0.45);}
+      .mg-input-row .mg-btn{flex:0 0 auto;}
       .mg-result{min-height:58px;font-size:13px;line-height:1.55;color:rgba(236,247,255,.72);margin-bottom:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(126,200,255,0.08);}
       .mg-result strong{color:#9fd3ff;}
       .mg-history{flex:1;min-height:120px;max-height:220px;overflow:auto;display:grid;gap:6px;padding-right:4px;align-content:start;margin-bottom:0;}
