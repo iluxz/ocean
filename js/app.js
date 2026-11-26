@@ -647,8 +647,6 @@
       const horizon = h * 0.58;
       ctx.save();
       ctx.lineCap = 'round';
-      ctx.strokeStyle = `rgba(215,238,255,${0.30 + weatherIntensity*0.24})`;
-      ctx.lineWidth = 1.15;
       for (let i=0; i<count; i++) {
         const d = rainDrops[i];
         if (!d) continue;
@@ -659,29 +657,30 @@
         const y = (yRaw % travel) - 20;
         const prevY = (prev % travel) - 20;
         const waterY = getWaveY(x, horizon);
-        const crossed = (prevY < waterY && y >= waterY) || (yRaw - prev > travel * 0.5); // wrapped
-        if (crossed && Math.random() < 0.35) {
-          ripples.push({ x, y: waterY + 1, r: 1.5 + Math.random()*2, age: 0, life: 600 + Math.random()*350, rain: true });
-          if (ripples.length > 120) ripples.splice(0, ripples.length - 120);
+        const crossed = (prevY < waterY && y >= waterY) || (yRaw - prev > travel * 0.5);
+        if (crossed && Math.random() < 0.45) {
+          ripples.push({ x, y: waterY + 1, r: 1.5 + Math.random()*2.5, age: 0, life: 550 + Math.random()*350, rain: true });
+          if (ripples.length > 140) ripples.splice(0, ripples.length - 140);
         }
         d._yRaw = yRaw;
-        const x2 = x - 1.5 * d.s;
-        const y2 = y + d.l;
-        if (y >= waterY) continue; // already under surface
-        let drawY2 = y2;
-        let drawX2 = x2;
+        const x2 = x - 2.2 * d.s;
+        const y2 = y + d.l * 1.15;
+        if (y >= waterY) continue;
+        let drawY2 = y2, drawX2 = x2;
         if (y2 > waterY) {
           const tHit = (waterY - y) / ((y2 - y) || 1);
-          drawY2 = waterY;
-          drawX2 = x + (x2 - x) * tHit;
+          drawY2 = waterY; drawX2 = x + (x2 - x) * tHit;
         }
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(drawX2, drawY2);
-        ctx.stroke();
+        const a = 0.22 + weatherIntensity * 0.2 + d.s * 0.08;
+        ctx.strokeStyle = `rgba(210,235,255,${a.toFixed(3)})`;
+        ctx.lineWidth = 0.8 + d.s * 0.45;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(drawX2, drawY2); ctx.stroke();
       }
       ctx.restore();
+      return;
     }
+
+
 
     function drawBottleSprite(x, y, rot, alpha=0.9, scale=1) {
       ctx.save();
@@ -937,47 +936,58 @@
       ctx.restore();
     }
 
-    // stacked luminous wave lines (reference look: many thin glowing crests)
+    // dense glowing crest lines to match reference: many thin, bright, flowing wave contours
     function drawCrestLines() {
       const horizon = h * 0.58;
       const d = dayFactor;
       const waveT = simTime * motionMul;
-      const cR = Math.round(lerp(150, 255, d));
-      const cG = Math.round(lerp(225, 255, d));
-      const cB = Math.round(lerp(255, 255, d));
+      const count = 38;
+      const step = 6;
       ctx.save();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      const count = 9;
-      const step = 18;
       for (let i = 0; i < count; i++) {
         const p = i / (count - 1);
-        const base = horizon + 12 + Math.pow(p, 1.35) * (h - horizon - 16);
-        const amp = 5 + p * 30;
-        const freq = 0.0115 - p * 0.0045;
+        const base = horizon + 8 + Math.pow(p, 1.18) * (h - horizon - 10);
+        const amp = 6 + p * 36;
+        const freq = 0.0125 - p * 0.0054;
         const dir = i % 2 ? 1 : -1;
-        const phase = waveT * 0.00045 * dir * (0.7 + p * 0.8) + i * 1.9;
-        const a = (0.30 - p * 0.15) * (0.75 + 0.25 * Math.sin(animTime * 0.0004 + i));
-        if (a <= 0.02) continue;
+        const phase = waveT * 0.00052 * dir * (0.6 + p * 0.9) + i * 1.37;
+        const breathe = 0.65 + 0.35 * Math.sin(animTime * 0.00055 + i * 0.7);
+        const alpha = (0.52 - p * 0.34) * breathe;
+        if (alpha <= 0.02) continue;
+        const r = Math.round(lerp(170, 235, 1 - p * 0.35));
+        const g = Math.round(lerp(225, 250, 1 - p * 0.2));
+        const b = 255;
+
         ctx.beginPath();
-        for (let x = 0; x <= w + step; x += step) {
+        for (let x = -step; x <= w + step; x += step) {
           const y = waveY(base, amp, freq, phase, x);
-          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          if (x === -step) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        ctx.strokeStyle = `rgba(${cR},${cG},${cB},${a.toFixed(3)})`;
-        ctx.lineWidth = 1.4;
+        // glow pass
+        ctx.strokeStyle = `rgba(${r},${g},${b},${(alpha * 0.22).toFixed(3)})`;
+        ctx.lineWidth = 4.2 - p * 1.2;
+        ctx.shadowColor = `rgba(150,220,255,${(alpha * 0.9).toFixed(3)})`;
+        ctx.shadowBlur = 10 - p * 4;
+        ctx.stroke();
+        // core pass
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = `rgba(${Math.min(255,r+30)},${Math.min(255,g+20)},255,${(alpha * 0.95).toFixed(3)})`;
+        ctx.lineWidth = 1.2 - p * 0.35;
         ctx.stroke();
       }
       ctx.restore();
     }
 
     // broken moonlight shimmer dancing on the water
-    const shimmerDashes = Array.from({ length: 46 }, () => ({
-      xf: Math.random(),
+    const shimmerDashes = Array.from({ length: 120 }, () => ({
+      xf: (Math.random() - 0.5),       // centered on light source
       yf: Math.random(),
-      sp: 0.4 + Math.random() * 1.2,
-      len: 6 + Math.random() * 26,
-      fl: Math.random() * Math.PI * 2
+      sp: 0.3 + Math.random() * 1.4,
+      len: 8 + Math.random() * 42,
+      fl: Math.random() * Math.PI * 2,
+      thick: 0.8 + Math.random() * 1.6
     }));
 
     function drawMoonShimmer() {
@@ -989,29 +999,59 @@
       const b = isDay ? sun : moon;
       const vis = isDay ? Math.max(0, Math.min(1, (d - 0.15) / 0.35)) : Math.max(0, Math.min(1, (0.45 - d) / 0.35));
       if (vis <= 0.01) return;
-      const top = h * 0.58 + 6;
-      const bottom = h * 0.97;
-      const rc = isDay ? '255,244,205' : '215,240,255';
+      const top = h * 0.58 + 2;
+      const bottom = h * 0.99;
+      const rc = isDay ? '255,248,220' : '220,242,255';
+
+      // broad reflection column
       ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      const col = ctx.createLinearGradient(0, top, 0, bottom);
+      col.addColorStop(0, `rgba(${rc},${0.28 * vis})`);
+      col.addColorStop(0.25, `rgba(${rc},${0.14 * vis})`);
+      col.addColorStop(1, `rgba(${rc},0)`);
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(b.x - 18, top);
+      ctx.lineTo(b.x + 18, top);
+      ctx.lineTo(b.x + 140, bottom);
+      ctx.lineTo(b.x - 140, bottom);
+      ctx.closePath();
+      ctx.fill();
+
+      // bright center line
+      const cl = ctx.createLinearGradient(0, top, 0, bottom);
+      cl.addColorStop(0, `rgba(255,255,255,${0.55 * vis})`);
+      cl.addColorStop(0.35, `rgba(${rc},${0.18 * vis})`);
+      cl.addColorStop(1, `rgba(${rc},0)`);
+      ctx.fillStyle = cl;
+      ctx.fillRect(b.x - 2, top, 4, bottom - top);
+
       ctx.lineCap = 'round';
       const speed = reducedMotion ? 0.15 : 1;
       for (const s of shimmerDashes) {
-        const prog = (s.yf + animTime * 0.000045 * s.sp * speed) % 1;
+        const prog = (s.yf + animTime * 0.000055 * s.sp * speed) % 1;
         const y = top + prog * (bottom - top);
-        const spread = 12 + prog * 95;
-        const wob = Math.sin(animTime * 0.0016 * s.sp + s.fl) * (2 + prog * 10);
-        const x = b.x + (s.xf - 0.5) * 2 * spread + wob;
-        const flicker = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(animTime * 0.003 * s.sp + s.fl * 3));
-        const a = flicker * (0.5 - prog * 0.25) * vis * (1 - weatherIntensity * 0.6);
-        if (a < 0.02) continue;
-        const len = s.len * (0.5 + prog * 1.3);
-        ctx.strokeStyle = `rgba(${rc},${a.toFixed(3)})`;
-        ctx.lineWidth = prog > 0.5 ? 1.6 : 1.1;
+        const spread = 10 + prog * 130;
+        const wob = Math.sin(animTime * 0.0018 * s.sp + s.fl) * (2 + prog * 12);
+        const drift = Math.sin(animTime * 0.00025 + s.fl) * 8;
+        const x = b.x + s.xf * spread + wob + drift;
+        const flicker = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(animTime * 0.0035 * s.sp + s.fl * 4));
+        const fade = Math.pow(1 - prog, 0.8);
+        const a = flicker * fade * vis * (0.75 - weatherIntensity * 0.35);
+        if (a < 0.015) continue;
+        const len = s.len * (0.4 + prog * 1.6);
+        ctx.strokeStyle = `rgba(255,255,255,${(a * 0.95).toFixed(3)})`;
+        ctx.lineWidth = s.thick * (1 - prog * 0.3);
+        ctx.shadowColor = `rgba(${rc},${(a * 0.8).toFixed(3)})`;
+        ctx.shadowBlur = 6;
         ctx.beginPath();
         ctx.moveTo(x - len / 2, y);
         ctx.lineTo(x + len / 2, y);
         ctx.stroke();
       }
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = 'source-over';
       ctx.restore();
     }
 
@@ -1026,30 +1066,33 @@
       const vis = isDay ? Math.max(0, Math.min(1, (d - 0.15) / 0.35)) : Math.max(0, Math.min(1, (0.45 - d) / 0.35));
       if (vis <= 0.01) return;
       const top = h * 0.58;
-      const bottom = h * 0.95;
+      const bottom = h * 0.98;
       ctx.save();
-      ctx.globalAlpha = (isDay ? lerp(0.13, 0.26, d) : 0.17) * vis * (1 - weatherIntensity * 0.5);
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = (isDay ? lerp(0.18, 0.32, d) : 0.22) * vis * (1 - weatherIntensity * 0.45);
       const g = ctx.createLinearGradient(0, top, 0, bottom);
-      const rc = isDay ? '255,245,200' : '190,230,255';
-      g.addColorStop(0, `rgba(${rc},0.65)`);
+      const rc = isDay ? '255,245,200' : '200,235,255';
+      g.addColorStop(0, `rgba(${rc},0.75)`);
+      g.addColorStop(0.4, `rgba(${rc},0.25)`);
       g.addColorStop(1, `rgba(${rc},0)`);
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.moveTo(mx - 10, top);
-      for (let y = top; y <= bottom; y += 8) {
+      ctx.moveTo(mx - 14, top);
+      for (let y = top; y <= bottom; y += 6) {
         const p = (y - top) / (bottom - top);
-        const wave = reducedMotion ? 0 : Math.sin(y * 0.08 + animTime * 0.0018) * (2 + p * 8);
-        const spread = 8 + p * 70 + wave;
+        const wave = reducedMotion ? 0 : Math.sin(y * 0.09 + animTime * 0.002) * (2 + p * 10);
+        const spread = 10 + p * 90 + wave;
         ctx.lineTo(mx + spread, y);
       }
-      for (let y = bottom; y >= top; y -= 8) {
+      for (let y = bottom; y >= top; y -= 6) {
         const p = (y - top) / (bottom - top);
-        const wave = reducedMotion ? 0 : Math.sin(y * 0.08 + animTime * 0.0018 + 1.7) * (2 + p * 8);
-        const spread = 8 + p * 70 + wave;
+        const wave = reducedMotion ? 0 : Math.sin(y * 0.09 + animTime * 0.002 + 1.7) * (2 + p * 10);
+        const spread = 10 + p * 90 + wave;
         ctx.lineTo(mx - spread, y);
       }
       ctx.closePath();
       ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
       ctx.restore();
     }
 
@@ -1336,11 +1379,11 @@
       const wc = (r,g,b,a) => `rgba(${Math.round(r*(1-dark))}, ${Math.round(g*(1-dark))}, ${Math.round(b*(1-dark))}, ${a})`;
       const waveT = simTime * motionMul;
       const layers = [
-        { base: horizon + 18, amp: 10, freq: 0.008,  phase: waveT * 0.00045, colorTop: wc(lerp(24,70,d), lerp(72,140,d), lerp(120,190,d), lerp(0.55,0.45,d)), colorBottom: wc(lerp(6,30,d), lerp(24,80,d), lerp(50,120,d), lerp(0.65,0.55,d)), alpha: 1, stroke: `rgba(140,210,255,${lerp(0.06,0.12,d)})` },
-        { base: horizon + 34, amp: 14, freq: 0.0105, phase: waveT * 0.00062 + 1.2, colorTop: wc(lerp(18,50,d), lerp(68,130,d), lerp(118,185,d), lerp(0.72,0.58,d)), colorBottom: wc(lerp(5,20,d), lerp(22,70,d), lerp(46,110,d), lerp(0.82,0.65,d)), alpha: 1, stroke: `rgba(140,210,255,${lerp(0.08,0.14,d)})` },
-        { base: horizon + 56, amp: 18, freq: 0.009,  phase: -waveT * 0.00052 + 2.1, colorTop: wc(lerp(12,35,d), lerp(54,115,d), lerp(98,175,d), lerp(0.82,0.68,d)), colorBottom: wc(lerp(4,15,d), lerp(18,60,d), lerp(40,100,d), lerp(0.92,0.75,d)), alpha: 1, stroke: `rgba(140,210,255,${lerp(0.1,0.16,d)})` },
-        { base: horizon + 84, amp: 24, freq: 0.0075, phase: waveT * 0.00072 + 0.4, colorTop: wc(lerp(8,25,d), lerp(40,95,d), lerp(78,160,d), lerp(0.9,0.78,d)), colorBottom: wc(lerp(2,10,d), lerp(12,50,d), lerp(30,90,d), lerp(0.96,0.85,d)), alpha: 1, stroke: `rgba(150,220,255,${lerp(0.11,0.18,d)})` },
-        { base: horizon + 120, amp: 32, freq: 0.0062, phase: -waveT * 0.00058 + 3.4, colorTop: wc(lerp(5,15,d), lerp(28,75,d), lerp(58,140,d), lerp(0.96,0.88,d)), colorBottom: wc(lerp(1,5,d), lerp(8,35,d), lerp(22,75,d), 1), alpha: 1, stroke: `rgba(150,220,255,${lerp(0.08,0.14,d)})` }
+        { base: horizon + 14, amp: 8,  freq: 0.009,  phase: waveT * 0.00042,        colorTop: wc(lerp(18,65,d), lerp(55,120,d), lerp(105,175,d), 0.55), colorBottom: wc(lerp(8,30,d), lerp(30,78,d), lerp(70,130,d), 0.65), alpha: 1, stroke: `rgba(160,225,255,${lerp(0.08,0.14,d)})` },
+        { base: horizon + 30, amp: 12, freq: 0.0105, phase: waveT * 0.00058 + 1.2, colorTop: wc(lerp(12,48,d), lerp(48,108,d), lerp(96,170,d), 0.68),  colorBottom: wc(lerp(6,22,d), lerp(25,68,d), lerp(58,118,d), 0.78), alpha: 1, stroke: `rgba(160,225,255,${lerp(0.10,0.16,d)})` },
+        { base: horizon + 52, amp: 16, freq: 0.0092, phase: -waveT * 0.0005 + 2.1, colorTop: wc(lerp(8,32,d),  lerp(38,92,d),  lerp(82,156,d), 0.82),  colorBottom: wc(lerp(4,14,d), lerp(18,56,d), lerp(46,102,d), 0.9),  alpha: 1, stroke: `rgba(170,230,255,${lerp(0.12,0.18,d)})` },
+        { base: horizon + 80, amp: 22, freq: 0.0078, phase: waveT * 0.00068 + 0.4, colorTop: wc(lerp(5,20,d),  lerp(28,76,d),  lerp(66,140,d), 0.92),  colorBottom: wc(lerp(2,8,d),  lerp(12,44,d), lerp(34,86,d), 0.97),  alpha: 1, stroke: `rgba(180,235,255,${lerp(0.14,0.20,d)})` },
+        { base: horizon + 118,amp: 30, freq: 0.0064, phase: -waveT * 0.00056 + 3.4,colorTop: wc(lerp(3,12,d),  lerp(20,60,d),  lerp(52,122,d), 0.98),  colorBottom: wc(lerp(1,4,d),  lerp(7,30,d),  lerp(22,68,d), 1),     alpha: 1, stroke: `rgba(185,238,255,${lerp(0.10,0.16,d)})` }
       ];
 
       drawReflection();
