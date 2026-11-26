@@ -115,6 +115,9 @@
     const updateBtn = document.getElementById('updateBtn');
     const feedbackBtn = document.getElementById('feedbackBtn');
     const crashBtn = document.getElementById('crashBtn');
+    const exportSaveBtn = document.getElementById('exportSaveBtn');
+    const importSaveBtn = document.getElementById('importSaveBtn');
+    const importSaveInput = document.getElementById('importSaveInput');
     const feedbackStatus = document.getElementById('feedbackStatus');
     const toastEl = document.getElementById('toast');
     let toastTimer = 0;
@@ -350,6 +353,208 @@
         if (['auto','clear','rain','storm'].includes(s.weatherMode)) weatherMode = s.weatherMode;
         if (typeof s.reducedMotion === 'boolean') reducedMotion = s.reducedMotion;
       } catch (_) {}
+    }
+
+    // ---------- SAVE EXPORT / IMPORT / CORRUPTION ----------
+    const SAVE_KEYS = [
+      'ocean_settings','ocean_discoveries','ocean_achievements','ocean_equipped',
+      'ocean_clicks','ocean_photos','ocean_bottles_found','ocean_bottom_trips',
+      'ocean_click_lock_until','ocean_void_quest','ocean_facility','ocean_perspective'
+    ];
+    const SAVE_FORMAT = 'ocsv';
+    const SAVE_VERSION = 1;
+    let corrupted = false;
+    let corruptRaf = 0;
+    const CORRUPT_SVGS = [
+      'assets/fish-shearfin.svg','assets/fish-ribbon-pike.svg','assets/fish-stoneback.svg',
+      'assets/fish-scarlet-veil.svg','assets/fish-basin-lantern.svg','assets/fish-ember-whip.svg',
+      'assets/fish-pale-sentinel.svg','assets/fish-the-watcher.svg'
+    ];
+    const corruptImages = [];
+    let corruptImagesReady = false;
+
+    function buildSavePayload() {
+      const data = {};
+      for (const k of SAVE_KEYS) {
+        const raw = localStorage.getItem(k);
+        if (raw === null) continue;
+        try { data[k] = JSON.parse(raw); }
+        catch (_) { data[k] = raw; }
+      }
+      return {
+        format: SAVE_FORMAT,
+        version: SAVE_VERSION,
+        game: 'ocean',
+        exportedAt: new Date().toISOString(),
+        data
+      };
+    }
+
+    function exportSave() {
+      try {
+        const payload = buildSavePayload();
+        const text = JSON.stringify(payload, null, 2);
+        const blob = new Blob([text], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        a.href = url;
+        a.download = `ocean-save-${stamp}.ocsv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        feedbackStatus.textContent = 'save: exported .ocsv';
+        sfxClick();
+      } catch (e) {
+        console.warn('export failed', e);
+        feedbackStatus.textContent = 'save: export failed';
+      }
+    }
+
+    function isValidOceanSave(obj) {
+      if (!obj || typeof obj !== 'object') return false;
+      if (obj.format !== SAVE_FORMAT) return false;
+      if (obj.game !== 'ocean') return false;
+      if (!obj.data || typeof obj.data !== 'object' || Array.isArray(obj.data)) return false;
+      // accept if it has at least the format markers; data keys validated softly
+      return true;
+    }
+
+    function applyImportedSave(obj) {
+      const data = obj.data || {};
+      // wipe known keys first, then apply imported ones (no save data lost on corruption path; this is a valid import)
+      for (const k of SAVE_KEYS) localStorage.removeItem(k);
+      for (const [k, v] of Object.entries(data)) {
+        if (!SAVE_KEYS.includes(k)) continue;
+        try {
+          localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v));
+        } catch (_) {}
+      }
+      feedbackStatus.textContent = 'save: imported .ocsv - reloading...';
+      setTimeout(() => location.reload(), 350);
+    }
+
+    function triggerCorruption() {
+      if (corrupted) return;
+      corrupted = true;
+      try { if (rafId) cancelAnimationFrame(rafId); } catch (_) {}
+      try { bgm.pause(); } catch (_) {}
+      try { if (audioCtx && audioCtx.state !== 'closed') { /* keep for no-op; we use audio element */ } } catch (_) {}
+
+      // hide all UI
+      document.querySelectorAll('.ui, .modal, .hint, .settings-wrap, .photo-exit, .toast, #toast').forEach(el => {
+        el.style.display = 'none';
+      });
+      document.body.style.background = '#000';
+      document.body.style.overflow = 'hidden';
+
+      const overlay = document.getElementById('corruptOverlay');
+      const c = document.getElementById('corruptCanvas');
+      const corruptAudio = document.getElementById('corruptAudio');
+      overlay.style.display = 'block';
+
+      // play fearfulharmony
+      try {
+        corruptAudio.currentTime = 0;
+        corruptAudio.volume = 0.85;
+        const p = corruptAudio.play();
+        if (p && p.catch) p.catch(() => {
+          // if autoplay blocked, start on first interaction
+          const resume = () => { corruptAudio.play().catch(() => {}); window.removeEventListener('pointerdown', resume); window.removeEventListener('keydown', resume); };
+          window.addEventListener('pointerdown', resume);
+          window.addEventListener('keydown', resume);
+        });
+      } catch (_) {}
+
+      const cx = c.getContext('2d');
+      function resizeCorrupt() {
+        const d = Math.min(window.devicePixelRatio || 1, 2);
+        c.width = Math.floor(window.innerWidth * d);
+        c.height = Math.floor(window.innerHeight * d);
+        cx.setTransform(d, 0, 0, d, 0, 0);
+      }
+      resizeCorrupt();
+      window.addEventListener('resize', resizeCorrupt);
+
+      // preload SVGs as images
+      if (!corruptImagesReady) {
+        let loaded = 0;
+        CORRUPT_SVGS.forEach((src, i) => {
+          const img = new Image();
+          img.decoding = 'async';
+          img.onload = img.onerror = () => { loaded++; if (loaded >= CORRUPT_SVGS.length) corruptImagesReady = true; };
+          img.src = src;
+          corruptImages[i] = img;
+        });
+      }
+
+      const rand = (a, b) => a + Math.random() * (b - a);
+      let lastSpawn = 0;
+      function corruptFrame(ts) {
+        const w = window.innerWidth, h = window.innerHeight;
+        // HoM smear: draw canvas onto itself with offsets/scaling
+        cx.save();
+        cx.globalAlpha = 0.92;
+        cx.translate(w / 2, h / 2);
+        const smearAngle = Math.sin(ts * 0.0003) * 0.003;
+        cx.rotate(smearAngle);
+        cx.scale(1.01 + Math.sin(ts * 0.0007) * 0.004, 1.008 + Math.cos(ts * 0.0006) * 0.004);
+        cx.translate(-w / 2 + Math.sin(ts * 0.0011) * 2.2, -h / 2 + Math.cos(ts * 0.0009) * 1.8);
+        cx.drawImage(c, 0, 0, c.width / Math.min(window.devicePixelRatio || 1, 2), c.height / Math.min(window.devicePixelRatio || 1, 2));
+        cx.restore();
+
+        // darken slightly to keep it from blowing out completely
+        cx.fillStyle = 'rgba(0,0,0,0.03)';
+        cx.fillRect(0, 0, w, h);
+
+        // place random SVGs every few frames
+        if (ts - lastSpawn > 55) {
+          lastSpawn = ts;
+          const count = 1 + Math.floor(Math.random() * 3);
+          for (let n = 0; n < count; n++) {
+            const img = corruptImages[Math.floor(Math.random() * corruptImages.length)];
+            if (!img || !img.complete || !img.naturalWidth) continue;
+            const size = rand(40, Math.min(w, h) * 0.35);
+            const aspect = img.naturalWidth / img.naturalHeight || 1;
+            const dw = size * aspect;
+            const dh = size;
+            cx.save();
+            cx.translate(rand(-dw * 0.3, w + dw * 0.3), rand(-dh * 0.3, h + dh * 0.3));
+            cx.rotate(rand(-Math.PI, Math.PI));
+            cx.globalAlpha = rand(0.35, 0.95);
+            // random tint via composite trick
+            cx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+            cx.restore();
+          }
+        }
+
+        corruptRaf = requestAnimationFrame(corruptFrame);
+      }
+      // seed black background
+      cx.fillStyle = '#000';
+      cx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+      corruptRaf = requestAnimationFrame(corruptFrame);
+    }
+
+    async function importSaveFile(file) {
+      try {
+        const text = await file.text();
+        let obj;
+        try {
+          obj = JSON.parse(text);
+        } catch (_) {
+          triggerCorruption();
+          return;
+        }
+        if (!isValidOceanSave(obj)) {
+          triggerCorruption();
+          return;
+        }
+        applyImportedSave(obj);
+      } catch (_) {
+        triggerCorruption();
+      }
     }
     function unlockAchievement(id) {
       if (achievements.includes(id)) return false;
@@ -2084,9 +2289,9 @@
       ctx.fillRect(0, 0, w, h);
 
       updateAudioMix();
-      if (!crashed) rafId = requestAnimationFrame(render);
+      if (!crashed && !corrupted) rafId = requestAnimationFrame(render);
     }
-    requestAnimationFrame(render);
+    if (!corrupted) requestAnimationFrame(render);
 
     function depthLabel(target) {
       if (target <= 0.01) return 'surface';
@@ -2304,6 +2509,12 @@
     updateClose.addEventListener('click', () => { updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); });
     updateModal.addEventListener('click', (e) => { if (e.target === updateModal) updateClose.click(); });
     crashBtn.addEventListener('click', (e) => { e.stopPropagation(); unlockAchievement('chaos'); startAudio(); setTimeout(() => { throw new Error('manual ocean crash initiated by user'); }, 30); });
+    exportSaveBtn.addEventListener('click', (e) => { e.stopPropagation(); exportSave(); });
+    importSaveBtn.addEventListener('click', (e) => { e.stopPropagation(); importSaveInput.value = ''; importSaveInput.click(); });
+    importSaveInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) importSaveFile(file);
+    });
     feedbackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFeedback(); });
     feedbackCancel.addEventListener('click', closeFeedback);
     feedbackSend.addEventListener('click', submitFeedback);
@@ -2311,6 +2522,7 @@
     feedbackModal.addEventListener('click', (e) => { if (e.target === feedbackModal) closeFeedback(); });
 
     canvas.addEventListener('click', (e) => {
+      if (corrupted) return;
       if (e.target.closest('.settings-wrap') || e.target.closest('.modal')) return;
       startAudio();
       const rect = canvas.getBoundingClientRect();
@@ -2524,6 +2736,7 @@
     });
 
     window.addEventListener('keydown', (e) => {
+      if (corrupted) return;
       const k = e.key.toLowerCase();
       if (e.key === 'Escape') { closeAdmin(); closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
       if (e.target.closest('textarea,input,select')) { adminIdx = 0; return; }

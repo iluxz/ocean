@@ -229,6 +229,11 @@
         <button class="btn locked" id="minigameBtn" type="button" disabled aria-disabled="true" title="deep dive is locked down for now">🔒 deep dive<span class="lock-badge">⛓️</span></button>
       </div>
       <div class="action-row">
+        <button class="btn" id="exportSaveBtn" type="button">export save</button>
+        <button class="btn" id="importSaveBtn" type="button">import save</button>
+      </div>
+      <input id="importSaveInput" type="file" accept=".ocsv,.json,.txt,.sav,*/*" style="display:none">
+      <div class="action-row">
         <button class="btn" id="crashBtn" type="button" style="border-color:rgba(255,120,120,0.35);color:#ffb0b0;">initiate crash</button>
       </div>
       <div class="feedback" id="feedbackStatus">feedback: ready</div>
@@ -307,6 +312,11 @@
   </div>
 
   <audio id="bgm" src="DeepBlue.wav" loop preload="auto"></audio>
+  <audio id="corruptAudio" src="assets/fearfulharmony.mp3" loop preload="auto"></audio>
+  <div id="corruptOverlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#000;overflow:hidden;cursor:default;">
+    <canvas id="corruptCanvas" style="position:absolute;inset:0;width:100%;height:100%;display:block;"></canvas>
+    <div id="corruptTitle" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;font-family:Consolas,monospace;font-size:clamp(28px,7vw,72px);letter-spacing:.22em;text-transform:uppercase;color:#fff;text-shadow:0 0 18px rgba(255,255,255,0.25);z-index:2;">OCEAN</div>
+  </div>
   <div id="toast" class="toast" aria-live="polite"></div>
 
   <script src="js/splash.js"></script>
