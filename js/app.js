@@ -936,58 +936,58 @@
       ctx.restore();
     }
 
-    // dense glowing crest lines to match reference: many thin, bright, flowing wave contours
+    // coherent glowing wave contours - calm swells, not spaghetti
     function drawCrestLines() {
       const horizon = h * 0.58;
       const d = dayFactor;
       const waveT = simTime * motionMul;
-      const count = 38;
-      const step = 6;
+      const count = 22;
+      const step = 10;
       ctx.save();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       for (let i = 0; i < count; i++) {
-        const p = i / (count - 1);
-        const base = horizon + 8 + Math.pow(p, 1.18) * (h - horizon - 10);
-        const amp = 6 + p * 36;
-        const freq = 0.0125 - p * 0.0054;
-        const dir = i % 2 ? 1 : -1;
-        const phase = waveT * 0.00052 * dir * (0.6 + p * 0.9) + i * 1.37;
-        const breathe = 0.65 + 0.35 * Math.sin(animTime * 0.00055 + i * 0.7);
-        const alpha = (0.52 - p * 0.34) * breathe;
-        if (alpha <= 0.02) continue;
-        const r = Math.round(lerp(170, 235, 1 - p * 0.35));
-        const g = Math.round(lerp(225, 250, 1 - p * 0.2));
-        const b = 255;
+        const p = i / (count - 1); // 0=horizon, 1=near
+        const base = horizon + 10 + Math.pow(p, 1.25) * (h - horizon - 14);
+        const amp = 4 + p * 18;
+        const freq = 0.0105 - p * 0.0042;
+        const phase = waveT * 0.00038 + p * 2.4;
+        const phase2 = -waveT * 0.00022 + p * 1.1;
+        const breathe = 0.78 + 0.22 * Math.sin(animTime * 0.00035 + i * 0.55);
+        const alpha = (0.28 - p * 0.16) * breathe * (1 - weatherIntensity * 0.25);
+        if (alpha <= 0.015) continue;
+        const r = 170;
+        const g = Math.round(lerp(215, 235, d));
+        const bcol = 255;
 
         ctx.beginPath();
         for (let x = -step; x <= w + step; x += step) {
-          const y = waveY(base, amp, freq, phase, x);
+          const y = base
+            + Math.sin(x * freq + phase) * amp
+            + Math.sin(x * freq * 0.55 + phase2) * amp * 0.45
+            + Math.sin(x * freq * 1.7 - phase * 0.6) * amp * 0.12;
           if (x === -step) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        // glow pass
-        ctx.strokeStyle = `rgba(${r},${g},${b},${(alpha * 0.22).toFixed(3)})`;
-        ctx.lineWidth = 4.2 - p * 1.2;
-        ctx.shadowColor = `rgba(150,220,255,${(alpha * 0.9).toFixed(3)})`;
-        ctx.shadowBlur = 10 - p * 4;
+        // fake glow: wide faint pass, no shadowBlur
+        ctx.strokeStyle = `rgba(${r},${g},${bcol},${(alpha * 0.18).toFixed(3)})`;
+        ctx.lineWidth = 3.2 - p * 1.0;
         ctx.stroke();
-        // core pass
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = `rgba(${Math.min(255,r+30)},${Math.min(255,g+20)},255,${(alpha * 0.95).toFixed(3)})`;
-        ctx.lineWidth = 1.2 - p * 0.35;
+        // bright core
+        ctx.strokeStyle = `rgba(210,242,255,${alpha.toFixed(3)})`;
+        ctx.lineWidth = 1.0 - p * 0.25;
         ctx.stroke();
       }
       ctx.restore();
     }
 
     // broken moonlight shimmer dancing on the water
-    const shimmerDashes = Array.from({ length: 120 }, () => ({
-      xf: (Math.random() - 0.5),       // centered on light source
+    const shimmerDashes = Array.from({ length: 55 }, () => ({
+      xf: (Math.random() - 0.5),
       yf: Math.random(),
-      sp: 0.3 + Math.random() * 1.4,
-      len: 8 + Math.random() * 42,
+      sp: 0.35 + Math.random() * 1.2,
+      len: 10 + Math.random() * 34,
       fl: Math.random() * Math.PI * 2,
-      thick: 0.8 + Math.random() * 1.6
+      thick: 0.9 + Math.random() * 1.3
     }));
 
     function drawMoonShimmer() {
@@ -1003,54 +1003,41 @@
       const bottom = h * 0.99;
       const rc = isDay ? '255,248,220' : '220,242,255';
 
-      // broad reflection column
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
       const col = ctx.createLinearGradient(0, top, 0, bottom);
-      col.addColorStop(0, `rgba(${rc},${0.28 * vis})`);
-      col.addColorStop(0.25, `rgba(${rc},${0.14 * vis})`);
+      col.addColorStop(0, `rgba(${rc},${0.24 * vis})`);
+      col.addColorStop(0.3, `rgba(${rc},${0.10 * vis})`);
       col.addColorStop(1, `rgba(${rc},0)`);
       ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.moveTo(b.x - 18, top);
-      ctx.lineTo(b.x + 18, top);
-      ctx.lineTo(b.x + 140, bottom);
-      ctx.lineTo(b.x - 140, bottom);
+      ctx.moveTo(b.x - 14, top);
+      ctx.lineTo(b.x + 14, top);
+      ctx.lineTo(b.x + 120, bottom);
+      ctx.lineTo(b.x - 120, bottom);
       ctx.closePath();
       ctx.fill();
-
-      // bright center line
-      const cl = ctx.createLinearGradient(0, top, 0, bottom);
-      cl.addColorStop(0, `rgba(255,255,255,${0.55 * vis})`);
-      cl.addColorStop(0.35, `rgba(${rc},${0.18 * vis})`);
-      cl.addColorStop(1, `rgba(${rc},0)`);
-      ctx.fillStyle = cl;
-      ctx.fillRect(b.x - 2, top, 4, bottom - top);
 
       ctx.lineCap = 'round';
       const speed = reducedMotion ? 0.15 : 1;
       for (const s of shimmerDashes) {
-        const prog = (s.yf + animTime * 0.000055 * s.sp * speed) % 1;
+        const prog = (s.yf + animTime * 0.000045 * s.sp * speed) % 1;
         const y = top + prog * (bottom - top);
-        const spread = 10 + prog * 130;
-        const wob = Math.sin(animTime * 0.0018 * s.sp + s.fl) * (2 + prog * 12);
-        const drift = Math.sin(animTime * 0.00025 + s.fl) * 8;
-        const x = b.x + s.xf * spread + wob + drift;
-        const flicker = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(animTime * 0.0035 * s.sp + s.fl * 4));
-        const fade = Math.pow(1 - prog, 0.8);
-        const a = flicker * fade * vis * (0.75 - weatherIntensity * 0.35);
-        if (a < 0.015) continue;
-        const len = s.len * (0.4 + prog * 1.6);
-        ctx.strokeStyle = `rgba(255,255,255,${(a * 0.95).toFixed(3)})`;
-        ctx.lineWidth = s.thick * (1 - prog * 0.3);
-        ctx.shadowColor = `rgba(${rc},${(a * 0.8).toFixed(3)})`;
-        ctx.shadowBlur = 6;
+        const spread = 8 + prog * 110;
+        const wob = Math.sin(animTime * 0.0015 * s.sp + s.fl) * (1.5 + prog * 9);
+        const x = b.x + s.xf * spread + wob;
+        const flicker = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(animTime * 0.003 * s.sp + s.fl * 3.5));
+        const fade = Math.pow(1 - prog, 0.85);
+        const a = flicker * fade * vis * (0.7 - weatherIntensity * 0.35);
+        if (a < 0.02) continue;
+        const len = s.len * (0.45 + prog * 1.4);
+        ctx.strokeStyle = `rgba(235,248,255,${(a * 0.9).toFixed(3)})`;
+        ctx.lineWidth = s.thick * (1 - prog * 0.25);
         ctx.beginPath();
         ctx.moveTo(x - len / 2, y);
         ctx.lineTo(x + len / 2, y);
         ctx.stroke();
       }
-      ctx.shadowBlur = 0;
       ctx.globalCompositeOperation = 'source-over';
       ctx.restore();
     }
