@@ -156,14 +156,15 @@
     let cameraY = 0;
     let cameraTarget = 0;
     let camAnim = null;
-    const MAX_DEPTH = 5;
+    const MAX_DEPTH = 5; // base max; quest unlocks 6
     const DEPTH_LAYERS = [
       { id:'surface', name:'surface', min:0, max:0.5 },
       { id:'underwater', name:'underwater', min:0.5, max:1.5 },
       { id:'abyss', name:'abyss', min:1.5, max:2.5 },
       { id:'trenches', name:'trenches', min:2.5, max:3.5 },
       { id:'hadal', name:'hadal', min:3.5, max:4.5 },
-      { id:'void', name:'the void', min:4.5, max:5.5 }
+      { id:'void', name:'the void', min:4.5, max:5.5 },
+      { id:'beyond', name:'beyond', min:5.5, max:6.5 }
     ];
     function depthLabel(y) {
       const d = DEPTH_LAYERS.find(l => y >= l.min && y < l.max) || DEPTH_LAYERS[DEPTH_LAYERS.length - 1];
@@ -184,6 +185,18 @@
     let equippedDiscovery = localStorage.getItem('ocean_equipped') || '';
     let clicks = Number(localStorage.getItem('ocean_clicks') || 0);
     let photoCount = Number(localStorage.getItem('ocean_photos') || 0);
+    let bottlesFound = Number(localStorage.getItem('ocean_bottles_found') || 0);
+    let bottomTrips = Number(localStorage.getItem('ocean_bottom_trips') || 0);
+    let reachedTopSinceBottom = true;
+    let clickLockUntil = Number(localStorage.getItem('ocean_click_lock_until') || 0);
+    let quest = null;
+    try { quest = JSON.parse(localStorage.getItem('ocean_void_quest') || 'null'); } catch (_) {}
+    if (!quest || typeof quest !== 'object') {
+      quest = { offered: false, accepted: false, completed: false, unlockedDeep: false, bottlesAtAccept: bottlesFound, fishAtAccept: discoveries.filter(id => ['clownfish','pufferfish','shark','betta','koi'].includes(id)).length, tripsAtAccept: bottomTrips };
+    }
+    let voidTalkTimer = 0;
+    let voidDialogue = null;
+    let voidEntity = { x: 0.5, y: 0.5, r: 70, pulse: 0 };
     bgm.volume = masterVolume;
 
     function svgThumb(title, emoji, c1, c2) {
@@ -247,7 +260,7 @@
       { id:'void', name:'The Void', desc:'No floor. No light. Just eyes in the dark and the feeling of being watched.', emoji:'👁️', c1:'#000000', c2:'#3a2a5a' },
       { id:'void_eye', name:'Void Watcher', desc:'Something in the void blinked back.', emoji:'🟣', c1:'#050010', c2:'#7a5ad0' },
       { id:'clownfish', name:'Clownfish', desc:'A bright little clownfish weaving through the reefy water.', emoji:'🐠', c1:'#7a2a12', c2:'#f28b36', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.clownfish) },
-      { id:'pufferfish', name:'Pufferfish', desc:'A spiky pufferfish. click it and it puffs up like a balloon.', emoji:'🐡', c1:'#6b4a12', c2:'#e9b94c', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.pufferfish) },
+      { id:'pufferfish', name:'Pufferfish', desc:'A spiky pufferfish. click it and it puffs up... but it stings. no clicking for 1 minute.', emoji:'🐡', c1:'#6b4a12', c2:'#e9b94c', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.pufferfish) },
       { id:'shark', name:'Great White Shark', desc:'A great white shark cruising the deeper water. respect the king.', emoji:'🦈', c1:'#1f3440', c2:'#718e9b', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.shark) },
       { id:'betta', name:'Betta Fish', desc:'A flowy betta fish showing off its dramatic fins.', emoji:'🐟', c1:'#204b8b', c2:'#d84e79', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.betta) },
       { id:'koi', name:'Koi Fish', desc:'A calm koi drifting through the upper deep.', emoji:'🎏', c1:'#5a4330', c2:'#e76d34', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.koi) }
@@ -280,6 +293,10 @@
         localStorage.setItem('ocean_equipped', equippedDiscovery || '');
         localStorage.setItem('ocean_clicks', String(clicks));
         localStorage.setItem('ocean_photos', String(photoCount));
+        localStorage.setItem('ocean_bottles_found', String(bottlesFound));
+        localStorage.setItem('ocean_bottom_trips', String(bottomTrips));
+        localStorage.setItem('ocean_click_lock_until', String(clickLockUntil));
+        localStorage.setItem('ocean_void_quest', JSON.stringify(quest));
       } catch (_) {}
     }
     function loadSettings() {
@@ -331,6 +348,7 @@
       { date: '2026-11-26', title: 'lux studios splash', detail: 'every load now opens with the lux studios intro: a wireframe cube rolls in, speeds up, explodes into lines, and reveals the wordmark before fading into the ocean.' },
       { date: '2026-11-25', title: 'deep dive minigame', detail: 'added a side arrow that opens a 10-move minigame. answer with the most underground picks to sink deeper and score higher.' },
       { date: '2026-11-25', title: 'the great fish expansion', detail: 'added clownfish, pufferfish, great white sharks, betta fish, and koi across the ocean depths. pufferfish puff up when you click them.' },
+      { date: '2026-11-25', title: 'the void speaks', detail: 'bottom is now ambient-only (music fades out). the purple void entity talks after 3 seconds, gives a quest (3 bottles, 3 clicked fish, 3 top-to-bottom trips), and unlocks a deeper layer when complete. pufferfish sting locks clicking for 1 minute. fish must be clicked to discover.' },
       { date: '2026-11-25', title: 'ocean: part 4 - deeper still', detail: 'added 3 more layers below the abyss: trenches, hadal, and the void. new biomes, particles, click discoveries, achievements, and depth tracking all the way down.' },
       { date: '2026-11-25', title: 'ocean: part 3 - the abyss', detail: 'you can go down again past underwater into a new abyss layer, with a darker biome, new creatures/vent, new abyss discoveries, new achievements, and depth-aware audio/visuals.' },
       { date: '2026-11-25', title: 'achievements + equipped discoveries', detail: 'split achievements into their own button, made discoveries into proper cards with lock states, and equipping now spawns the discovery in the world.' },
@@ -475,13 +493,18 @@
       const g = audioCtx.createGain(); g.gain.value = 0.18;
       src.connect(f); f.connect(g); g.connect(masterGain); src.start();
     }
+    function currentBottomDepth() { return quest && quest.unlockedDeep ? 6 : 5; }
+    function isAtBottom() { return cameraY >= currentBottomDepth() - 0.05; }
+
     function updateAudioMix() {
       bgm.muted = !soundEnabled;
-      const depthRaw = Number.isFinite(cameraY) ? Math.max(0, Math.min(MAX_DEPTH, cameraY)) : 0;
+      const bottomDepth = currentBottomDepth();
+      const depthRaw = Number.isFinite(cameraY) ? Math.max(0, Math.min(bottomDepth, cameraY)) : 0;
       const under = Math.min(1, depthRaw);
       const abyss = Math.max(0, depthRaw - 1);
       const volBase = Number.isFinite(masterVolume) ? Math.max(0, Math.min(1, masterVolume)) : 0.65;
-      const duck = bgmFilter ? 1 : lerp(1, 0.22, Math.pow(depthRaw / MAX_DEPTH, 1.1));
+      const bottomFade = Math.max(0, Math.min(1, (bottomDepth - 0.35 - depthRaw) / 0.65));
+      const duck = bgmFilter ? bottomFade : lerp(1, 0.22, Math.pow(depthRaw / Math.max(1, bottomDepth), 1.1)) * bottomFade;
       const vol = volBase * (Number.isFinite(duck) ? duck : 1);
       bgm.volume = Number.isFinite(vol) ? Math.max(0, Math.min(1, vol)) : volBase;
       if (!audioCtx) return;
@@ -491,21 +514,81 @@
       const d = dayFactor;
       rainGain.gain.setTargetAtTime(surface * Math.min(1, weatherIntensity) * 0.2, audioCtx.currentTime, 0.25);
       windGain.gain.setTargetAtTime(surface * Math.max(0, weatherIntensity - 0.8) * 0.16, audioCtx.currentTime, 0.3);
-      underwaterGain.gain.setTargetAtTime((under * 0.08) + (abyss * 0.04), audioCtx.currentTime, 0.2);
+      underwaterGain.gain.setTargetAtTime(((under * 0.08) + (abyss * 0.04)) * (0.45 + 0.55 * bottomFade), audioCtx.currentTime, 0.2);
       dayGain.gain.setTargetAtTime(surface * d * (0.012 + (1-Math.min(1,weatherIntensity))*0.01), audioCtx.currentTime, 0.4);
       nightGain.gain.setTargetAtTime(surface * (1-d) * 0.01, audioCtx.currentTime, 0.4);
       if (rainNoise) rainNoise.f.frequency.setTargetAtTime(900 + weatherIntensity * 700, audioCtx.currentTime, 0.2);
       if (windNoise) windNoise.f.frequency.setTargetAtTime(400 + weatherIntensity * 250, audioCtx.currentTime, 0.2);
       if (bgmFilter) {
-        const cutoff = lerp(14000, 420, Math.pow(depthRaw / MAX_DEPTH, 1.25));
-        bgmFilter.frequency.setTargetAtTime(cutoff, audioCtx.currentTime, 0.18);
+        const cutoff = lerp(14000, 320, Math.pow(depthRaw / Math.max(1, bottomDepth), 1.25));
+        bgmFilter.frequency.setTargetAtTime(Math.max(120, cutoff * (0.55 + 0.45 * bottomFade)), audioCtx.currentTime, 0.18);
         bgmFilter.Q.setTargetAtTime(0.7 + Math.min(1, depthRaw) * 0.8, audioCtx.currentTime, 0.18);
       }
     }
 
     function easeInOutCubic(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+    function fishDiscoveryCount() {
+      return discoveries.filter(id => ['clownfish','pufferfish','shark','betta','koi'].includes(id)).length;
+    }
+    function questProgress() {
+      return {
+        bottles: Math.max(0, bottlesFound - (quest.bottlesAtAccept || 0)),
+        fish: Math.max(0, fishDiscoveryCount() - (quest.fishAtAccept || 0)),
+        trips: Math.max(0, bottomTrips - (quest.tripsAtAccept || 0))
+      };
+    }
+    function questComplete() {
+      const p = questProgress();
+      return p.bottles >= 3 && p.fish >= 3 && p.trips >= 3;
+    }
+    function showVoidDialogue(text, ms = 6000) {
+      voidDialogue = { text, until: performance.now() + ms };
+    }
+    function updateVoidQuest() {
+      if (cameraY <= 0.15) reachedTopSinceBottom = true;
+      const atBottom = isAtBottom();
+      if (atBottom) {
+        if (reachedTopSinceBottom) {
+          bottomTrips += 1;
+          reachedTopSinceBottom = false;
+          saveGameState();
+        }
+        voidTalkTimer += dt;
+        if (voidTalkTimer >= 3 && !voidDialogue) {
+          if (!quest.offered) {
+            quest.offered = true;
+            saveGameState();
+            showVoidDialogue('...you made it. i have a quest: find 3 bottles, discover 3 new fish, go top to bottom 3 times. click me to accept.', 9000);
+          } else if (!quest.accepted) {
+            showVoidDialogue('the quest still stands. 3 bottles. 3 new fish. 3 top-to-bottom trips. click me.', 7000);
+          } else if (!quest.completed) {
+            const p = questProgress();
+            if (questComplete()) {
+              quest.completed = true;
+              quest.unlockedDeep = true;
+              saveGameState();
+              showVoidDialogue('it is done. the deep opens. go deeper.', 8000);
+            } else {
+              showVoidDialogue(`quest: bottles ${Math.min(3,p.bottles)}/3, fish ${Math.min(3,p.fish)}/3, trips ${Math.min(3,p.trips)}/3`, 4500);
+            }
+          } else {
+            showVoidDialogue('the deep is open. keep going.', 4500);
+          }
+        }
+        if (quest.accepted && !quest.completed && questComplete()) {
+          quest.completed = true;
+          quest.unlockedDeep = true;
+          saveGameState();
+          showVoidDialogue('it is done. the deep opens. go deeper.', 8000);
+        }
+      } else {
+        voidTalkTimer = 0;
+        voidDialogue = null;
+      }
+      if (voidDialogue && performance.now() > voidDialogue.until) voidDialogue = null;
+    }
     function setCamera(target) {
-      target = Math.max(0, Math.min(MAX_DEPTH, target));
+      target = Math.max(0, Math.min(currentBottomDepth(), target));
       camAnim = { from: cameraY, to: target, start: performance.now(), dur: 1600 };
       cameraTarget = target;
       syncSettingsUI();
@@ -1515,6 +1598,64 @@
       ctx.fillStyle = topFade; ctx.fillRect(0,0,w,120);
     }
 
+    function drawVoidEntityAndDialogue() {
+      const cx = w * voidEntity.x;
+      const cy = h * voidEntity.y;
+      voidEntity.screenX = cx;
+      voidEntity.screenY = cy;
+      voidEntity.pulse = 0.5 + 0.5 * Math.sin(animTime * 0.0015);
+      const pulse = voidEntity.pulse;
+      const baseR = Math.min(w,h) * 0.055;
+      voidEntity.r = baseR;
+      const glow = ctx.createRadialGradient(cx, cy, baseR*0.2, cx, cy, baseR*4.2);
+      glow.addColorStop(0, `rgba(170,120,255,${0.18 + pulse*0.08})`);
+      glow.addColorStop(0.35, `rgba(120,70,220,${0.08 + pulse*0.04})`);
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, baseR*4.2, 0, Math.PI*2); ctx.fill();
+      for (let i=0;i<3;i++) {
+        const rr = baseR * (1.5 + i*0.55 + pulse*0.08);
+        ctx.strokeStyle = `rgba(180,140,255,${0.22 - i*0.05})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI*2); ctx.stroke();
+      }
+      const core = ctx.createRadialGradient(cx-baseR*0.2, cy-baseR*0.2, baseR*0.2, cx, cy, baseR);
+      core.addColorStop(0, 'rgba(230,210,255,0.95)');
+      core.addColorStop(0.45, 'rgba(160,100,255,0.95)');
+      core.addColorStop(1, 'rgba(90,40,170,0.95)');
+      ctx.fillStyle = core;
+      ctx.beginPath(); ctx.arc(cx, cy, baseR, 0, Math.PI*2); ctx.fill();
+
+      if (voidDialogue && isAtBottom()) {
+        const text = voidDialogue.text;
+        ctx.save();
+        ctx.font = '14px Consolas, monospace';
+        const padX = 14, padY = 10;
+        const maxW = Math.min(w * 0.72, 560);
+        const words = text.split(' ');
+        const lines = [];
+        let line = '';
+        for (const word of words) {
+          const test = line ? line + ' ' + word : word;
+          if (ctx.measureText(test).width > maxW - padX*2 && line) { lines.push(line); line = word; }
+          else line = test;
+        }
+        if (line) lines.push(line);
+        const lh = 20;
+        const boxW = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width), 120) + padX*2);
+        const boxH = lines.length * lh + padY*2;
+        const bx = Math.max(12, Math.min(w - boxW - 12, cx - boxW/2));
+        const by = Math.max(12, cy - baseR*2.8 - boxH);
+        ctx.fillStyle = 'rgba(8,4,20,0.82)';
+        ctx.strokeStyle = 'rgba(170,130,255,0.45)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(bx, by, boxW, boxH, 10); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(236,224,255,0.95)';
+        ctx.textBaseline = 'top';
+        lines.forEach((l,i) => ctx.fillText(l, bx + padX, by + padY + i*lh));
+        ctx.restore();
+      }
+    }
+
     function drawVoid() {
       const g = ctx.createLinearGradient(0, 0, 0, h);
       g.addColorStop(0, '#000000');
@@ -1523,29 +1664,43 @@
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
 
-      // distant void glow
-      const glow = ctx.createRadialGradient(w*0.5, h*0.5, 10, w*0.5, h*0.5, w*0.6);
-      glow.addColorStop(0, 'rgba(120,90,255,0.06)');
-      glow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = glow; ctx.fillRect(0,0,w,h);
-
       for (const e of voidEyes) {
         const blink = Math.sin(animTime*0.0008 + e.blink);
         if (blink < -0.92) continue;
         const ex = e.x * w + Math.sin(animTime*0.00005 + e.ph)*20;
         const ey = e.y * h + Math.sin(animTime*0.00012 + e.ph)*8;
-        const a = 0.15 + 0.25 * (0.5 + 0.5 * Math.sin(animTime*0.001 + e.ph));
+        const a = 0.1 + 0.2 * (0.5 + 0.5 * Math.sin(animTime*0.001 + e.ph));
         ctx.fillStyle = `rgba(180,140,255,${a})`;
         ctx.beginPath(); ctx.ellipse(ex-4, ey, 2.2, 1.2, 0, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(ex+4, ey, 2.2, 1.2, 0, 0, Math.PI*2); ctx.fill();
       }
 
-      // bottom nothingness
-      const fade = ctx.createLinearGradient(0,h-120,0,h);
-      fade.addColorStop(0,'rgba(0,0,0,0)');
-      fade.addColorStop(1,'rgba(0,0,0,0.7)');
-      ctx.fillStyle = fade; ctx.fillRect(0,h-120,w,120);
+      drawVoidEntityAndDialogue();
 
+      const topFade = ctx.createLinearGradient(0,0,0,120);
+      topFade.addColorStop(0,'rgba(0,0,0,0.95)');
+      topFade.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle = topFade; ctx.fillRect(0,0,w,120);
+    }
+
+    function drawBeyond() {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#000000');
+      g.addColorStop(0.5, '#020008');
+      g.addColorStop(1, '#000000');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      const cg = ctx.createRadialGradient(w*0.5, h*0.55, 10, w*0.5, h*0.55, w*0.5);
+      cg.addColorStop(0, 'rgba(150,110,255,0.09)');
+      cg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = cg; ctx.fillRect(0,0,w,h);
+      for (let i=0;i<30;i++) {
+        const x = (i*97 % 1000) / 1000 * w;
+        const y = (i*53 % 1000) / 1000 * h;
+        const a = 0.05 + 0.15*(0.5+0.5*Math.sin(animTime*0.0006+i));
+        ctx.fillStyle = `rgba(200,180,255,${a})`;
+        ctx.fillRect(x, y, 2, 2);
+      }
+      drawVoidEntityAndDialogue();
       const topFade = ctx.createLinearGradient(0,0,0,120);
       topFade.addColorStop(0,'rgba(0,0,0,0.95)');
       topFade.addColorStop(1,'rgba(0,0,0,0)');
@@ -1594,6 +1749,7 @@
           if (cameraY > 4.95) recordDiscovery('void');
         }
       }
+      updateVoidQuest();
 
       ctx.clearRect(0, 0, w, h);
       const camPx = cameraY * h;
@@ -1658,10 +1814,18 @@
       ctx.save();
       ctx.translate(0, h * 5);
       drawVoid();
-      if (cameraY >= 4.5) drawEquippedUnderwater();
+      if (cameraY >= 4.5 && cameraY < 5.5) drawEquippedUnderwater();
       ctx.restore();
 
-      if (window.OceanFish) window.OceanFish.drawInWorld(ctx, { w, h, animTime, dt, reducedMotion, maxDepth: MAX_DEPTH });
+      if (quest.unlockedDeep) {
+        ctx.save();
+        ctx.translate(0, h * 6);
+        drawBeyond();
+        if (cameraY >= 5.5) drawEquippedUnderwater();
+        ctx.restore();
+      }
+
+      if (window.OceanFish) window.OceanFish.drawInWorld(ctx, { w, h, animTime, dt, reducedMotion, maxDepth: currentBottomDepth() + 1 });
 
       ctx.restore();
 
@@ -1683,16 +1847,18 @@
       if (target < 2.5) return 'abyss';
       if (target < 3.5) return 'trenches';
       if (target < 4.5) return 'hadal';
-      return 'the void';
+      if (target < 5.5) return 'the void';
+      return 'beyond';
     }
     function syncSettingsUI() {
       setSound.checked = soundEnabled;
       setCycle.checked = dayCycle;
       setDay.checked = forcedMode === 'day';
       setNight.checked = forcedMode === 'night';
-      goDownBtn.textContent = cameraTarget >= MAX_DEPTH - 0.01 ? 'bottom' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
+      const bottomDepth = currentBottomDepth();
+      goDownBtn.textContent = cameraTarget >= bottomDepth - 0.01 ? 'bottom' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
       goUpBtn.textContent = cameraTarget <= 0.01 ? 'surface' : 'go up';
-      goDownBtn.disabled = cameraTarget >= MAX_DEPTH - 0.01;
+      goDownBtn.disabled = cameraTarget >= bottomDepth - 0.01;
       goUpBtn.disabled = cameraTarget <= 0.01;
       goDownBtn.style.opacity = goDownBtn.disabled ? '0.45' : '1';
       goUpBtn.style.opacity = goUpBtn.disabled ? '0.45' : '1';
@@ -1801,9 +1967,10 @@
       setWeather.value = weatherMode;
       setMotion.checked = reducedMotion;
       setPhoto.checked = photoMode;
-      goDownBtn.textContent = cameraTarget >= MAX_DEPTH - 0.01 ? 'bottom' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
+      const bottomDepth = currentBottomDepth();
+      goDownBtn.textContent = cameraTarget >= bottomDepth - 0.01 ? 'bottom' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
       goUpBtn.textContent = cameraTarget <= 0.01 ? 'surface' : 'go up';
-      goDownBtn.disabled = cameraTarget >= MAX_DEPTH - 0.01;
+      goDownBtn.disabled = cameraTarget >= bottomDepth - 0.01;
       goUpBtn.disabled = cameraTarget <= 0.01;
       goDownBtn.style.opacity = goDownBtn.disabled ? '0.45' : '1';
       goUpBtn.style.opacity = goUpBtn.disabled ? '0.45' : '1';
@@ -1882,7 +2049,7 @@
     }
     setPhoto.addEventListener('change', () => { setPhotoMode(setPhoto.checked); sfxClick(); });
     photoExitBtn.addEventListener('click', (e) => { e.stopPropagation(); setPhotoMode(false); sfxClick(); });
-    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.min(MAX_DEPTH, cameraTarget + 1)); sfxDive(true); });
+    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.min(currentBottomDepth(), cameraTarget + 1)); sfxDive(true); });
     goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.max(0, cameraTarget - 1)); sfxDive(false); });
     photoBtn.addEventListener('click', (e) => { e.stopPropagation(); savePhoto(); });
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
@@ -1904,14 +2071,43 @@
     canvas.addEventListener('click', (e) => {
       if (e.target.closest('.settings-wrap') || e.target.closest('.modal')) return;
       startAudio();
-      clicks += 1;
-      checkAchievements();
-      saveGameState();
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       const worldY = y + cameraY * h;
       const horizon = h * 0.58;
+
+      if (isAtBottom()) {
+        const bottomLayer = Math.floor(currentBottomDepth());
+        const localY = worldY - h * bottomLayer;
+        const dx = x - (voidEntity.screenX || w*0.5);
+        const dy = localY - (voidEntity.screenY || h*0.5);
+        if (dx*dx + dy*dy < (voidEntity.r + 20) * (voidEntity.r + 20)) {
+          if (!quest.accepted) {
+            quest.accepted = true;
+            quest.bottlesAtAccept = bottlesFound;
+            quest.fishAtAccept = fishDiscoveryCount();
+            quest.tripsAtAccept = bottomTrips;
+            saveGameState();
+            showVoidDialogue('good. 3 bottles. 3 new fish, clicked by your own hand. 3 trips from top to bottom. then come back.', 7000);
+          } else if (!quest.completed) {
+            const p = questProgress();
+            if (questComplete()) { quest.completed = true; quest.unlockedDeep = true; saveGameState(); showVoidDialogue('it is done. the deep opens. go deeper.', 8000); }
+            else showVoidDialogue(`quest: bottles ${Math.min(3,p.bottles)}/3, fish ${Math.min(3,p.fish)}/3, trips ${Math.min(3,p.trips)}/3`, 4500);
+          } else {
+            showVoidDialogue('the deep is open. keep going.', 4000);
+          }
+          return;
+        }
+      }
+
+      if (Date.now() < clickLockUntil) {
+        feedbackStatus.textContent = 'pufferfish sting: clicking locked for a bit...';
+        return;
+      }
+      clicks += 1;
+      checkAchievements();
+      saveGameState();
       const hitFish = window.OceanFish ? window.OceanFish.hitTest(x, worldY) : null;
       if (cameraY < 0.5 && worldY > horizon && worldY < h) {
         ripples.push({ x, y: worldY, r: 5, age: 0, life: 900 });
@@ -1921,13 +2117,22 @@
           bottle.active = false;
           bottle.screenX = -999; bottle.screenY = -999;
           bottle.next = 90000 + Math.random() * 120000;
+          bottlesFound += 1;
           recordDiscovery('bottle');
+          saveGameState();
           sfxClick();
         }
       } else if (hitFish) {
+        if (Date.now() < clickLockUntil) {
+          feedbackStatus.textContent = 'pufferfish sting: clicking locked for a bit...';
+          return;
+        }
         recordDiscovery(hitFish.type.id);
         if (window.OceanFish.puff(hitFish)) {
           unlockAchievement('puff_puff');
+          clickLockUntil = Date.now() + 60 * 1000;
+          saveGameState();
+          feedbackStatus.textContent = 'pufferfish got you! no clicking for 1 minute.';
           for (let i=0;i<8;i++) clickBubbles.push({ x, y: worldY, r: 1.5+Math.random()*3, sp: 0.3+Math.random()*0.7, ph: Math.random()*10, age:0, life: 900+Math.random()*700 });
         } else {
           for (let i=0;i<4;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.2, sp: 0.25+Math.random()*0.5, ph: Math.random()*10, age:0, life: 700+Math.random()*500 });
