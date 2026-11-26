@@ -134,7 +134,7 @@
             </div>
             <div class="minigame-result" id="mgResult">the deeper you go, the rarer your answer needs to be.</div>
             <div class="minigame-history" id="mgHistory"></div>
-            <div class="modal-actions"><button class="btn" id="mgRestart" type="button">restart</button></div>
+            <div class="minigame-actions"><button class="btn" id="mgRestart" type="button">restart</button><button class="btn" id="mgQuit" type="button">quit</button></div>
           </div>
         </div>
       </div>`;
@@ -146,32 +146,33 @@
       .minigame-arrow:hover{background:rgba(10,36,68,0.72);border-color:rgba(126,200,255,0.4);}
       .minigame-arrow span{writing-mode:vertical-rl;transform:rotate(180deg);line-height:1;}
       @media (max-width:700px){.minigame-arrow span{display:none;}.minigame-arrow{padding:12px 8px;}}
-      .minigame-card{width:min(980px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:hidden;}
+      .minigame-card{width:min(980px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto;}
       .minigame-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;}
       .minigame-head h2{margin-bottom:4px;}
       .minigame-sub{font-size:12px;color:var(--muted);line-height:1.5;}
-      .minigame-layout{display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:stretch;}
-      .minigame-visual{position:relative;border-radius:14px;overflow:hidden;border:1px solid rgba(126,200,255,0.16);background:#02101f;min-height:520px;}
+      .minigame-layout{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:16px;align-items:stretch;}
+      .minigame-visual{position:relative;border-radius:14px;overflow:hidden;border:1px solid rgba(126,200,255,0.16);background:#02101f;min-height:420px;height:520px;}
       #mgCanvas{display:block;width:100%;height:100%;}
       .mg-depth-readout{position:absolute;left:12px;top:12px;font-size:22px;color:#dff4ff;text-shadow:0 2px 12px rgba(0,0,0,0.6);}
       .mg-depth-readout span{font-size:34px;color:#8fd7ff;}
-      .minigame-panel{min-width:0;display:flex;flex-direction:column;}
-      .minigame-status{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
-      .mg-stat{background:rgba(255,255,255,0.03);border:1px solid rgba(126,200,255,0.1);border-radius:10px;padding:10px;font-size:18px;color:#dff4ff;}
+      .minigame-panel{min-width:0;display:flex;flex-direction:column;gap:0;}
+      .minigame-status{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px;}
+      .mg-stat{background:rgba(255,255,255,0.03);border:1px solid rgba(126,200,255,0.1);border-radius:10px;padding:10px;font-size:18px;color:#dff4ff;min-width:0;}
       .mg-stat-label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:4px;}
       .minigame-question{font-size:24px;color:#ecf7ff;margin-bottom:4px;line-height:1.3;}
       .mg-hint{font-size:12px;color:var(--muted);margin-bottom:12px;min-height:18px;}
       .minigame-input-row{display:flex;gap:8px;margin-bottom:10px;}
-      .minigame-input-row input{flex:1;background:rgba(255,255,255,0.04);color:var(--text);border:1px solid rgba(126,200,255,0.18);border-radius:10px;padding:11px 12px;font:inherit;font-size:14px;}
+      .minigame-input-row input{flex:1;min-width:0;background:rgba(255,255,255,0.04);color:var(--text);border:1px solid rgba(126,200,255,0.18);border-radius:10px;padding:11px 12px;font:inherit;font-size:14px;}
       .minigame-input-row input:focus{outline:none;border-color:rgba(126,200,255,0.45);}
       .minigame-input-row input:disabled,.btn:disabled{opacity:.55;cursor:not-allowed;}
       .minigame-result{min-height:58px;font-size:13px;line-height:1.55;color:var(--muted);margin-bottom:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(126,200,255,0.08);}
       .minigame-result strong{color:#9fd3ff;}
-      .minigame-history{flex:1;min-height:160px;max-height:220px;overflow:auto;display:grid;gap:6px;padding-right:4px;align-content:start;}
+      .minigame-history{flex:1;min-height:120px;max-height:220px;overflow:auto;display:grid;gap:6px;padding-right:4px;align-content:start;margin-bottom:10px;}
       .minigame-history::-webkit-scrollbar{width:8px;}.minigame-history::-webkit-scrollbar-thumb{background:rgba(126,200,255,0.25);border-radius:999px;}
       .mg-item{font-size:12px;color:var(--muted);padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(126,200,255,0.08);display:flex;justify-content:space-between;gap:10px;}
       .mg-item b{color:var(--text);font-weight:500;}
-      @media (max-width:860px){.minigame-layout{grid-template-columns:1fr;}.minigame-visual{min-height:320px;height:320px;}}
+      .minigame-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:auto;flex-wrap:wrap;}
+      @media (max-width:860px){.minigame-layout{grid-template-columns:1fr;}.minigame-visual{min-height:280px;height:320px;}.minigame-question{font-size:20px;}}
     `;
     document.head.appendChild(style);
   }
@@ -191,6 +192,7 @@
     const scoreEl = document.getElementById('mgScore');
     const rankEl = document.getElementById('mgRank');
     const restart = document.getElementById('mgRestart');
+    const quit = document.getElementById('mgQuit');
     const canvas = document.getElementById('mgCanvas');
     const ctx = canvas.getContext('2d');
 
@@ -385,13 +387,16 @@
       input.focus();
     }
 
-    document.getElementById('minigameBtn').addEventListener('click', () => { modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); resizeCanvas(); renderState(); setTimeout(()=>input.focus(),50); });
-    close.addEventListener('click', () => { modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); });
-    modal.addEventListener('click', (e) => { if (e.target === modal) { modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); } });
+    function closeGame() { modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
+    function openGame() { modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); resizeCanvas(); renderState(); setTimeout(()=>input.focus(),50); }
+    document.getElementById('minigameBtn').addEventListener('click', openGame);
+    close.addEventListener('click', closeGame);
+    quit.addEventListener('click', closeGame);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeGame(); });
     submit.addEventListener('click', submitAnswer);
     restart.addEventListener('click', reset);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitAnswer(); } });
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) { modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); } });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) closeGame(); });
     window.addEventListener('resize', () => { if (modal.classList.contains('open')) resizeCanvas(); });
     renderState();
     requestAnimationFrame(drawVisual);
