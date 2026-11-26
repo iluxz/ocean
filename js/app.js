@@ -168,7 +168,7 @@
     let cameraY = 0;
     let cameraTarget = 0;
     let camAnim = null;
-    let perspective = Number(localStorage.getItem('ocean_perspective') || 0) === 1 ? 1 : 0; // 0=main, 1=alternate, not for deepest/facility
+    let perspective = Math.max(0, Math.min(2, Number(localStorage.getItem('ocean_perspective') || 0))); // 0=main,1=forward,2=forward deep (not for facility)
     const MAX_DEPTH = 5; // base max; quest unlocks 6
     const DEPTH_LAYERS = [
       { id:'surface', name:'surface', min:0, max:0.5 },
@@ -516,6 +516,7 @@
       src.connect(f); f.connect(g); g.connect(masterGain); src.start();
     }
     function isFacilityLayer() { return quest && quest.unlockedDeep && cameraY >= 5.5; }
+    const MAX_PERSPECTIVE = 2;
     function canUsePerspective() { return !isFacilityLayer(); }
     function currentBottomDepth() { return quest && quest.unlockedDeep ? 6 : 5; }
     function isAtBottom() { return cameraY >= currentBottomDepth() - 0.05; }
@@ -724,6 +725,27 @@
         ctx.beginPath(); ctx.moveTo(b.x-b.w*0.5,b.y); ctx.lineTo(b.x-b.w*0.2,b.y-b.h); ctx.lineTo(b.x+b.w*0.1,b.y-b.h*0.75); ctx.lineTo(b.x+b.w*0.5,b.y); ctx.closePath(); ctx.fill();
         ctx.fillStyle='rgba(170,210,235,0.8)'; ctx.fillRect(b.x-b.w*0.45,b.y, b.w*0.9, b.h*0.22);
       }
+    }
+
+    function drawSurfacePerspective2() {
+      ctx.save();
+      ctx.fillStyle='rgba(255,210,150,0.06)'; ctx.fillRect(0,0,w,h*0.6);
+      // distant warm coast silhouette
+      ctx.fillStyle='rgba(30,25,45,0.35)';
+      ctx.beginPath(); ctx.moveTo(0,h*0.56);
+      for(let x=0;x<=w;x+=40){ ctx.lineTo(x, h*0.54 - Math.sin(x*0.008)*18 - (x>w*0.6?20:0)); }
+      ctx.lineTo(w,h*0.62); ctx.lineTo(0,h*0.62); ctx.closePath(); ctx.fill();
+      // lighthouse
+      const lx=w*0.78, ly=h*0.54;
+      ctx.fillStyle='rgba(230,235,245,0.75)'; ctx.fillRect(lx-8,ly-80,16,80);
+      ctx.fillStyle='rgba(255,90,90,0.7)'; ctx.fillRect(lx-8,ly-60,16,10); ctx.fillRect(lx-8,ly-30,16,10);
+      const beam = ctx.createRadialGradient(lx,ly-84,0,lx,ly-84,220);
+      beam.addColorStop(0,`rgba(255,245,200,${0.18+0.08*Math.sin(animTime*0.002)})`);
+      beam.addColorStop(1,'rgba(255,245,200,0)');
+      ctx.fillStyle=beam; ctx.beginPath(); ctx.moveTo(lx,ly-84); ctx.lineTo(lx-220,ly-130); ctx.lineTo(lx-220,ly-40); ctx.closePath(); ctx.fill();
+      // buoys
+      for(const bx of [w*0.25,w*0.42,w*0.58]){ const by=h*0.64+Math.sin(animTime*0.001+bx)*3; ctx.fillStyle='rgba(220,90,70,0.85)'; ctx.beginPath(); ctx.moveTo(bx,by-16); ctx.lineTo(bx+8,by); ctx.lineTo(bx-8,by); ctx.closePath(); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.moveTo(bx,by-16); ctx.lineTo(bx,by-24); ctx.stroke(); }
+      ctx.restore();
     }
     function drawSky() {
       dayFactor = getDayFactor();
@@ -1880,6 +1902,7 @@
       drawSurfaceLife();
       drawEquippedSurface();
       if (perspective === 1) drawIcebergs();
+      if (perspective === 2) drawSurfacePerspective2();
       drawRipplesAndBubbles();
       drawWeather();
 
@@ -1892,6 +1915,13 @@
         ctx.fillStyle='rgba(80,180,140,0.07)'; ctx.fillRect(0,0,w,h);
         for (let i=0;i<14;i++){ const kx=i*w/13; const sway=Math.sin(animTime*0.0008+i)*18; ctx.strokeStyle='rgba(60,170,110,0.35)'; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(kx,h); ctx.quadraticCurveTo(kx+sway,h*0.65,kx-sway*0.6,h*0.28); ctx.stroke(); }
         ctx.restore();
+      } else if (perspective === 2) {
+        ctx.save();
+        ctx.fillStyle='rgba(30,60,120,0.10)'; ctx.fillRect(0,0,w,h);
+        ctx.strokeStyle='rgba(120,180,255,0.12)'; ctx.lineWidth=1;
+        for(let i=0;i<8;i++){ const rx=w*(0.1+i*0.12), ry=h*(0.35+Math.sin(i)*0.15); ctx.beginPath(); ctx.ellipse(rx,ry,90,45,0,0,Math.PI*2); ctx.stroke(); }
+        for(let i=0;i<18;i++){ const sx=(i*97%100)/100*w, sy=h*(0.55+(i%5)*0.07); ctx.fillStyle='rgba(180,220,255,0.08)'; ctx.beginPath(); ctx.arc(sx,sy,2+(i%3),0,Math.PI*2); ctx.fill(); }
+        ctx.restore();
       }
       ctx.restore();
 
@@ -1903,6 +1933,11 @@
         ctx.save();
         ctx.fillStyle='rgba(255,80,30,0.04)'; ctx.fillRect(0,0,w,h);
         for (let i=0;i<6;i++){ const vx=w*(0.1+i*0.16), vy=h*0.78; const g=ctx.createRadialGradient(vx,vy-h*0.1,0,vx,vy-h*0.1,80); g.addColorStop(0,`rgba(255,120,50,${0.12+0.05*Math.sin(animTime*0.003+i)})`); g.addColorStop(1,'rgba(255,120,50,0)'); ctx.fillStyle=g; ctx.fillRect(vx-80,vy-160,160,160); ctx.strokeStyle='rgba(120,220,255,0.1)'; ctx.beginPath(); ctx.arc(vx,vy-h*0.2,60+i*8,0,Math.PI*2); ctx.stroke(); }
+        ctx.restore();
+      } else if (perspective === 2) {
+        ctx.save();
+        ctx.fillStyle='rgba(120,40,255,0.05)'; ctx.fillRect(0,0,w,h);
+        for(let i=0;i<10;i++){ const x=w*(i/9), y=h*(0.25+(i%4)*0.15); const r=18+ (i%3)*10; const g=ctx.createRadialGradient(x,y,0,x,y,r*3); g.addColorStop(0,'rgba(170,120,255,0.15)'); g.addColorStop(1,'rgba(170,120,255,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r*3,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(210,170,255,0.35)'; ctx.beginPath(); ctx.arc(x,y,r*0.25,0,Math.PI*2); ctx.fill(); }
         ctx.restore();
       }
       ctx.restore();
@@ -1919,6 +1954,13 @@
         ctx.beginPath(); ctx.moveTo(w,0); ctx.lineTo(w*0.82,0); ctx.lineTo(w*0.72,h*0.5); ctx.lineTo(w*0.84,h); ctx.lineTo(w,h); ctx.closePath(); ctx.fill();
         ctx.strokeStyle='rgba(160,140,255,0.12)'; for(let i=0;i<10;i++){ ctx.beginPath(); ctx.moveTo(w*0.28,h*i/10); ctx.lineTo(w*0.72,h*i/10); ctx.stroke(); }
         ctx.restore();
+      } else if (perspective === 2) {
+        ctx.save();
+        ctx.fillStyle='rgba(15,10,40,0.18)'; ctx.fillRect(0,0,w,h);
+        ctx.strokeStyle='rgba(100,220,255,0.08)'; ctx.lineWidth=2;
+        for(let i=0;i<12;i++){ const x=w*(i/11); ctx.beginPath(); ctx.moveTo(x,h); ctx.lineTo(x+Math.sin(i+animTime*0.0005)*40,h*0.2); ctx.stroke(); }
+        ctx.fillStyle='rgba(180,220,255,0.05)'; for(let i=0;i<40;i++){ ctx.fillRect((i*53%w), (i*97%h), 2, 2); }
+        ctx.restore();
       }
       ctx.restore();
 
@@ -1932,6 +1974,11 @@
         ctx.strokeStyle='rgba(255,100,150,0.18)'; ctx.lineWidth=2;
         for(let i=0;i<5;i++){ const fx=w*(0.15+i*0.18); ctx.beginPath(); ctx.moveTo(fx,h*0.9); ctx.lineTo(fx+20,h*0.65); ctx.lineTo(fx-10,h*0.45); ctx.stroke(); }
         const rg=ctx.createRadialGradient(w*0.5,h*0.75,10,w*0.5,h*0.75,w*0.4); rg.addColorStop(0,'rgba(255,60,120,0.08)'); rg.addColorStop(1,'rgba(255,60,120,0)'); ctx.fillStyle=rg; ctx.fillRect(0,0,w,h);
+        ctx.restore();
+      } else if (perspective === 2) {
+        ctx.save();
+        ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.fillRect(0,0,w,h);
+        for(let i=0;i<6;i++){ const cx=w*(0.15+i*0.14), cy=h*(0.6+Math.sin(i)*0.08); ctx.strokeStyle='rgba(255,120,160,0.12)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx,cy,40,0,Math.PI*2); ctx.stroke(); ctx.fillStyle='rgba(255,80,130,0.05)'; ctx.beginPath(); ctx.arc(cx,cy,40,0,Math.PI*2); ctx.fill(); }
         ctx.restore();
       }
       ctx.restore();
@@ -1948,6 +1995,14 @@
         for(let x=0;x<w;x+=80){ ctx.beginPath(); ctx.moveTo(x,h*0.2); ctx.lineTo(x,h); ctx.stroke(); }
         ctx.fillStyle='rgba(120,200,255,0.08)'; ctx.fillRect(w*0.1,h*0.35,w*0.8,h*0.35);
         ctx.strokeStyle='rgba(140,210,255,0.25)'; ctx.strokeRect(w*0.1,h*0.35,w*0.8,h*0.35);
+        ctx.restore();
+      } else if (perspective === 2) {
+        ctx.save();
+        ctx.fillStyle='rgba(30,20,60,0.12)'; ctx.fillRect(0,0,w,h);
+        const vg = ctx.createRadialGradient(w*0.5,h*0.5,20,w*0.5,h*0.5,w*0.7);
+        vg.addColorStop(0,'rgba(120,80,255,0.08)'); vg.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle=vg; ctx.fillRect(0,0,w,h);
+        ctx.strokeStyle='rgba(170,140,255,0.1)'; for(let i=0;i<5;i++){ ctx.beginPath(); ctx.arc(w*0.5,h*0.55,60+i*45,0,Math.PI*2); ctx.stroke(); }
         ctx.restore();
       }
       ctx.restore();
@@ -2002,8 +2057,8 @@
       goDownBtn.style.opacity = goDownBtn.disabled ? '0.45' : '1';
       goUpBtn.style.opacity = goUpBtn.disabled ? '0.45' : '1';
       const facilityNow = isFacilityLayer();
-      goForwardBtn.disabled = facilityNow;
-      goBackBtn.disabled = facilityNow || perspective === 0;
+      goForwardBtn.disabled = facilityNow || perspective >= MAX_PERSPECTIVE;
+      goBackBtn.disabled = facilityNow || perspective <= 0;
       goForwardBtn.style.opacity = goForwardBtn.disabled ? '0.45' : '1';
       goBackBtn.style.opacity = goBackBtn.disabled ? '0.45' : '1';
       goForwardBtn.textContent = 'go forwards';
@@ -2178,8 +2233,8 @@
     photoExitBtn.addEventListener('click', (e) => { e.stopPropagation(); setPhotoMode(false); sfxClick(); });
     goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.min(currentBottomDepth(), cameraTarget + 1)); sfxDive(true); });
     goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.max(0, cameraTarget - 1)); sfxDive(false); });
-    goForwardBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!canUsePerspective()) return; perspective = 1; viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
-    goBackBtn.addEventListener('click', (e) => { e.stopPropagation(); perspective = 0; viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
+    goForwardBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!canUsePerspective() || perspective >= MAX_PERSPECTIVE) return; perspective = Math.min(MAX_PERSPECTIVE, perspective + 1); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
+    goBackBtn.addEventListener('click', (e) => { e.stopPropagation(); if (perspective <= 0) return; perspective = Math.max(0, perspective - 1); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
     photoBtn.addEventListener('click', (e) => { e.stopPropagation(); savePhoto(); });
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
     logClose.addEventListener('click', () => { logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); });
