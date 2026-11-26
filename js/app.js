@@ -90,7 +90,13 @@
     window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason));
 
     const canvas = document.getElementById('ocean');
-    const ctx = canvas.getContext('2d');
+    let ctx = null;
+    try { ctx = canvas.getContext('2d', { colorSpace: 'display-p3', pixelFormat: 'float16' }); } catch (_) {}
+    if (!ctx) try { ctx = canvas.getContext('2d', { pixelFormat: 'float16' }); } catch (_) {}
+    if (!ctx) try { ctx = canvas.getContext('2d', { colorSpace: 'display-p3' }); } catch (_) {}
+    if (!ctx) ctx = canvas.getContext('2d');
+    window.__oceanCtxInfo = { pixelFormat: ctx.getContextAttributes?.().pixelFormat || 'unorm8', colorSpace: ctx.getContextAttributes?.().colorSpace || 'srgb' };
+    console.log('[ocean] canvas', window.__oceanCtxInfo);
     const bgm = document.getElementById('bgm');
     const hint = document.getElementById('hint');
     const settingsBtn = document.getElementById('settingsBtn');
