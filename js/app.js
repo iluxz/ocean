@@ -659,22 +659,11 @@
     function lerp(a,b,p){ return a + (b-a)*p; }
     function mixArr(c1,c2,p){ return [Math.round(lerp(c1[0],c2[0],p)), Math.round(lerp(c1[1],c2[1],p)), Math.round(lerp(c1[2],c2[2],p))]; }
     function mix(c1,c2,p){ const c=mixArr(c1,c2,p); return `rgb(${c[0]},${c[1]},${c[2]})`; }
-    function fillBandGradient(y0, y1, stops, noiseAmt = 3.5) {
-      const hgt = Math.max(1, y1 - y0);
-      for (let y = 0; y < hgt; y += 2) {
-        const p = y / hgt;
-        let a = stops[0], b = stops[stops.length - 1];
-        for (let i = 0; i < stops.length - 1; i++) {
-          if (p >= stops[i][0] && p <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; }
-        }
-        const t = (p - a[0]) / ((b[0] - a[0]) || 1);
-        const n = (Math.random() - 0.5) * noiseAmt;
-        const r = Math.max(0, Math.min(255, Math.round(a[1] + (b[1] - a[1]) * t + n)));
-        const g = Math.max(0, Math.min(255, Math.round(a[2] + (b[2] - a[2]) * t + n)));
-        const bl = Math.max(0, Math.min(255, Math.round(a[3] + (b[3] - a[3]) * t + n)));
-        ctx.fillStyle = `rgb(${r},${g},${bl})`;
-        ctx.fillRect(0, y0 + y, w, 2);
-      }
+    function fillBandGradient(y0, y1, stops) {
+      const g = ctx.createLinearGradient(0, y0, 0, y1);
+      for (const s of stops) g.addColorStop(s[0], `rgb(${s[1]},${s[2]},${s[3]})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, y0, w, y1 - y0);
     }
     function getCyclePhase() {
       if (forcedMode === 'day') return 0.25;
