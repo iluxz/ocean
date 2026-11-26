@@ -77,7 +77,7 @@
     return img;
   }
 
-  // World depth units: 0-1 surface, 1-2 underwater, 2-3 abyss
+  // World depth units: 0-1 surface, 1-2 underwater, 2-3 abyss, 3-4 trenches, 4-5 hadal, 5-6 void
   const TYPES = [
     { id:'clownfish', name:'Clownfish', img: svgToImg(SVGs.clownfish), w:400, h:260, zone:[1.10,1.70], scale:0.18, speed:0.000014, count:4 },
     { id:'pufferfish', name:'Pufferfish', img: svgToImg(SVGs.pufferfish), w:400, h:300, zone:[1.20,1.85], scale:0.16, speed:0.000009, count:3, puffer:true },
@@ -133,7 +133,7 @@
       if (f.x < -0.25) { f.x = 1.25; f.y = randY(t); f.dir = -1; }
       if (f.puff > 0) f.puff = Math.max(0, f.puff - dt * 0.4);
 
-      // world Y: 0..h surface, h..2h underwater, 2h..3h abyss
+      // world Y: 0..h surface, 1..2 underwater, ... 5..6 void
       const worldY = f.y * h + Math.sin(animTime * 0.0005 + f.ph) * f.bob;
       const fx = f.x * w;
       const baseS = t.scale * Math.min(w, h) * 0.0018;

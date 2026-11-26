@@ -156,7 +156,19 @@
     let cameraY = 0;
     let cameraTarget = 0;
     let camAnim = null;
-    const MAX_DEPTH = 2;
+    const MAX_DEPTH = 5;
+    const DEPTH_LAYERS = [
+      { id:'surface', name:'surface', min:0, max:0.5 },
+      { id:'underwater', name:'underwater', min:0.5, max:1.5 },
+      { id:'abyss', name:'abyss', min:1.5, max:2.5 },
+      { id:'trenches', name:'trenches', min:2.5, max:3.5 },
+      { id:'hadal', name:'hadal', min:3.5, max:4.5 },
+      { id:'void', name:'the void', min:4.5, max:5.5 }
+    ];
+    function depthLabel(y) {
+      const d = DEPTH_LAYERS.find(l => y >= l.min && y < l.max) || DEPTH_LAYERS[DEPTH_LAYERS.length - 1];
+      return d.name;
+    }
     let lightning = 0;
     let nextLightning = 4000 + Math.random() * 8000;
     const ripples = [];
@@ -164,6 +176,9 @@
     const abyssParticles = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random()*1.8+0.3, ph: Math.random()*10, sp: 0.00001+Math.random()*0.00002 }));
     const ventBubbles = Array.from({ length: 18 }, () => ({ x: 0.5 + (Math.random()-0.5)*0.08, y: Math.random(), r: Math.random()*3+1.2, sp: 0.00003+Math.random()*0.00005 }));
     const angler = { x: 0.15, y: 0.45, dir: 1, sp: 0.000012, ph: Math.random()*10 };
+    const trenchParticles = Array.from({ length: 55 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random()*1.4+0.2, ph: Math.random()*10, sp: 0.000008+Math.random()*0.000015, c: Math.random()<0.5?'120,220,255':'180,140,255' }));
+    const hadalSpores = Array.from({ length: 80 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random()*2.2+0.4, ph: Math.random()*10, sp: 0.000006+Math.random()*0.000012 }));
+    const voidEyes = Array.from({ length: 14 }, () => ({ x: Math.random(), y: 0.15 + Math.random()*0.7, ph: Math.random()*10, blink: Math.random()*6 }));
     const discoveries = JSON.parse(localStorage.getItem('ocean_discoveries') || '[]');
     const achievements = JSON.parse(localStorage.getItem('ocean_achievements') || '[]');
     let equippedDiscovery = localStorage.getItem('ocean_equipped') || '';
@@ -225,6 +240,12 @@
       { id:'abyss', name:'The Abyss', desc:'You went deeper than deep. The water turned black-blue and the ocean started whispering in bioluminescence.', emoji:'🕳️', c1:'#020614', c2:'#1a0f3d' },
       { id:'angler', name:'Anglerfish Encounter', desc:'A glowing anglerfish drifted out of the dark, curious, creepy, and kinda beautiful.', emoji:'🐡', c1:'#05081a', c2:'#1f5f5a', img: ANGLER_IMG_URL },
       { id:'vent', name:'Hydrothermal Vent', desc:'A vent on the abyss floor breathed heat and strange light into the crushing dark.', emoji:'♨️', c1:'#120a08', c2:'#7a2d12' },
+      { id:'trenches', name:'The Trenches', desc:'The walls closed in and the water turned violet-black. You found the trenches.', emoji:'🪨', c1:'#020316', c2:'#3a2d7a' },
+      { id:'crack', name:'Biolume Crack', desc:'A glowing crack in the trench wall pulsed like the ocean had veins.', emoji:'✨', c1:'#04061a', c2:'#5a7fe0' },
+      { id:'hadal', name:'Hadal Zone', desc:'Below the trenches, pressure and silence became a place. The hadal zone.', emoji:'🩸', c1:'#050008', c2:'#5a1830' },
+      { id:'ribcage', name:'Ancient Ribs', desc:'Huge bone-like ribs curved out of the hadal floor. Best not to ask what they belonged to.', emoji:'🦴', c1:'#120812', c2:'#6a4a66' },
+      { id:'void', name:'The Void', desc:'No floor. No light. Just eyes in the dark and the feeling of being watched.', emoji:'👁️', c1:'#000000', c2:'#3a2a5a' },
+      { id:'void_eye', name:'Void Watcher', desc:'Something in the void blinked back.', emoji:'🟣', c1:'#050010', c2:'#7a5ad0' },
       { id:'clownfish', name:'Clownfish', desc:'A bright little clownfish weaving through the reefy water.', emoji:'🐠', c1:'#7a2a12', c2:'#f28b36', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.clownfish) },
       { id:'pufferfish', name:'Pufferfish', desc:'A spiky pufferfish. click it and it puffs up like a balloon.', emoji:'🐡', c1:'#6b4a12', c2:'#e9b94c', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.pufferfish) },
       { id:'shark', name:'Great White Shark', desc:'A great white shark cruising the deeper water. respect the king.', emoji:'🦈', c1:'#1f3440', c2:'#718e9b', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.shark) },
@@ -240,6 +261,10 @@
       { id:'chaos', name:'Crash Test Dummy', desc:'Initiate a crash.', check: () => achievements.includes('chaos') },
       { id:'abyss_diver', name:'Abyss Diver', desc:'Reach the abyss in Ocean: Part 3.', check: () => discoveries.includes('abyss') },
       { id:'abyss_secrets', name:'Abyss Secrets', desc:'Find every abyss discovery.', check: () => ['abyss','angler','vent'].every(id => discoveries.includes(id)) },
+      { id:'trench_diver', name:'Trench Diver', desc:'Reach the trenches.', check: () => discoveries.includes('trenches') },
+      { id:'hadal_diver', name:'Hadal Diver', desc:'Reach the hadal zone.', check: () => discoveries.includes('hadal') },
+      { id:'void_diver', name:'Void Diver', desc:'Reach the void. why would you do that.', check: () => discoveries.includes('void') },
+      { id:'deepest_secrets', name:'Deepest Secrets', desc:'Find every deep-layer discovery.', check: () => ['trenches','crack','hadal','ribcage','void','void_eye'].every(id => discoveries.includes(id)) },
       { id:'fish_friend', name:'Fish Friend', desc:'Discover your first fish species.', check: () => ['clownfish','pufferfish','shark','betta','koi'].some(id => discoveries.includes(id)) },
       { id:'ichthyologist', name:'Ichthyologist', desc:'Discover all fish species from the great fish expansion.', check: () => ['clownfish','pufferfish','shark','betta','koi'].every(id => discoveries.includes(id)) },
       { id:'puff_puff', name:'Puff Puff', desc:'Click a pufferfish and make it puff up.', check: () => achievements.includes('puff_puff') }
@@ -306,6 +331,7 @@
       { date: '2026-11-26', title: 'lux studios splash', detail: 'every load now opens with the lux studios intro: a wireframe cube rolls in, speeds up, explodes into lines, and reveals the wordmark before fading into the ocean.' },
       { date: '2026-11-25', title: 'deep dive minigame', detail: 'added a side arrow that opens a 10-move minigame. answer with the most underground picks to sink deeper and score higher.' },
       { date: '2026-11-25', title: 'the great fish expansion', detail: 'added clownfish, pufferfish, great white sharks, betta fish, and koi across the ocean depths. pufferfish puff up when you click them.' },
+      { date: '2026-11-25', title: 'ocean: part 4 - deeper still', detail: 'added 3 more layers below the abyss: trenches, hadal, and the void. new biomes, particles, click discoveries, achievements, and depth tracking all the way down.' },
       { date: '2026-11-25', title: 'ocean: part 3 - the abyss', detail: 'you can go down again past underwater into a new abyss layer, with a darker biome, new creatures/vent, new abyss discoveries, new achievements, and depth-aware audio/visuals.' },
       { date: '2026-11-25', title: 'achievements + equipped discoveries', detail: 'split achievements into their own button, made discoveries into proper cards with lock states, and equipping now spawns the discovery in the world.' },
       { date: '2026-11-25', title: 'photo mode + crash fixes', detail: 'added photo mode exit button, fixed rain clipping at the waterline, avoided file:// bgm CORS silence, and guarded audio volume from non-finite values.' },
@@ -804,6 +830,48 @@
         const g = ctx.createRadialGradient(w*0.5, h*0.5, 10, w*0.5, h*0.5, 140);
         g.addColorStop(0, 'rgba(100,80,255,0.12)'); g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+        ctx.restore();
+      } else if (equippedDiscovery === 'trenches') {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(120,150,255,0.18)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(w*0.35,h*0.1); ctx.lineTo(w*0.42,h*0.45); ctx.lineTo(w*0.38,h*0.9); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(w*0.65,h*0.1); ctx.lineTo(w*0.58,h*0.45); ctx.lineTo(w*0.62,h*0.9); ctx.stroke();
+        ctx.restore();
+      } else if (equippedDiscovery === 'crack') {
+        ctx.save();
+        const cx = w*0.5, cy = h*0.5 + Math.sin(animTime*0.001)*6;
+        const g = ctx.createRadialGradient(cx,cy,0,cx,cy,60);
+        g.addColorStop(0,`rgba(140,190,255,${0.22+0.1*Math.sin(animTime*0.003)})`); g.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx,cy,60,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle = 'rgba(170,210,255,0.65)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx-5,cy-35); ctx.lineTo(cx+3,cy); ctx.lineTo(cx-2,cy+35); ctx.stroke();
+        ctx.restore();
+      } else if (equippedDiscovery === 'hadal') {
+        ctx.save();
+        const g = ctx.createRadialGradient(w*0.5,h*0.65,10,w*0.5,h*0.65,140);
+        g.addColorStop(0,'rgba(140,40,80,0.12)'); g.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+        ctx.restore();
+      } else if (equippedDiscovery === 'ribcage') {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(120,100,120,0.35)'; ctx.lineWidth = 6;
+        for (let i=0;i<4;i++) { const x = w*(0.3+i*0.13); ctx.beginPath(); ctx.moveTo(x,h*0.85); ctx.quadraticCurveTo(x+25, h*0.6, x+8, h*0.45+Math.sin(animTime*0.001+i)*4); ctx.stroke(); }
+        ctx.restore();
+      } else if (equippedDiscovery === 'void') {
+        ctx.save();
+        const g = ctx.createRadialGradient(w*0.5,h*0.5,10,w*0.5,h*0.5,150);
+        g.addColorStop(0,'rgba(120,90,255,0.09)'); g.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+        ctx.restore();
+      } else if (equippedDiscovery === 'void_eye') {
+        ctx.save();
+        const ex = w*0.5, ey = h*0.45 + Math.sin(animTime*0.0012)*5;
+        const blink = Math.sin(animTime*0.001 + 1.3);
+        if (blink > -0.92) {
+          ctx.fillStyle = 'rgba(180,140,255,0.65)';
+          ctx.beginPath(); ctx.ellipse(ex-8, ey, 4, 2.2, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(ex+8, ey, 4, 2.2, 0, 0, Math.PI*2); ctx.fill();
+        }
         ctx.restore();
       } else if (['clownfish','pufferfish','shark','betta','koi'].includes(equippedDiscovery) && window.OceanFish) {
         const t = window.OceanFish.TYPES.find(x => x.id === equippedDiscovery);
@@ -1356,6 +1424,134 @@
       ctx.fillStyle = topFade; ctx.fillRect(0,0,w,120);
     }
 
+    function drawTrenches() {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#000308');
+      g.addColorStop(0.4, '#01010a');
+      g.addColorStop(1, '#000003');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      const haze = ctx.createRadialGradient(w*0.5, h*0.5, 20, w*0.5, h*0.5, w*0.75);
+      haze.addColorStop(0, 'rgba(70,60,140,0.08)');
+      haze.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = haze; ctx.fillRect(0,0,w,h);
+
+      for (const p of trenchParticles) {
+        const px = (p.x * w + Math.sin(animTime*0.00012 + p.ph) * 24) % w;
+        const py = (p.y * h + animTime * p.sp * 10) % h;
+        const a = 0.12 + 0.28 * (0.5 + 0.5 * Math.sin(animTime*0.0009 + p.ph));
+        ctx.fillStyle = `rgba(${p.c},${a})`;
+        ctx.beginPath(); ctx.arc(px, py, p.r, 0, Math.PI*2); ctx.fill();
+      }
+
+      // trench walls
+      ctx.fillStyle = '#02030a';
+      ctx.beginPath();
+      ctx.moveTo(0,0); ctx.lineTo(w*0.22,0);
+      ctx.lineTo(w*0.32, h*0.25); ctx.lineTo(w*0.28, h*0.55); ctx.lineTo(w*0.35, h);
+      ctx.lineTo(0,h); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(w,0); ctx.lineTo(w*0.78,0);
+      ctx.lineTo(w*0.68, h*0.25); ctx.lineTo(w*0.72, h*0.55); ctx.lineTo(w*0.65, h);
+      ctx.lineTo(w,h); ctx.closePath(); ctx.fill();
+
+      // glowing cracks
+      ctx.strokeStyle = 'rgba(120,170,255,0.12)';
+      ctx.lineWidth = 2;
+      for (let i=0;i<5;i++) {
+        const x = w*(0.34 + i*0.08);
+        ctx.beginPath(); ctx.moveTo(x, h*(0.1+i*0.03)); ctx.lineTo(x + Math.sin(i)*20, h*(0.85-i*0.05)); ctx.stroke();
+      }
+
+      const topFade = ctx.createLinearGradient(0,0,0,120);
+      topFade.addColorStop(0,'rgba(0,2,10,0.95)');
+      topFade.addColorStop(1,'rgba(0,2,10,0)');
+      ctx.fillStyle = topFade; ctx.fillRect(0,0,w,120);
+    }
+
+    function drawHadal() {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#000005');
+      g.addColorStop(0.5, '#020006');
+      g.addColorStop(1, '#000000');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      const haze = ctx.createRadialGradient(w*0.5, h*0.6, 20, w*0.5, h*0.6, w*0.8);
+      haze.addColorStop(0, 'rgba(130,40,80,0.07)');
+      haze.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = haze; ctx.fillRect(0,0,w,h);
+
+      // hadal floor
+      const fy = h * 0.88;
+      ctx.fillStyle = '#030206';
+      ctx.beginPath(); ctx.moveTo(0,h); ctx.lineTo(0,fy);
+      for (let x=0; x<=w; x+=30) ctx.lineTo(x, fy + Math.sin(x*0.025 + 1)*5 - 3);
+      ctx.lineTo(w,h); ctx.closePath(); ctx.fill();
+
+      for (const p of hadalSpores) {
+        const px = (p.x * w + Math.sin(animTime*0.00008 + p.ph) * 16) % w;
+        const py = (p.y * h + Math.sin(animTime*0.0002 + p.ph)*10);
+        const a = 0.08 + 0.22 * (0.5 + 0.5 * Math.sin(animTime*0.0007 + p.ph));
+        ctx.fillStyle = `rgba(255,120,170,${a})`;
+        ctx.beginPath(); ctx.arc(px, py, p.r, 0, Math.PI*2); ctx.fill();
+      }
+
+      // weird bone-like ribs
+      ctx.strokeStyle = 'rgba(90,70,90,0.22)';
+      ctx.lineWidth = 5;
+      for (let i=0;i<6;i++) {
+        const x = w*(0.12 + i*0.15);
+        ctx.beginPath();
+        ctx.moveTo(x, fy);
+        ctx.quadraticCurveTo(x + 30*Math.sin(i), h*0.65, x + 10, h*0.52);
+        ctx.stroke();
+      }
+
+      const topFade = ctx.createLinearGradient(0,0,0,120);
+      topFade.addColorStop(0,'rgba(2,0,6,0.95)');
+      topFade.addColorStop(1,'rgba(2,0,6,0)');
+      ctx.fillStyle = topFade; ctx.fillRect(0,0,w,120);
+    }
+
+    function drawVoid() {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#000000');
+      g.addColorStop(0.5, '#010002');
+      g.addColorStop(1, '#000000');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      // distant void glow
+      const glow = ctx.createRadialGradient(w*0.5, h*0.5, 10, w*0.5, h*0.5, w*0.6);
+      glow.addColorStop(0, 'rgba(120,90,255,0.06)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow; ctx.fillRect(0,0,w,h);
+
+      for (const e of voidEyes) {
+        const blink = Math.sin(animTime*0.0008 + e.blink);
+        if (blink < -0.92) continue;
+        const ex = e.x * w + Math.sin(animTime*0.00005 + e.ph)*20;
+        const ey = e.y * h + Math.sin(animTime*0.00012 + e.ph)*8;
+        const a = 0.15 + 0.25 * (0.5 + 0.5 * Math.sin(animTime*0.001 + e.ph));
+        ctx.fillStyle = `rgba(180,140,255,${a})`;
+        ctx.beginPath(); ctx.ellipse(ex-4, ey, 2.2, 1.2, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(ex+4, ey, 2.2, 1.2, 0, 0, Math.PI*2); ctx.fill();
+      }
+
+      // bottom nothingness
+      const fade = ctx.createLinearGradient(0,h-120,0,h);
+      fade.addColorStop(0,'rgba(0,0,0,0)');
+      fade.addColorStop(1,'rgba(0,0,0,0.7)');
+      ctx.fillStyle = fade; ctx.fillRect(0,h-120,w,120);
+
+      const topFade = ctx.createLinearGradient(0,0,0,120);
+      topFade.addColorStop(0,'rgba(0,0,0,0.95)');
+      topFade.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle = topFade; ctx.fillRect(0,0,w,120);
+    }
+
     function render(ts) {
       t = ts;
       dt = Math.min(0.05, (ts - (lastT || ts)) / 1000);
@@ -1389,7 +1585,14 @@
       if (camAnim) {
         const p = Math.min(1, (ts - camAnim.start) / camAnim.dur);
         cameraY = camAnim.from + (camAnim.to - camAnim.from) * easeInOutCubic(p);
-        if (p >= 1) { camAnim = null; if (cameraY > 0.95) recordDiscovery('deep'); if (cameraY > 1.95) recordDiscovery('abyss'); }
+        if (p >= 1) {
+          camAnim = null;
+          if (cameraY > 0.95) recordDiscovery('deep');
+          if (cameraY > 1.95) recordDiscovery('abyss');
+          if (cameraY > 2.95) recordDiscovery('trenches');
+          if (cameraY > 3.95) recordDiscovery('hadal');
+          if (cameraY > 4.95) recordDiscovery('void');
+        }
       }
 
       ctx.clearRect(0, 0, w, h);
@@ -1437,10 +1640,28 @@
       ctx.save();
       ctx.translate(0, h * 2);
       drawAbyss();
-      drawEquippedUnderwater();
+      if (cameraY >= 1.5 && cameraY < 2.5) drawEquippedUnderwater();
       ctx.restore();
 
-      if (window.OceanFish) window.OceanFish.drawInWorld(ctx, { w, h, animTime, dt, reducedMotion });
+      ctx.save();
+      ctx.translate(0, h * 3);
+      drawTrenches();
+      if (cameraY >= 2.5 && cameraY < 3.5) drawEquippedUnderwater();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(0, h * 4);
+      drawHadal();
+      if (cameraY >= 3.5 && cameraY < 4.5) drawEquippedUnderwater();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(0, h * 5);
+      drawVoid();
+      if (cameraY >= 4.5) drawEquippedUnderwater();
+      ctx.restore();
+
+      if (window.OceanFish) window.OceanFish.drawInWorld(ctx, { w, h, animTime, dt, reducedMotion, maxDepth: MAX_DEPTH });
 
       ctx.restore();
 
@@ -1459,15 +1680,18 @@
     function depthLabel(target) {
       if (target <= 0.01) return 'surface';
       if (target < 1.5) return 'underwater';
-      return 'abyss';
+      if (target < 2.5) return 'abyss';
+      if (target < 3.5) return 'trenches';
+      if (target < 4.5) return 'hadal';
+      return 'the void';
     }
     function syncSettingsUI() {
       setSound.checked = soundEnabled;
       setCycle.checked = dayCycle;
       setDay.checked = forcedMode === 'day';
       setNight.checked = forcedMode === 'night';
-      goDownBtn.textContent = cameraTarget >= MAX_DEPTH - 0.01 ? 'abyss' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
-      goUpBtn.textContent = cameraTarget <= 0.01 ? 'surface' : (cameraTarget > 1.01 ? 'go up' : 'go up');
+      goDownBtn.textContent = cameraTarget >= MAX_DEPTH - 0.01 ? 'bottom' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
+      goUpBtn.textContent = cameraTarget <= 0.01 ? 'surface' : 'go up';
       goDownBtn.disabled = cameraTarget >= MAX_DEPTH - 0.01;
       goUpBtn.disabled = cameraTarget <= 0.01;
       goDownBtn.style.opacity = goDownBtn.disabled ? '0.45' : '1';
@@ -1577,7 +1801,7 @@
       setWeather.value = weatherMode;
       setMotion.checked = reducedMotion;
       setPhoto.checked = photoMode;
-      goDownBtn.textContent = cameraTarget >= MAX_DEPTH - 0.01 ? 'abyss' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
+      goDownBtn.textContent = cameraTarget >= MAX_DEPTH - 0.01 ? 'bottom' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
       goUpBtn.textContent = cameraTarget <= 0.01 ? 'surface' : 'go up';
       goDownBtn.disabled = cameraTarget >= MAX_DEPTH - 0.01;
       goUpBtn.disabled = cameraTarget <= 0.01;
@@ -1709,6 +1933,30 @@
           for (let i=0;i<4;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.2, sp: 0.25+Math.random()*0.5, ph: Math.random()*10, age:0, life: 700+Math.random()*500 });
         }
         sfxBubble();
+      } else if (cameraY >= 4.5) {
+        for (let i=0;i<5;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.2, sp: 0.15+Math.random()*0.35, ph: Math.random()*10, age:0, life: 1400+Math.random()*800 });
+        sfxBubble();
+        const localY = worldY - h * 5;
+        for (const e of voidEyes) {
+          const ex = e.x * w;
+          const ey = e.y * h;
+          if (Math.abs(x - ex) < 30 && Math.abs(localY - ey) < 25) { recordDiscovery('void_eye'); break; }
+        }
+      } else if (cameraY >= 3.5) {
+        for (let i=0;i<5;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.4, sp: 0.2+Math.random()*0.4, ph: Math.random()*10, age:0, life: 1200+Math.random()*700 });
+        sfxBubble();
+        const localY = worldY - h * 4;
+        for (let i=0;i<4;i++) {
+          const rx = w*(0.3+i*0.13) + 12;
+          const ry = h*0.65;
+          if (Math.abs(x - rx) < 40 && Math.abs(localY - ry) < 70) { recordDiscovery('ribcage'); break; }
+        }
+      } else if (cameraY >= 2.5) {
+        for (let i=0;i<5;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.5, sp: 0.22+Math.random()*0.45, ph: Math.random()*10, age:0, life: 1200+Math.random()*700 });
+        sfxBubble();
+        const localY = worldY - h * 3;
+        const cx = w * 0.5, cy = h * 0.5;
+        if (Math.abs(x - cx) < 45 && Math.abs(localY - cy) < 60) recordDiscovery('crack');
       } else if (cameraY >= 1.2) {
         // abyss interactions
         for (let i=0;i<6;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.8, sp: 0.25+Math.random()*0.5, ph: Math.random()*10, age:0, life: 1100+Math.random()*700 });
