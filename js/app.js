@@ -211,14 +211,7 @@
       const sf = JSON.parse(localStorage.getItem('ocean_facility') || 'null');
       if (sf && typeof sf === 'object') facility = { ...facility, ...sf, code:'BLUE' };
     } catch (_) {}
-    const perspectiveLabels = {
-      surface: 'perspective: arctic shelf (icebergs tappable)',
-      underwater: 'perspective: kelp forest front',
-      abyss: 'perspective: thermal vent field',
-      trenches: 'perspective: trench wall ravine',
-      hadal: 'perspective: hadal fracture basin',
-      void: 'perspective: outer facility perimeter'
-    };
+    let perspectiveAnim = 0; // 0..1 visual transition for forward/back view
     // lore: Deep Blue (guard) protects The Deep Blue, a submarine-ish facility controlling the ocean.
     bgm.volume = masterVolume;
 
@@ -618,7 +611,7 @@
         if (voidTalkTimer >= 3 && !voidDialogue) {
           if (!quest.offered) {
             quest.offered = true; saveGameState();
-            showVoidDialogue('halt. i am the guard of The Deep Blue... colloquially, they call me that. this facility controls the ocean. accept the quest and I will grant passage.', 9000);
+            showVoidDialogue('i guard The Deep Blue. accept the quest for passage.', 6000);
           } else if (!quest.accepted) {
             showVoidDialogue('quest: 3 bottles, 3 new fish, 3 top-to-bottom trips. click me to accept. then we stop the scientists.', 7000);
           } else if (!quest.completed) {
@@ -626,7 +619,7 @@
             if (questComplete()) { quest.completed = true; quest.unlockedDeep = true; saveGameState(); showVoidDialogue('passage granted. below is The Deep Blue facility. stop the scientists before they deploy the ocean wipeout supply.', 9000); }
             else showVoidDialogue(`quest: bottles ${Math.min(3,p.bottles)}/3, fish ${Math.min(3,p.fish)}/3, trips ${Math.min(3,p.trips)}/3`, 4500);
           } else if (isFacilityLayer()) {
-            showVoidDialogue(facility.complete ? 'the supply is stopped. the ocean breathes again.' : 'puzzles ahead: seal the valve, enter code BLUE, bypass me. stop the wipeout supply.', 6000);
+            showVoidDialogue(facility.complete ? 'the ocean is safe... for now.' : 'stop the wipeout supply.', 4000);
           } else {
             showVoidDialogue('The Deep Blue is below. stop the scientists. the ocean depends on it.', 4500);
           }
@@ -742,7 +735,7 @@
       const darken = (c) => [Math.round(c[0]*(1-stormDark)), Math.round(c[1]*(1-stormDark)), Math.round(c[2]*(1-stormDark))];
       const t0=darken(mixArr(nightTop,dayTop,d)), t1=darken(mixArr(nightMid,dayMid,d)), t2=darken(mixArr(nightLow,dayLow,d)), t3=darken(mixArr(nightBot,dayBot,d));
       fillBandGradient(0, h, [[0,...t0],[0.35,...t1],[0.6,...t2],[1,...t3]], 4.2);
-      if (perspective === 1) { ctx.fillStyle='rgba(180,230,255,0.08)'; ctx.fillRect(0,0,w,h); }
+      if (perspectiveAnim > 0.01) { ctx.fillStyle=`rgba(180,230,255,${0.08*perspectiveAnim})`; ctx.fillRect(0,0,w,h); }
       drawLightning();
 
       const sun = bodyPos(phase);
@@ -1506,12 +1499,7 @@
     function drawAbyss() {
       fillBandGradient(0, h, [[0,2,7,19],[0.35,1,3,11],[1,0,1,5]], 2.8);
 
-      // purple background orb/light (like zone before, but purple)
-      const orb = ctx.createRadialGradient(w*0.5, h*0.45, 10, w*0.5, h*0.45, w*0.55);
-      orb.addColorStop(0, 'rgba(150,100,255,0.10)');
-      orb.addColorStop(0.4, 'rgba(110,70,220,0.05)');
-      orb.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = orb; ctx.fillRect(0,0,w,h);
+      // subtle deep glow, no orb/halo artifact
 
       for (const p of abyssParticles) {
         const px = (p.x * w + Math.sin(animTime*0.00015 + p.ph) * 18) % w;
@@ -1657,17 +1645,7 @@
       const baseR = Math.min(w, h) * 0.12;
       voidEntity.r = baseR * 0.7;
 
-      // guard glow (colloquially "Deep Blue" guard)
-      const glow = ctx.createRadialGradient(cx, cy, baseR*0.05, cx, cy, baseR*1.8);
-      glow.addColorStop(0, `rgba(120,170,255,${0.22 + pulse*0.08})`);
-      glow.addColorStop(0.4, `rgba(70,120,255,${0.10 + pulse*0.04})`);
-      glow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = glow; ctx.fillRect(cx-baseR*2, cy-baseR*2, baseR*4, baseR*4);
-      ctx.fillStyle = `rgba(160,210,255,${0.75 + pulse*0.2})`;
-      ctx.beginPath(); ctx.arc(cx, cy, baseR*0.25, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = `rgba(140,190,255,${0.35+pulse*0.2})`; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(cx, cy, baseR*0.55, 0, Math.PI*2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx, cy, baseR*0.85, 0, Math.PI*2); ctx.stroke();
+      // subtle presence only - no orb/halo visuals
 
       if (voidDialogue && isAtBottom()) {
         const text = voidDialogue.text;
@@ -1678,8 +1656,9 @@
         for (const word of words) { const test = line ? line + ' ' + word : word; if (ctx.measureText(test).width > maxW - padX*2 && line) { lines.push(line); line = word; } else line = test; }
         if (line) lines.push(line);
         const lh = 20; const boxW = Math.min(maxW, Math.max(...lines.map(l=>ctx.measureText(l).width),120)+padX*2); const boxH = lines.length*lh+padY*2;
-        const bx = Math.max(12, Math.min(w-boxW-12, cx-boxW/2)); const by = Math.max(12, cy-baseR-30-boxH);
-        ctx.fillStyle = 'rgba(5,14,30,0.86)'; ctx.strokeStyle = 'rgba(120,180,255,0.45)'; ctx.lineWidth = 1;
+        const bx = Math.max(12, Math.min(w-boxW-12, cx-boxW/2));
+        const by = Math.max(12, Math.min(h-boxH-12, h*0.08));
+        ctx.fillStyle = 'rgba(5,14,30,0.88)'; ctx.strokeStyle = 'rgba(120,180,255,0.35)'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.roundRect(bx, by, boxW, boxH, 10); ctx.fill(); ctx.stroke();
         ctx.fillStyle = 'rgba(220,240,255,0.95)'; ctx.textBaseline = 'top';
         lines.forEach((l,i)=>ctx.fillText(l,bx+padX,by+padY+i*lh));
@@ -1785,24 +1764,22 @@
       ctx.fillStyle='rgba(210,235,255,0.95)'; ctx.font='16px Consolas, monospace'; ctx.textAlign='center';
       ctx.fillText('THE DEEP BLUE — facility core', w*0.5, h*0.12);
       ctx.font='12px Consolas, monospace'; ctx.fillStyle='rgba(170,200,225,0.75)';
-      ctx.fillText('a submarine-ish facility controlling the ocean. guard: Deep Blue.', w*0.5, h*0.15);
       ctx.fillStyle = facility.complete ? 'rgba(140,255,190,0.9)' : 'rgba(255,190,140,0.85)';
-      ctx.fillText(facility.complete ? 'objective complete: wipeout supply stopped' : 'objective: stop the scientists from deploying the ocean wipeout supply', w*0.5, h*0.185);
+      ctx.fillText(facility.complete ? 'supply neutralized' : 'stop the wipeout supply', w*0.5, h*0.15);
 
-      const py = h*0.83;
+      const py = h*0.86;
       const boxes = [
-        {x:w*0.22, done:facility.puzzleA, label:facility.puzzleA?'✓ valve sealed':'seal valve', sub:'flood the supply line'},
-        {x:w*0.5, done:facility.puzzleB, label:facility.puzzleB?'✓ code entered':'enter code', sub:'hint: the guard\'s name'},
-        {x:w*0.78, done:facility.encounterDone, label:facility.encounterDone?'✓ guard bypassed':'bypass guard', sub:'slip past Deep Blue drone'}
+        {x:w*0.22, done:facility.puzzleA, label:facility.puzzleA?'✓ sealed':'valve'},
+        {x:w*0.5, done:facility.puzzleB, label:facility.puzzleB?'✓ code':'code'},
+        {x:w*0.78, done:facility.encounterDone, label:facility.encounterDone?'✓ bypassed':'guard'}
       ];
       for (const b of boxes){
         ctx.fillStyle = b.done ? 'rgba(40,120,80,0.25)' : 'rgba(20,50,80,0.45)';
         ctx.strokeStyle = b.done ? 'rgba(120,255,170,0.55)' : 'rgba(130,200,255,0.45)';
         ctx.lineWidth = 1.5;
-        roundRectPath(ctx, b.x-95, py, 190, 46, 8); ctx.fill(); ctx.stroke();
+        roundRectPath(ctx, b.x-70, py, 140, 32, 8); ctx.fill(); ctx.stroke();
         ctx.fillStyle = b.done ? 'rgba(170,255,200,0.95)' : 'rgba(210,235,255,0.9)';
-        ctx.font='12px Consolas, monospace'; ctx.fillText(b.label, b.x, py+18);
-        ctx.fillStyle = 'rgba(150,185,210,0.6)'; ctx.font='10px Consolas, monospace'; ctx.fillText(b.sub, b.x, py+34);
+        ctx.font='12px Consolas, monospace'; ctx.fillText(b.label, b.x, py+20);
       }
       if (facility.complete) {
         ctx.fillStyle='rgba(140,255,190,0.95)'; ctx.font='14px Consolas, monospace';
@@ -1835,6 +1812,8 @@
         weatherTarget = night * 0.45 + wave * 0.9;
       }
       weatherIntensity += (weatherTarget - weatherIntensity) * Math.min(1, dt * 0.8);
+      const pTarget = (perspective === 1 && !isFacilityLayer()) ? 1 : 0;
+      perspectiveAnim += (pTarget - perspectiveAnim) * Math.min(1, dt * 5);
 
       // lightning
       lightning = Math.max(0, lightning - dt * 2.2);
@@ -1893,15 +1872,14 @@
       for (const layer of layers) drawWave(layer);
       drawSurfaceLife();
       drawEquippedSurface();
-      if (perspective === 1) drawIcebergs();
+      if (perspectiveAnim > 0.01) { ctx.save(); ctx.globalAlpha = perspectiveAnim; drawIcebergs(); ctx.restore(); }
       drawRipplesAndBubbles();
       drawWeather();
-      if (perspective === 1) {
-        // arctic shelf perspective: colder sky tint, extra ice floes
+      if (perspectiveAnim > 0.01) {
         ctx.save();
+        ctx.globalAlpha = perspectiveAnim;
         ctx.fillStyle='rgba(200,235,255,0.10)'; ctx.fillRect(0,0,w,h*0.58);
         for (let i=0;i<7;i++){ const fx=(i/6)*w; ctx.fillStyle='rgba(230,245,255,0.35)'; ctx.beginPath(); ctx.ellipse(fx,h*0.585,55,8,0,0,Math.PI*2); ctx.fill(); }
-        ctx.fillStyle='rgba(210,245,255,0.72)'; ctx.font='13px Consolas, monospace'; ctx.fillText(perspectiveLabels.surface, 20, h*0.52);
         ctx.restore();
       }
 
@@ -1909,11 +1887,10 @@
       ctx.translate(0, h);
       drawUnderwater();
       if (cameraY < 1.5) drawEquippedUnderwater();
-      if (perspective === 1) {
-        ctx.save();
+      if (perspectiveAnim > 0.01) {
+        ctx.save(); ctx.globalAlpha = perspectiveAnim;
         ctx.fillStyle='rgba(80,180,140,0.07)'; ctx.fillRect(0,0,w,h);
         for (let i=0;i<14;i++){ const kx=i*w/13; const sway=Math.sin(animTime*0.0008+i)*18; ctx.strokeStyle='rgba(60,170,110,0.35)'; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(kx,h); ctx.quadraticCurveTo(kx+sway,h*0.65,kx-sway*0.6,h*0.28); ctx.stroke(); }
-        ctx.fillStyle='rgba(180,235,255,0.65)'; ctx.font='13px Consolas, monospace'; ctx.fillText(perspectiveLabels.underwater,20,30);
         ctx.restore();
       }
       ctx.restore();
@@ -1922,11 +1899,10 @@
       ctx.translate(0, h * 2);
       drawAbyss();
       if (cameraY >= 1.5 && cameraY < 2.5) drawEquippedUnderwater();
-      if (perspective === 1) {
-        ctx.save();
+      if (perspectiveAnim > 0.01) {
+        ctx.save(); ctx.globalAlpha = perspectiveAnim;
         ctx.fillStyle='rgba(255,80,30,0.04)'; ctx.fillRect(0,0,w,h);
         for (let i=0;i<6;i++){ const vx=w*(0.1+i*0.16), vy=h*0.78; const g=ctx.createRadialGradient(vx,vy-h*0.1,0,vx,vy-h*0.1,80); g.addColorStop(0,`rgba(255,120,50,${0.12+0.05*Math.sin(animTime*0.003+i)})`); g.addColorStop(1,'rgba(255,120,50,0)'); ctx.fillStyle=g; ctx.fillRect(vx-80,vy-160,160,160); ctx.strokeStyle='rgba(120,220,255,0.1)'; ctx.beginPath(); ctx.arc(vx,vy-h*0.2,60+i*8,0,Math.PI*2); ctx.stroke(); }
-        ctx.fillStyle='rgba(255,200,160,0.65)'; ctx.font='13px Consolas, monospace'; ctx.fillText(perspectiveLabels.abyss,20,30);
         ctx.restore();
       }
       ctx.restore();
@@ -1935,14 +1911,13 @@
       ctx.translate(0, h * 3);
       drawTrenches();
       if (cameraY >= 2.5 && cameraY < 3.5) drawEquippedUnderwater();
-      if (perspective === 1) {
-        ctx.save();
+      if (perspectiveAnim > 0.01) {
+        ctx.save(); ctx.globalAlpha = perspectiveAnim;
         ctx.fillStyle='rgba(60,40,110,0.15)'; ctx.fillRect(0,0,w,h);
         ctx.fillStyle='rgba(10,8,30,0.55)';
         ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(w*0.18,0); ctx.lineTo(w*0.28,h*0.5); ctx.lineTo(w*0.16,h); ctx.lineTo(0,h); ctx.closePath(); ctx.fill();
         ctx.beginPath(); ctx.moveTo(w,0); ctx.lineTo(w*0.82,0); ctx.lineTo(w*0.72,h*0.5); ctx.lineTo(w*0.84,h); ctx.lineTo(w,h); ctx.closePath(); ctx.fill();
         ctx.strokeStyle='rgba(160,140,255,0.12)'; for(let i=0;i<10;i++){ ctx.beginPath(); ctx.moveTo(w*0.28,h*i/10); ctx.lineTo(w*0.72,h*i/10); ctx.stroke(); }
-        ctx.fillStyle='rgba(200,190,255,0.6)'; ctx.font='13px Consolas, monospace'; ctx.fillText(perspectiveLabels.trenches,20,30);
         ctx.restore();
       }
       ctx.restore();
@@ -1951,13 +1926,12 @@
       ctx.translate(0, h * 4);
       drawHadal();
       if (cameraY >= 3.5 && cameraY < 4.5) drawEquippedUnderwater();
-      if (perspective === 1) {
-        ctx.save();
+      if (perspectiveAnim > 0.01) {
+        ctx.save(); ctx.globalAlpha = perspectiveAnim;
         ctx.fillStyle='rgba(255,40,100,0.05)'; ctx.fillRect(0,0,w,h);
         ctx.strokeStyle='rgba(255,100,150,0.18)'; ctx.lineWidth=2;
         for(let i=0;i<5;i++){ const fx=w*(0.15+i*0.18); ctx.beginPath(); ctx.moveTo(fx,h*0.9); ctx.lineTo(fx+20,h*0.65); ctx.lineTo(fx-10,h*0.45); ctx.stroke(); }
         const rg=ctx.createRadialGradient(w*0.5,h*0.75,10,w*0.5,h*0.75,w*0.4); rg.addColorStop(0,'rgba(255,60,120,0.08)'); rg.addColorStop(1,'rgba(255,60,120,0)'); ctx.fillStyle=rg; ctx.fillRect(0,0,w,h);
-        ctx.fillStyle='rgba(255,170,200,0.65)'; ctx.font='13px Consolas, monospace'; ctx.fillText(perspectiveLabels.hadal,20,30);
         ctx.restore();
       }
       ctx.restore();
@@ -1966,15 +1940,14 @@
       ctx.translate(0, h * 5);
       drawVoid();
       if (cameraY >= 4.5 && cameraY < 5.5) drawEquippedUnderwater();
-      if (perspective === 1) {
-        ctx.save();
+      if (perspectiveAnim > 0.01) {
+        ctx.save(); ctx.globalAlpha = perspectiveAnim;
         ctx.fillStyle='rgba(100,140,255,0.05)'; ctx.fillRect(0,0,w,h);
         ctx.strokeStyle='rgba(120,180,255,0.14)'; ctx.lineWidth=1;
         for(let y=h*0.2;y<h;y+=60){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
         for(let x=0;x<w;x+=80){ ctx.beginPath(); ctx.moveTo(x,h*0.2); ctx.lineTo(x,h); ctx.stroke(); }
         ctx.fillStyle='rgba(120,200,255,0.08)'; ctx.fillRect(w*0.1,h*0.35,w*0.8,h*0.35);
         ctx.strokeStyle='rgba(140,210,255,0.25)'; ctx.strokeRect(w*0.1,h*0.35,w*0.8,h*0.35);
-        ctx.fillStyle='rgba(180,210,255,0.65)'; ctx.font='13px Consolas, monospace'; ctx.fillText(perspectiveLabels.void,20,30);
         ctx.restore();
       }
       ctx.restore();
@@ -2035,7 +2008,7 @@
       goBackBtn.style.opacity = goBackBtn.disabled ? '0.45' : '1';
       goForwardBtn.textContent = perspective === 1 ? 'forward view' : 'go forwards';
       document.body.classList.toggle('photo-mode', photoMode);
-      discoverHint.textContent = `discoveries: ${discoveries.length}/${DISCOVERY_DEFS.length} found • depth: ${depthLabel(cameraTarget)}${perspective===1 && !facilityNow ? ' • alt view' : ''}`;
+      discoverHint.textContent = `discoveries: ${discoveries.length}/${DISCOVERY_DEFS.length} found • depth: ${depthLabel(cameraTarget)}`;
       renderDiscoveries();
     }
 
@@ -2245,19 +2218,19 @@
           }
           else if (hitBox(w*0.5)) {
             if (!facility.puzzleB) {
-              const code = prompt('enter facility code (hint: the guard\'s name):','');
+              const code = prompt('enter facility code:','');
               if ((code||'').trim().toUpperCase() === 'BLUE') { facility.puzzleB = true; sfxClick(); showVoidDialogue('code accepted. BLUE protocol unlocked.', 3500); }
-              else if (code !== null) { sfxClick(); showVoidDialogue('wrong code. the guard whispers: "they named it after me..."', 3500); }
+              else if (code !== null) { sfxClick(); showVoidDialogue('wrong code.', 1800); }
             } else { sfxClick(); showVoidDialogue('code terminal already green.', 1800); }
           }
           else if (hitBox(w*0.78)) {
-            if (!facility.encounterDone) { facility.encounterDone = true; sfxClick(); showVoidDialogue('you slip past the guard drone. Deep Blue watches... but lets you pass.', 4000); }
+            if (!facility.encounterDone) { facility.encounterDone = true; sfxClick(); showVoidDialogue('guard bypassed.', 2200); }
             else { sfxClick(); showVoidDialogue('guard already bypassed.', 1800); }
           }
           if (facility.puzzleA && facility.puzzleB && facility.encounterDone && !facility.complete) {
             facility.complete = true;
             unlockAchievement('deep_blue');
-            showVoidDialogue('valves sealed. code accepted. guard bypassed. you stopped the wipeout supply. the ocean is safe... for now.', 8000);
+            showVoidDialogue('supply stopped. the ocean is safe... for now.', 5000);
           }
           saveGameState();
           return;
@@ -2292,7 +2265,7 @@
       checkAchievements();
       saveGameState();
 
-      if (perspective === 1 && cameraY < 0.5) {
+      if (perspectiveAnim > 0.5 && cameraY < 0.5) {
         const bergs = getIcebergs();
         for (const b of bergs) { if (Math.abs(x-b.x)<b.w*0.45 && Math.abs(y-b.y)<b.h*0.6) { sfxClick(); feedbackStatus.textContent='you tapped an iceberg. it does nothing. majestic.'; return; } }
       }
