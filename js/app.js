@@ -1,38 +1,6 @@
     let crashBuzzStarted = false;
     let crashed = false;
     let rafId = null;
-    let ditherCanvas = null;
-    let ditherPattern = null;
-    function ensureDither() {
-      if (ditherPattern) return ditherPattern;
-      const size = 128;
-      ditherCanvas = document.createElement('canvas');
-      ditherCanvas.width = size; ditherCanvas.height = size;
-      const dctx = ditherCanvas.getContext('2d');
-      const img = dctx.createImageData(size, size);
-      const data = img.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const v = Math.random() * 255;
-        data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
-      }
-      dctx.putImageData(img, 0, 0);
-      ditherPattern = ctx.createPattern(ditherCanvas, 'repeat');
-      return ditherPattern;
-    }
-    function drawDither() {
-      const pat = ensureDither();
-      if (!pat) return;
-      ctx.save();
-      ctx.globalCompositeOperation = 'soft-light';
-      ctx.globalAlpha = 0.18;
-      ctx.fillStyle = pat;
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = 0.08;
-      ctx.fillStyle = pat;
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
-    }
     function playWiiCrashBuzz() {
       if (crashBuzzStarted) return;
       crashBuzzStarted = true;
@@ -689,7 +657,25 @@
     }));
 
     function lerp(a,b,p){ return a + (b-a)*p; }
-    function mix(c1,c2,p){ return `rgb(${Math.round(lerp(c1[0],c2[0],p))}, ${Math.round(lerp(c1[1],c2[1],p))}, ${Math.round(lerp(c1[2],c2[2],p))})`; }
+    function mixArr(c1,c2,p){ return [Math.round(lerp(c1[0],c2[0],p)), Math.round(lerp(c1[1],c2[1],p)), Math.round(lerp(c1[2],c2[2],p))]; }
+    function mix(c1,c2,p){ const c=mixArr(c1,c2,p); return `rgb(${c[0]},${c[1]},${c[2]})`; }
+    function fillBandGradient(y0, y1, stops, noiseAmt = 3.5) {
+      const hgt = Math.max(1, y1 - y0);
+      for (let y = 0; y < hgt; y += 2) {
+        const p = y / hgt;
+        let a = stops[0], b = stops[stops.length - 1];
+        for (let i = 0; i < stops.length - 1; i++) {
+          if (p >= stops[i][0] && p <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; }
+        }
+        const t = (p - a[0]) / ((b[0] - a[0]) || 1);
+        const n = (Math.random() - 0.5) * noiseAmt;
+        const r = Math.max(0, Math.min(255, Math.round(a[1] + (b[1] - a[1]) * t + n)));
+        const g = Math.max(0, Math.min(255, Math.round(a[2] + (b[2] - a[2]) * t + n)));
+        const bl = Math.max(0, Math.min(255, Math.round(a[3] + (b[3] - a[3]) * t + n)));
+        ctx.fillStyle = `rgb(${r},${g},${bl})`;
+        ctx.fillRect(0, y0 + y, w, 2);
+      }
+    }
     function getCyclePhase() {
       if (forcedMode === 'day') return 0.25;
       if (forcedMode === 'night') return 0.75;
@@ -732,13 +718,8 @@
       const dayTop=[80,170,235], dayMid=[120,200,255], dayLow=[160,220,255], dayBot=[210,238,255];
       const stormDark = Math.min(0.55, weatherIntensity * 0.22);
       const darken = (c) => [Math.round(c[0]*(1-stormDark)), Math.round(c[1]*(1-stormDark)), Math.round(c[2]*(1-stormDark))];
-      const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, mix(darken(nightTop), darken(dayTop), d));
-      g.addColorStop(0.35, mix(darken(nightMid), darken(dayMid), d));
-      g.addColorStop(0.6, mix(darken(nightLow), darken(dayLow), d));
-      g.addColorStop(1, mix(darken(nightBot), darken(dayBot), d));
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
+      const t0=darken(mixArr(nightTop,dayTop,d)), t1=darken(mixArr(nightMid,dayMid,d)), t2=darken(mixArr(nightLow,dayLow,d)), t3=darken(mixArr(nightBot,dayBot,d));
+      fillBandGradient(0, h, [[0,...t0],[0.35,...t1],[0.6,...t2],[1,...t3]], 4.2);
       drawLightning();
 
       const sun = bodyPos(phase);
@@ -1914,8 +1895,6 @@
       vg.addColorStop(1, `rgba(0,0,0,${lerp(0.28,0.14,d) + cameraY*0.18 + weatherIntensity*0.05})`);
       ctx.fillStyle = vg;
       ctx.fillRect(0, 0, w, h);
-
-      drawDither();
 
       updateAudioMix();
       if (!crashed) rafId = requestAnimationFrame(render);
