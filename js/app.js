@@ -1781,21 +1781,24 @@
 
       // big core window
       const cx=w*0.5, cy=h*0.52;
-      const coreG = ctx.createRadialGradient(cx,cy,10,cx,cy,w*0.16);
-      coreG.addColorStop(0, facility.complete ? 'rgba(120,255,180,0.18)' : 'rgba(120,180,255,0.16)');
-      coreG.addColorStop(0.6, facility.complete ? 'rgba(60,180,120,0.06)' : 'rgba(60,120,200,0.06)');
+      const coreG = ctx.createRadialGradient(cx,cy,10,cx,cy,w*0.14);
+      coreG.addColorStop(0, facility.complete ? 'rgba(120,255,180,0.10)' : 'rgba(120,180,255,0.10)');
+      coreG.addColorStop(0.6, facility.complete ? 'rgba(60,180,120,0.04)' : 'rgba(60,120,200,0.04)');
       coreG.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle=coreG; ctx.beginPath(); ctx.ellipse(cx,cy,w*0.16,h*0.09,0,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle=facility.complete?'rgba(140,255,190,0.4)':'rgba(130,210,255,0.35)'; ctx.lineWidth=2; ctx.stroke();
+      ctx.fillStyle=coreG; ctx.beginPath(); ctx.ellipse(cx,cy,w*0.14,h*0.075,0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle=facility.complete?'rgba(140,255,190,0.28)':'rgba(130,210,255,0.22)'; ctx.lineWidth=1.5; ctx.stroke();
 
       // wipeout supply tank (objective target)
       const tx=w*0.5, ty=h*0.67;
-      ctx.fillStyle = facility.complete ? 'rgba(40,100,70,0.45)' : 'rgba(90,30,40,0.45)';
-      roundRectPath(ctx, tx-70, ty-28, 140, 56, 10); ctx.fill();
-      ctx.strokeStyle = facility.complete ? 'rgba(120,255,170,0.5)' : 'rgba(255,100,120,0.45)'; ctx.stroke();
-      ctx.fillStyle = facility.complete ? 'rgba(180,255,210,0.85)' : 'rgba(255,180,190,0.85)';
-      ctx.font='10px Consolas, monospace'; ctx.textAlign='center';
-      ctx.fillText(facility.complete ? 'SUPPLY NEUTRALIZED' : 'WIPEOUT SUPPLY', tx, ty+4);
+      ctx.fillStyle = facility.complete ? 'rgba(40,100,70,0.55)' : 'rgba(90,30,40,0.55)';
+      roundRectPath(ctx, tx-82, ty-30, 164, 60, 10); ctx.fill();
+      ctx.strokeStyle = facility.complete ? 'rgba(120,255,170,0.65)' : 'rgba(255,110,130,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = 'rgba(5,14,30,0.45)';
+      roundRectPath(ctx, tx-72, ty-10, 144, 24, 6); ctx.fill();
+      ctx.fillStyle = facility.complete ? 'rgba(180,255,210,0.96)' : 'rgba(255,200,210,0.95)';
+      ctx.font='12px Consolas, monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(facility.complete ? 'SUPPLY NEUTRALIZED' : 'WIPEOUT SUPPLY', tx, ty+2);
+      ctx.textBaseline='alphabetic';
 
       // caution stripes
       if (!facility.complete) {
@@ -1809,13 +1812,13 @@
       // puzzle/encounter UI
       ctx.save();
       const small = w < 560;
-      ctx.fillStyle='rgba(210,235,255,0.95)';
-      ctx.font=(small ? '13px' : '16px') + ' Consolas, monospace';
       ctx.textAlign='center';
-      ctx.fillText(small ? 'DEEP BLUE CORE' : 'THE DEEP BLUE — facility core', w*0.5, h*0.12);
-      ctx.font=(small ? '11px' : '12px') + ' Consolas, monospace';
-      ctx.fillStyle = facility.complete ? 'rgba(140,255,190,0.9)' : 'rgba(255,190,140,0.85)';
-      ctx.fillText(facility.complete ? 'supply neutralized' : 'stop the wipeout supply', w*0.5, h*0.15);
+      ctx.fillStyle='rgba(210,235,255,0.96)';
+      ctx.font=(small ? '14px' : '18px') + ' Consolas, monospace';
+      ctx.fillText(small ? 'DEEP BLUE CORE' : 'THE DEEP BLUE — facility core', w*0.5, h*0.1);
+      ctx.font=(small ? '12px' : '13px') + ' Consolas, monospace';
+      ctx.fillStyle = facility.complete ? 'rgba(150,255,195,0.95)' : 'rgba(255,200,150,0.92)';
+      ctx.fillText(facility.complete ? 'supply neutralized' : 'stop the wipeout supply', w*0.5, h*0.135);
 
       const py = h*0.86;
       const boxW = Math.min(140, Math.max(84, w * 0.28));
@@ -1829,17 +1832,18 @@
         {x:startX + (boxW + gap) * 2, done:facility.encounterDone, label:facility.encounterDone?'✓ bypassed':'guard'}
       ];
       for (const b of boxes){
-        ctx.fillStyle = b.done ? 'rgba(40,120,80,0.25)' : 'rgba(20,50,80,0.45)';
-        ctx.strokeStyle = b.done ? 'rgba(120,255,170,0.55)' : 'rgba(130,200,255,0.45)';
+        ctx.fillStyle = b.done ? 'rgba(40,120,80,0.32)' : 'rgba(20,50,80,0.5)';
+        ctx.strokeStyle = b.done ? 'rgba(120,255,170,0.72)' : 'rgba(130,200,255,0.62)';
         ctx.lineWidth = 1.5;
         roundRectPath(ctx, b.x - boxW/2, py, boxW, boxH, 8); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = b.done ? 'rgba(170,255,200,0.95)' : 'rgba(210,235,255,0.9)';
-        ctx.font = (small ? '11px' : '12px') + ' Consolas, monospace';
+        ctx.fillStyle = b.done ? 'rgba(180,255,210,0.96)' : 'rgba(220,240,255,0.94)';
+        ctx.font = (small ? '11px' : '13px') + ' Consolas, monospace';
         ctx.fillText(b.label, b.x, py + (small ? 19 : 20));
       }
       if (facility.complete) {
-        ctx.fillStyle='rgba(140,255,190,0.95)'; ctx.font=(small ? '12px' : '14px') + ' Consolas, monospace';
-        ctx.fillText('the ocean is safe... for now.', w*0.5, h*0.95);
+        ctx.fillStyle='rgba(150,255,200,0.96)';
+        ctx.font=(small ? '13px' : '15px') + ' Consolas, monospace';
+        ctx.fillText('the ocean is safe... for now.', w*0.5, h*0.93);
       }
       ctx.restore();
     }
