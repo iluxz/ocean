@@ -115,6 +115,9 @@
     const crashBtn = document.getElementById('crashBtn');
     const feedbackStatus = document.getElementById('feedbackStatus');
     const discoverHint = document.getElementById('discoverHint');
+    const hurtVignette = document.getElementById('hurtVignette');
+    const hurtTimer = document.getElementById('hurtTimer');
+    const hurtTimerText = document.getElementById('hurtTimerText');
     const feedbackModal = document.getElementById('feedbackModal');
     const feedbackText = document.getElementById('feedbackText');
     const feedbackCategory = document.getElementById('feedbackCategory');
@@ -544,7 +547,37 @@
     function showVoidDialogue(text, ms = 6000) {
       voidDialogue = { text, until: performance.now() + ms };
     }
+    function updateHurtState() {
+      const remaining = clickLockUntil - Date.now();
+      const active = remaining > 0;
+      if (hurtVignette) hurtVignette.classList.toggle('active', active);
+      if (hurtTimer) hurtTimer.classList.toggle('active', active);
+      if (hurtTimerText) {
+        const secs = Math.max(0, Math.ceil(remaining / 1000));
+        const m = Math.floor(secs / 60);
+        const s = String(secs % 60).padStart(2, '0');
+        hurtTimerText.textContent = `${m}:${s}`;
+      }
+      document.body.classList.toggle('hurt', active);
+      return active;
+    }
+
+    function triggerHurt(durationMs = 60000) {
+      clickLockUntil = Math.max(clickLockUntil, Date.now() + durationMs);
+      saveGameState();
+      updateHurtState();
+      // quick hurt jolt
+      document.body.animate([
+        { transform: 'translate(0,0)', filter: 'brightness(1)' },
+        { transform: 'translate(-4px, 2px)', filter: 'brightness(1.2) saturate(1.3)' },
+        { transform: 'translate(4px, -2px)', filter: 'brightness(0.95)' },
+        { transform: 'translate(-2px, -3px)', filter: 'brightness(1.15)' },
+        { transform: 'translate(0,0)', filter: 'brightness(1)' }
+      ], { duration: 260, easing: 'ease-out' });
+    }
+
     function updateVoidQuest() {
+      updateHurtState();
       if (cameraY <= 0.15) reachedTopSinceBottom = true;
       const atBottom = isAtBottom();
       if (atBottom) {
@@ -2116,7 +2149,8 @@
       }
 
       if (Date.now() < clickLockUntil) {
-        feedbackStatus.textContent = 'pufferfish sting: clicking locked for a bit...';
+        updateHurtState();
+        feedbackStatus.textContent = `pufferfish sting: clicking locked (${hurtTimerText ? hurtTimerText.textContent : '1:00'})`;
         return;
       }
       clicks += 1;
@@ -2138,16 +2172,17 @@
         }
       } else if (hitFish) {
         if (Date.now() < clickLockUntil) {
-          feedbackStatus.textContent = 'pufferfish sting: clicking locked for a bit...';
+          updateHurtState();
+          feedbackStatus.textContent = `pufferfish sting: clicking locked (${hurtTimerText ? hurtTimerText.textContent : '1:00'})`;
           return;
         }
         recordDiscovery(hitFish.type.id);
         if (window.OceanFish.puff(hitFish)) {
           unlockAchievement('puff_puff');
-          clickLockUntil = Date.now() + 60 * 1000;
-          saveGameState();
+          triggerHurt(60000);
           feedbackStatus.textContent = 'pufferfish got you! no clicking for 1 minute.';
-          for (let i=0;i<8;i++) clickBubbles.push({ x, y: worldY, r: 1.5+Math.random()*3, sp: 0.3+Math.random()*0.7, ph: Math.random()*10, age:0, life: 900+Math.random()*700 });
+          for (let i=0;i<14;i++) clickBubbles.push({ x, y: worldY, r: 1.5+Math.random()*3.5, sp: 0.3+Math.random()*0.9, ph: Math.random()*10, age:0, life: 900+Math.random()*900 });
+          for (let i=0;i<10;i++) clickRipples.push({ x, y, r: 4+i*3, maxR: 30+i*8, age: 0, life: 500+i*40, alpha: 0.35 });
         } else {
           for (let i=0;i<4;i++) clickBubbles.push({ x, y: worldY, r: 1+Math.random()*2.2, sp: 0.25+Math.random()*0.5, ph: Math.random()*10, age:0, life: 700+Math.random()*500 });
         }
