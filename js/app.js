@@ -1408,7 +1408,6 @@
 
       drawMist();
       for (const layer of layers) drawWave(layer);
-      drawMoonShimmer();
       drawSurfaceLife();
       drawEquippedSurface();
       drawRipplesAndBubbles();
