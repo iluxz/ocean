@@ -148,6 +148,16 @@
       toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
     }
     const discoverHint = document.getElementById('discoverHint');
+    const oxygenHud = document.getElementById('oxygenHud');
+    const oxygenFill = document.getElementById('oxygenFill');
+    const oxygenText = document.getElementById('oxygenText');
+    const bossUi = document.getElementById('bossUi');
+    const bossHpFill = document.getElementById('bossHpFill');
+    const playerHpFill = document.getElementById('playerHpFill');
+    const bossLog = document.getElementById('bossLog');
+    const bossAttackBtn = document.getElementById('bossAttackBtn');
+    const bossGuardBtn = document.getElementById('bossGuardBtn');
+    const bossHealBtn = document.getElementById('bossHealBtn');
     const hurtVignette = document.getElementById('hurtVignette');
     const hurtTimer = document.getElementById('hurtTimer');
     const hurtTimerText = document.getElementById('hurtTimerText');
@@ -244,6 +254,245 @@
     } catch (_) {}
     let viewPush = 0; // forward/back camera push animation
     // lore: Deep Blue (guard) protects The Deep Blue, a submarine-ish facility controlling the ocean.
+
+    // Oxygen: drains everywhere except surface and facility. Refills at surface.
+    let oxygenMax = 100;
+    let oxygen = oxygenMax;
+    let oxygenWarned = false;
+
+    // Void Octopus bossfight: forward x2 + dive to hadal
+    const VOID_OCTOPUS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 520" width="600" height="520">
+  <defs>
+    <radialGradient id="body"><stop offset="0" stop-color="#102d46"/><stop offset=".7" stop-color="#06121f"/><stop offset="1" stop-color="#01050c"/></radialGradient>
+    <linearGradient id="tentacle" x2="0" y2="1"><stop stop-color="#123c58"/><stop offset=".5" stop-color="#071725"/><stop offset="1" stop-color="#01040a"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#b5ffff"/><stop offset=".3" stop-color="#36d9ff"/><stop offset="1" stop-color="#0875b8" stop-opacity="0"/></radialGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="12"/></filter>
+  </defs>
+  <ellipse cx="300" cy="210" rx="150" ry="160" fill="#0876a9" opacity=".13" filter="url(#blur)"/>
+  <g fill="none" stroke="url(#tentacle)" stroke-width="27" stroke-linecap="round">
+    <path d="M250 290 C180 330 80 290 65 370 C50 435 120 455 160 420"/>
+    <path d="M265 310 C210 390 180 450 220 480 C250 500 280 460 275 430"/>
+    <path d="M285 320 C270 400 320 450 355 465 C390 480 405 440 380 420"/>
+    <path d="M315 310 C390 370 490 350 515 415 C535 470 475 480 440 445"/>
+    <path d="M235 250 C150 240 105 190 65 230 C30 270 80 300 120 280"/>
+    <path d="M260 240 C190 180 200 100 150 100 C105 100 105 150 140 170"/>
+    <path d="M340 245 C420 190 440 115 485 130 C530 145 505 195 470 205"/>
+    <path d="M365 275 C450 260 530 275 545 325 C555 365 510 380 485 350"/>
+  </g>
+  <path d="M210 250 C175 170 215 70 300 55 C385 70 425 170 390 250 C370 290 330 310 300 310 C270 310 230 290 210 250Z" fill="url(#body)" stroke="#174967" stroke-width="4"/>
+  <path d="M245 115 Q300 85 355 115 M230 150 Q300 125 370 150" fill="none" stroke="#247da0" stroke-width="3" opacity=".4"/>
+  <ellipse cx="268" cy="235" rx="25" ry="32" fill="url(#glow)" opacity=".9"/>
+  <ellipse cx="332" cy="235" rx="25" ry="32" fill="url(#glow)" opacity=".9"/>
+  <ellipse cx="268" cy="235" rx="9" ry="15" fill="#a9faff"/>
+  <ellipse cx="332" cy="235" rx="9" ry="15" fill="#a9faff"/>
+  <ellipse cx="268" cy="235" rx="4" ry="9" fill="#00121d"/>
+  <ellipse cx="332" cy="235" rx="4" ry="9" fill="#00121d"/>
+  <g fill="#0b3045" stroke="#237b9b" stroke-width="2">
+    <circle cx="90" cy="365" r="7"/><circle cx="110" cy="400" r="7"/><circle cx="135" cy="425" r="7"/>
+    <circle cx="210" cy="450" r="7"/><circle cx="235" cy="475" r="7"/><circle cx="350" cy="455" r="7"/>
+    <circle cx="380" cy="455" r="7"/><circle cx="480" cy="445" r="7"/><circle cx="510" cy="415" r="7"/>
+    <circle cx="510" cy="320" r="7"/><circle cx="535" cy="340" r="7"/><circle cx="95" cy="265" r="7"/>
+    <circle cx="120" cy="155" r="7"/><circle cx="475" cy="160" r="7"/>
+  </g>
+  <g fill="#53cfff">
+    <circle cx="120" cy="65" r="3" opacity=".6"/><circle cx="450" cy="65" r="2" opacity=".5"/>
+    <circle cx="70" cy="180" r="2" opacity=".5"/><circle cx="530" cy="210" r="3" opacity=".4"/>
+    <circle cx="180" cy="490" r="2" opacity=".5"/><circle cx="420" cy="490" r="3" opacity=".4"/>
+  </g>
+</svg>`;
+    const VOID_OCTOPUS_IMG = new Image();
+    VOID_OCTOPUS_IMG.decoding = 'async';
+    VOID_OCTOPUS_IMG.src = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(VOID_OCTOPUS_SVG);
+    let voidOctopusDefeated = localStorage.getItem('ocean_void_octopus_defeated') === '1';
+    let boss = {
+      active: false, phase: 'intro', // intro, player, enemy, win, lose
+      hp: 140, maxHp: 140,
+      playerHp: 100, playerMaxHp: 100,
+      turn: 0, log: '', timer: 0, shake: 0, hitFlash: 0, playerFlash: 0,
+      ink: [], bubbles: [], phaseT: 0, guard: false
+    };
+
+    function isOctopusArena() { return perspective === 2 && cameraY >= 3.5 && cameraY < 4.5 && !isFacilityLayer(); }
+    function canStartOctopus() { return !voidOctopusDefeated && isOctopusArena() && !boss.active; }
+
+    function setBossLog(text) { boss.log = text; if (bossLog) bossLog.textContent = text; }
+    function syncBossUi() {
+      if (!bossUi) return;
+      bossUi.classList.toggle('open', !!boss.active);
+      bossUi.setAttribute('aria-hidden', boss.active ? 'false' : 'true');
+      if (bossHpFill) bossHpFill.style.width = Math.max(0, (boss.hp / boss.maxHp) * 100) + '%';
+      if (playerHpFill) playerHpFill.style.width = Math.max(0, (boss.playerHp / boss.playerMaxHp) * 100) + '%';
+      const canAct = boss.active && boss.phase === 'player';
+      [bossAttackBtn, bossGuardBtn, bossHealBtn].forEach(b => { if (b) b.disabled = !canAct; });
+    }
+
+    function startVoidOctopus() {
+      if (boss.active || voidOctopusDefeated) return;
+      if (photoMode) setPhotoMode(false);
+      boss.active = true;
+      boss.phase = 'intro';
+      boss.hp = boss.maxHp = 140;
+      boss.playerHp = boss.playerMaxHp = 100;
+      boss.turn = 0; boss.timer = 1.2; boss.shake = 0; boss.hitFlash = 0; boss.playerFlash = 0;
+      boss.ink = []; boss.bubbles = []; boss.phaseT = 0; boss.guard = false;
+      oxygen = Math.max(oxygen, 72); // enough oxygen to finish fight
+      setBossLog('a void octopus rises from the hadal dark...');
+      syncBossUi();
+      sfxDiscovery();
+    }
+
+    function endVoidOctopus(win) {
+      boss.phase = win ? 'win' : 'lose';
+      boss.timer = win ? 2.2 : 1.8;
+      if (win) {
+        voidOctopusDefeated = true;
+        localStorage.setItem('ocean_void_octopus_defeated', '1');
+        recordDiscovery('void_octopus');
+        unlockAchievement('octopus_slayer');
+        setBossLog('the void octopus retreats into the dark. hadal is calm again.');
+      } else {
+        setBossLog('the octopus overwhelms you... you drift back up.');
+      }
+      syncBossUi();
+    }
+
+    function bossEnemyTurn() {
+      boss.phase = 'enemy';
+      boss.phaseT = 0;
+      boss.timer = 0.9;
+      const dmgBase = 10 + Math.floor(Math.random() * 10);
+      const dmg = boss.guard ? Math.max(2, Math.floor(dmgBase * 0.45)) : dmgBase;
+      boss.guard = false;
+      boss.pendingDmg = dmg;
+      boss.pendingAtk = Math.random() < 0.35 ? 'ink' : 'slam';
+      setBossLog(boss.pendingAtk === 'ink' ? 'the void octopus blasts ink!' : 'the void octopus lashes its tentacles!');
+      syncBossUi();
+    }
+
+    function applyBossEnemyHit() {
+      const dmg = boss.pendingDmg || 8;
+      boss.playerHp = Math.max(0, boss.playerHp - dmg);
+      boss.playerFlash = 0.5;
+      boss.shake = 0.45;
+      if (boss.pendingAtk === 'ink') {
+        for (let i=0;i<16;i++) boss.ink.push({ x:w*0.5+(Math.random()-0.5)*120, y:h*0.45+(Math.random()-0.5)*80, vx:(Math.random()-0.5)*220, vy:(Math.random()-0.5)*120, r:10+Math.random()*30, a:0.35+Math.random()*0.35, life:1+Math.random()*0.8 });
+      }
+      if (boss.playerHp <= 0) { endVoidOctopus(false); return; }
+      boss.phase = 'player';
+      boss.timer = 0;
+      setBossLog(`you took ${dmg} damage. your move.`);
+      syncBossUi();
+    }
+
+    function bossPlayerAction(action) {
+      if (!boss.active || boss.phase !== 'player') return;
+      boss.turn++;
+      if (action === 'attack') {
+        const dmg = 14 + Math.floor(Math.random() * 10);
+        boss.hp = Math.max(0, boss.hp - dmg);
+        boss.hitFlash = 0.35;
+        boss.shake = 0.25;
+        setBossLog(`ink blast hits for ${dmg}!`);
+        sfxClick();
+      } else if (action === 'guard') {
+        boss.guard = true;
+        setBossLog('you brace for impact. next hit reduced.');
+        sfxClick();
+      } else if (action === 'heal') {
+        const heal = 12 + Math.floor(Math.random() * 8);
+        boss.playerHp = Math.min(boss.playerMaxHp, boss.playerHp + heal);
+        oxygen = Math.min(oxygenMax, oxygen + 8);
+        setBossLog(`you recharge ${heal} hp and a bit of oxygen.`);
+        sfxDiscovery();
+      }
+      syncBossUi();
+      if (boss.hp <= 0) { endVoidOctopus(true); return; }
+      setTimeout(() => { if (boss.active && boss.phase === 'player') bossEnemyTurn(); }, 420);
+      boss.phase = 'wait';
+      syncBossUi();
+    }
+
+    function updateBoss(dtMs) {
+      if (!boss.active) return;
+      const dt = dtMs / 1000;
+      boss.phaseT += dt;
+      boss.shake = Math.max(0, boss.shake - dt);
+      boss.hitFlash = Math.max(0, boss.hitFlash - dt * 1.8);
+      boss.playerFlash = Math.max(0, boss.playerFlash - dt * 1.8);
+      for (let i=boss.ink.length-1;i>=0;i--) { const p=boss.ink[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt*0.6; p.r+=dt*8; if(p.life<=0) boss.ink.splice(i,1); }
+      if (boss.phase === 'intro') { boss.timer -= dt; if (boss.timer <= 0) { boss.phase = 'player'; setBossLog('your move. ink blast, brace, or recharge.'); syncBossUi(); } }
+      else if (boss.phase === 'enemy') { boss.timer -= dt; if (boss.timer <= 0) applyBossEnemyHit(); }
+      else if (boss.phase === 'win' || boss.phase === 'lose') {
+        boss.timer -= dt;
+        if (boss.timer <= 0) {
+          const won = boss.phase === 'win';
+          boss.active = false;
+          bossUi.classList.remove('open');
+          if (!won) { oxygen = oxygenMax; setCamera(Math.max(0, cameraY - 1)); }
+          syncBossUi();
+        }
+      }
+    }
+
+    function drawBossFight() {
+      if (!boss.active || !isOctopusArena()) return;
+      const px = w * 0.5;
+      const py = h * 0.45;
+      const bob = Math.sin(animTime * 0.0018) * 10;
+      const sway = Math.sin(animTime * 0.0011) * 8;
+      const size = Math.min(w, h) * 0.42;
+      ctx.save();
+      if (boss.shake > 0) ctx.translate((Math.random()-0.5)*boss.shake*18, (Math.random()-0.5)*boss.shake*18);
+      const aura = ctx.createRadialGradient(px, py, 20, px, py, size*0.9);
+      aura.addColorStop(0, 'rgba(80,180,255,0.16)');
+      aura.addColorStop(1, 'rgba(80,180,255,0)');
+      ctx.fillStyle = aura; ctx.fillRect(0,0,w,h);
+      ctx.save();
+      ctx.translate(px + sway, py + bob);
+      const scale = 1 + Math.sin(animTime*0.0025)*0.02 + (boss.hitFlash>0?0.04:0);
+      ctx.scale(scale, scale);
+      ctx.globalAlpha = 0.96;
+      if (VOID_OCTOPUS_IMG.complete && VOID_OCTOPUS_IMG.naturalWidth) {
+        ctx.drawImage(VOID_OCTOPUS_IMG, -size/2, -size/2, size, size);
+      }
+      if (boss.hitFlash > 0) { ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = boss.hitFlash; ctx.fillStyle='rgba(180,240,255,0.8)'; ctx.beginPath(); ctx.ellipse(0,-20,size*0.28,size*0.32,0,0,Math.PI*2); ctx.fill(); }
+      ctx.restore();
+      for (const p of boss.ink) { ctx.globalAlpha = Math.max(0, p.life) * p.a; ctx.fillStyle='rgba(30,10,50,0.9)'; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill(); }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      if (boss.playerFlash > 0) { ctx.fillStyle = `rgba(255,80,110,${boss.playerFlash*0.22})`; ctx.fillRect(0,0,w,h); }
+    }
+
+    function updateOxygen(dt) {
+      if (corrupted) return;
+      const onSurface = cameraY <= 0.2;
+      const inFacility = isFacilityLayer();
+      if (onSurface) {
+        oxygen = Math.min(oxygenMax, oxygen + dt * 28);
+        oxygenWarned = false;
+      } else if (!inFacility) {
+        const drain = boss.active ? 0.45 : (3.1 + Math.max(0, cameraY - 1) * 0.28);
+        oxygen = Math.max(0, oxygen - dt * drain);
+        if (oxygen <= 25 && !oxygenWarned && !boss.active) { oxygenWarned = true; showToast('oxygen low', 'head up before you run out of air.', 2400); }
+        if (oxygen <= 0) {
+          oxygen = oxygenMax;
+          oxygenWarned = false;
+          if (boss.active) {
+            endVoidOctopus(false);
+          } else {
+            showToast('out of oxygen', 'you blacked out and drifted back to the surface.', 3200);
+            setCamera(0);
+          }
+        }
+      }
+      if (oxygenHud) {
+        oxygenHud.classList.toggle('hidden', inFacility);
+        oxygenHud.classList.toggle('low', oxygen <= 35 && oxygen > 18);
+        oxygenHud.classList.toggle('critical', oxygen <= 18);
+      }
+      if (oxygenFill) oxygenFill.style.width = Math.max(0, Math.min(100, oxygen)) + '%';
+      if (oxygenText) oxygenText.textContent = Math.ceil(Math.max(0, oxygen)) + '%';
+    }
     bgm.volume = masterVolume;
 
     function svgThumb(title, emoji, c1, c2) {
@@ -318,7 +567,8 @@
       { id:'basinlantern', name:'Basin Lantern', desc:'A lantern-lit hadal fish, glowing softly where light shouldn\'t exist.', emoji:'🏮', c1:'#2a1230', c2:'#e7839b', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.basinlantern) },
       { id:'emberwhip', name:'Ember Whip', desc:'A hot-tailed hadal fish with an ember glow trailing behind it.', emoji:'🔥', c1:'#301018', c2:'#ef9b80', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.emberwhip) },
       { id:'palesentinel', name:'Pale Sentinel', desc:'A pale void watcher, drifting silently through the black like a ghost.', emoji:'👻', c1:'#0b1028', c2:'#778ac1', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.palesentinel) },
-      { id:'thewatcher', name:'The Watcher', desc:'It doesn\'t swim so much as observe. the void stares back.', emoji:'👁️', c1:'#050510', c2:'#7777a5', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.thewatcher) }
+      { id:'thewatcher', name:'The Watcher', desc:'It doesn\'t swim so much as observe. the void stares back.', emoji:'👁️', c1:'#050510', c2:'#7777a5', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.thewatcher) },
+      { id:'void_octopus', name:'Void Octopus', desc:'A massive void octopus rose from the hadal dark. you survived the encounter.', emoji:'🦑', c1:'#08162a', c2:'#5d49a8', img: () => 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(VOID_OCTOPUS_SVG) }
     ];
     const ACHIEVEMENT_DEFS = [
       { id:'first_find', name:'First Discovery', desc:'Find your first discovery.', check: () => discoveries.length >= 1 },
@@ -340,7 +590,8 @@
       { id:'void_fauna', name:'Void Fauna', desc:'Discover the void fish: Pale Sentinel and The Watcher.', check: () => ['palesentinel','thewatcher'].every(id => discoveries.includes(id)) },
       { id:'abyssal_biologist', name:'Abyssal Biologist', desc:'Discover every fish species in the ocean, from surface to void.', check: () => ALL_FISH_IDS.every(id => discoveries.includes(id)) },
       { id:'puff_puff', name:'Puff Puff', desc:'Click a pufferfish and make it puff up.', check: () => achievements.includes('puff_puff') },
-      { id:'deep_blue', name:'Deep Blue', desc:'Stop the wipeout supply in The Deep Blue facility.', check: () => achievements.includes('deep_blue') }
+      { id:'deep_blue', name:'Deep Blue', desc:'Stop the wipeout supply in The Deep Blue facility.', check: () => achievements.includes('deep_blue') },
+      { id:'octopus_slayer', name:'Octopus Slayer', desc:'Defeat the Void Octopus in the hadal depths.', check: () => achievements.includes('octopus_slayer') }
     ];
 
     function saveSettings() {
@@ -378,7 +629,8 @@
     const SAVE_KEYS = [
       'ocean_settings','ocean_discoveries','ocean_achievements','ocean_equipped',
       'ocean_clicks','ocean_photos','ocean_bottles_found','ocean_bottom_trips',
-      'ocean_click_lock_until','ocean_void_quest','ocean_facility','ocean_perspective'
+      'ocean_click_lock_until','ocean_void_quest','ocean_facility','ocean_perspective',
+      'ocean_void_octopus_defeated'
     ];
     const SAVE_FORMAT = 'ocsv';
     const SAVE_VERSION = 2;
@@ -571,7 +823,7 @@
       try { document.querySelectorAll('audio').forEach(a => { if (a.id !== 'corruptAudio') { try { a.pause(); a.muted = true; a.volume = 0; } catch(_){} } }); } catch (_) {}
 
       // hide all UI
-      document.querySelectorAll('.ui, .modal, .hint, .settings-wrap, .photo-exit, .toast, #toast').forEach(el => {
+      document.querySelectorAll('.ui, .modal, .hint, .settings-wrap, .photo-exit, .toast, #toast, #bossUi, #oxygenHud').forEach(el => {
         el.style.display = 'none';
       });
       document.body.style.background = '#000';
@@ -2255,6 +2507,9 @@
         }
       }
       updateVoidQuest();
+      updateOxygen(dt);
+      updateBoss(dt * 1000);
+      if (canStartOctopus()) startVoidOctopus();
 
       ctx.clearRect(0, 0, w, h);
       const camPx = cameraY * h;
@@ -2607,6 +2862,7 @@
     setWeather.addEventListener('change', () => { weatherMode = setWeather.value; sfxClick(); saveSettings(); });
     setMotion.addEventListener('change', () => { reducedMotion = setMotion.checked; sfxClick(); saveSettings(); });
     function setPhotoMode(on) {
+      if (on && boss.active) { showToast('boss fight', 'not now. the void octopus is watching.', 1400); setPhoto.checked = false; return; }
       photoMode = !!on;
       setPhoto.checked = photoMode;
       document.body.classList.toggle('photo-mode', photoMode);
@@ -2618,10 +2874,10 @@
     }
     setPhoto.addEventListener('change', () => { setPhotoMode(setPhoto.checked); sfxClick(); });
     photoExitBtn.addEventListener('click', (e) => { e.stopPropagation(); setPhotoMode(false); sfxClick(); });
-    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.min(currentBottomDepth(), cameraTarget + 1)); sfxDive(true); });
-    goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); setCamera(Math.max(0, cameraTarget - 1)); sfxDive(false); });
-    goForwardBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!canUsePerspective() || perspective >= MAX_PERSPECTIVE) return; perspective = Math.min(MAX_PERSPECTIVE, perspective + 1); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
-    goBackBtn.addEventListener('click', (e) => { e.stopPropagation(); if (perspective <= 0) return; perspective = Math.max(0, perspective - 1); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
+    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); if (boss.active) { showToast('boss fight', 'you can\'t leave during the void octopus fight.', 1600); return; } setCamera(Math.min(currentBottomDepth(), cameraTarget + 1)); sfxDive(true); });
+    goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); if (boss.active) { showToast('boss fight', 'brace, fight, or recharge. no running up.', 1600); return; } setCamera(Math.max(0, cameraTarget - 1)); sfxDive(false); });
+    goForwardBtn.addEventListener('click', (e) => { e.stopPropagation(); if (boss.active) { showToast('boss fight', 'the void octopus blocks your path.', 1600); return; } if (!canUsePerspective() || perspective >= MAX_PERSPECTIVE) return; perspective = Math.min(MAX_PERSPECTIVE, perspective + 1); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
+    goBackBtn.addEventListener('click', (e) => { e.stopPropagation(); if (boss.active) { showToast('boss fight', 'focus on the fight first.', 1600); return; } if (perspective <= 0) return; perspective = Math.max(0, perspective - 1); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
     photoBtn.addEventListener('click', (e) => { e.stopPropagation(); savePhoto(); });
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
     logClose.addEventListener('click', () => { logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); });
@@ -2633,6 +2889,9 @@
     updateClose.addEventListener('click', () => { updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); });
     updateModal.addEventListener('click', (e) => { if (e.target === updateModal) updateClose.click(); });
     crashBtn.addEventListener('click', (e) => { e.stopPropagation(); unlockAchievement('chaos'); startAudio(); setTimeout(() => { throw new Error('manual ocean crash initiated by user'); }, 30); });
+    bossAttackBtn.addEventListener('click', (e) => { e.stopPropagation(); bossPlayerAction('attack'); });
+    bossGuardBtn.addEventListener('click', (e) => { e.stopPropagation(); bossPlayerAction('guard'); });
+    bossHealBtn.addEventListener('click', (e) => { e.stopPropagation(); bossPlayerAction('heal'); });
     exportSaveBtn.addEventListener('click', (e) => { e.stopPropagation(); exportSave(); });
     importSaveBtn.addEventListener('click', (e) => { e.stopPropagation(); importSaveInput.value = ''; importSaveInput.click(); });
     importSaveInput.addEventListener('change', (e) => {
@@ -2649,6 +2908,7 @@
       if (corrupted) return;
       if (e.target.closest('.settings-wrap') || e.target.closest('.modal')) return;
       startAudio();
+      if (boss.active) { sfxClick(); return; }
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
@@ -2878,4 +3138,6 @@
     renderAchievements();
     renderDiscoveries();
     syncSettingsUI();
+    syncBossUi();
+    updateOxygen(0);
   

@@ -185,12 +185,47 @@
       transition: opacity .6s ease;
     }
     .hint.hidden { opacity: 0; }
+    .oxygen-hud { position: fixed; left: 18px; top: 18px; z-index: 12; width: min(220px, calc(100vw - 110px)); padding: 10px 12px; border-radius: 14px; border: 1px solid rgba(126,200,255,0.2); background: rgba(3,16,34,0.5); backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+    .oxygen-hud.hidden { display: none; }
+    .oxygen-label { display:flex; justify-content:space-between; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color: var(--muted); margin-bottom:6px; }
+    .oxygen-bar { height: 10px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow:hidden; border:1px solid rgba(126,200,255,0.12); }
+    .oxygen-fill { height:100%; width:100%; background: linear-gradient(90deg, #7ec8ff, #b8ecff); box-shadow: 0 0 12px rgba(126,200,255,0.45); transition: width .15s linear, background .2s ease; }
+    .oxygen-hud.low .oxygen-fill { background: linear-gradient(90deg, #ff9d6b, #ffd08a); box-shadow: 0 0 12px rgba(255,160,120,0.45); }
+    .oxygen-hud.critical .oxygen-fill { background: linear-gradient(90deg, #ff5f7a, #ff9d6b); }
+    .boss-ui { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); z-index: 14; padding: 14px; border-radius: 16px; border: 1px solid rgba(140,120,255,0.28); background: rgba(6,10,28,0.72); backdrop-filter: blur(10px); box-shadow: 0 20px 50px rgba(0,0,0,0.45); display:none; }
+    .boss-ui.open { display:block; }
+    .boss-title { font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:#cbbcff; margin-bottom:10px; text-align:center; }
+    .boss-hp-row { display:grid; grid-template-columns:42px 1fr; gap:10px; align-items:center; margin-bottom:8px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+    .boss-hp-bar { height:10px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; border:1px solid rgba(140,120,255,0.16); }
+    .boss-hp-bar.player { border-color: rgba(126,200,255,0.16); }
+    .boss-hp-fill { height:100%; width:100%; background: linear-gradient(90deg,#7a5ad0,#c59cff); transition: width .2s ease; }
+    .boss-hp-fill.player { background: linear-gradient(90deg,#4fa8d8,#9fe0ff); }
+    .boss-actions { display:flex; gap:8px; margin:10px 0 8px; }
+    .boss-actions .btn { flex:1; padding:10px 8px; }
+    .boss-actions .btn:disabled { opacity:0.45; cursor:not-allowed; transform:none; }
+    .boss-log { min-height:20px; font-size:12px; color:rgba(236,247,255,0.8); text-align:center; line-height:1.4; }
+    @media (max-width:640px) { .boss-actions { flex-direction:column; } .oxygen-hud { left:12px; top:12px; width:170px; } }
   </style>
 </head>
 <body>
   <canvas id="ocean"></canvas>
   <div class="hurt-vignette" id="hurtVignette"></div>
   <div class="hurt-timer" id="hurtTimer"><span class="dot"></span>sting <span id="hurtTimerText">1:00</span></div>
+  <div class="oxygen-hud ui" id="oxygenHud" aria-live="polite">
+    <div class="oxygen-label"><span>O2</span><span id="oxygenText">100%</span></div>
+    <div class="oxygen-bar"><div class="oxygen-fill" id="oxygenFill"></div></div>
+  </div>
+  <div class="boss-ui ui" id="bossUi" aria-hidden="true">
+    <div class="boss-title" id="bossTitle">VOID OCTOPUS</div>
+    <div class="boss-hp-row"><span id="bossHpLabel">boss</span><div class="boss-hp-bar"><div class="boss-hp-fill" id="bossHpFill"></div></div></div>
+    <div class="boss-hp-row"><span>you</span><div class="boss-hp-bar player"><div class="boss-hp-fill player" id="playerHpFill"></div></div></div>
+    <div class="boss-actions" id="bossActions">
+      <button class="btn" id="bossAttackBtn" type="button">ink blast</button>
+      <button class="btn" id="bossGuardBtn" type="button">brace</button>
+      <button class="btn" id="bossHealBtn" type="button">recharge</button>
+    </div>
+    <div class="boss-log" id="bossLog">a void octopus rises from the hadal dark...</div>
+  </div>
 
   <div class="settings-wrap ui">
     <button class="btn" id="settingsBtn" type="button" aria-expanded="false" aria-controls="settingsPanel">settings</button>
