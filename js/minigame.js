@@ -145,13 +145,13 @@
             <div class="mg-hint" id="mgHint"></div>
             <div class="mg-input-row">
               <input id="mgInput" type="text" maxlength="80" placeholder="type your rarest answer..." autocomplete="off" />
-              <button class="mg-btn primary" id="mgSubmit" type="button">dive</button>
             </div>
             <div class="mg-result" id="mgResult">the deeper you go, the rarer your answer needs to be.</div>
             <div class="mg-history" id="mgHistory"></div>
           </div>
         </div>
         <div class="mg-footer">
+          <button class="mg-btn primary" id="mgSubmit" type="button">dive</button>
           <button class="mg-btn" id="mgRestart" type="button">restart</button>
           <button class="mg-btn" id="mgQuit" type="button">quit</button>
         </div>
