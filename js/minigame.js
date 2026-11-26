@@ -93,14 +93,7 @@
   }
 
   function createUI() {
-    if (document.getElementById('minigameBtn')) return;
-    const btn = document.createElement('button');
-    btn.id = 'minigameBtn';
-    btn.className = 'minigame-arrow ui';
-    btn.type = 'button';
-    btn.setAttribute('aria-label', 'Open Deep Dive minigame');
-    btn.innerHTML = '<span>deep dive</span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
-    document.body.appendChild(btn);
+    if (document.getElementById('minigameModal')) return;
 
     const modal = document.createElement('div');
     modal.id = 'minigameModal';
@@ -142,11 +135,9 @@
 
     const style = document.createElement('style');
     style.textContent = `
-      .minigame-arrow{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:12;border:1px solid rgba(126,200,255,0.22);border-right:0;background:rgba(3,16,34,0.55);color:var(--text);padding:12px 10px 12px 12px;border-radius:14px 0 0 14px;cursor:pointer;backdrop-filter:blur(8px);display:flex;align-items:center;gap:8px;font:inherit;font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
-      .minigame-arrow:hover{background:rgba(10,36,68,0.72);border-color:rgba(126,200,255,0.4);}
-      .minigame-arrow span{writing-mode:vertical-rl;transform:rotate(180deg);line-height:1;}
-      @media (max-width:700px){.minigame-arrow span{display:none;}.minigame-arrow{padding:12px 8px;}}
-      .minigame-card{width:min(980px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto;}
+      #minigameModal{position:fixed;inset:0;display:none;z-index:40;background:rgba(2,8,20,0.72);backdrop-filter:blur(6px);padding:18px;}
+      #minigameModal.open{display:flex;align-items:center;justify-content:center;}
+      .minigame-card{width:min(1100px,100%);max-height:calc(100vh - 36px);overflow:auto;background:rgba(3,16,34,0.94);border:1px solid rgba(126,200,255,0.2);border-radius:16px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.45);}
       .minigame-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;}
       .minigame-head h2{margin-bottom:4px;}
       .minigame-sub{font-size:12px;color:var(--muted);line-height:1.5;}
@@ -389,13 +380,14 @@
 
     function closeGame() { modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
     function openGame() { modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); resizeCanvas(); renderState(); setTimeout(()=>input.focus(),50); }
-    document.getElementById('minigameBtn').addEventListener('click', openGame);
-    close.addEventListener('click', closeGame);
-    quit.addEventListener('click', closeGame);
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeGame(); });
-    submit.addEventListener('click', submitAnswer);
-    restart.addEventListener('click', reset);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitAnswer(); } });
+    const mgBtn = document.getElementById('minigameBtn');
+    if (mgBtn) mgBtn.addEventListener('click', openGame);
+    close.onclick = closeGame;
+    quit.onclick = closeGame;
+    modal.onclick = (e) => { if (e.target === modal) closeGame(); };
+    submit.onclick = submitAnswer;
+    restart.onclick = (e) => { e.preventDefault(); reset(); };
+    input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); submitAnswer(); } };
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) closeGame(); });
     window.addEventListener('resize', () => { if (modal.classList.contains('open')) resizeCanvas(); });
     renderState();
