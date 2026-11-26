@@ -81,7 +81,7 @@
     style.textContent = `
       #minigameModal{position:fixed;inset:0;display:none;z-index:60;background:rgba(2,8,20,0.72);backdrop-filter:blur(6px);padding:16px;}
       #minigameModal.open{display:flex;align-items:center;justify-content:center;}
-      .mg-card{width:min(1120px,100%);max-height:calc(100vh - 32px);overflow:auto;background:rgba(3,16,34,0.96);border:1px solid rgba(126,200,255,0.2);border-radius:16px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.45);color:var(--text,#ecf7ff);font-family:Consolas,"Lucida Console","Courier New",monospace;}
+      .mg-card{width:min(1120px,100%);max-height:calc(100vh - 32px);overflow:auto;background:rgba(3,16,34,0.96);border:1px solid rgba(126,200,255,0.2);border-radius:16px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.45);color:var(--text,#ecf7ff);font-family:Consolas,"Lucida Console","Courier New",monospace;display:flex;flex-direction:column;}
       .mg-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;}
       .mg-head h2{margin:0 0 4px;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:rgba(236,247,255,.72);font-weight:500;}
       .mg-sub{font-size:12px;color:rgba(236,247,255,.62);line-height:1.5;}
@@ -109,8 +109,8 @@
       .mg-btn:hover{background:rgba(126,200,255,0.12);border-color:rgba(126,200,255,0.4);}
       .mg-btn:disabled{opacity:.55;cursor:not-allowed;}
       .mg-btn.primary{background:rgba(126,200,255,0.14);}
-      .mg-footer{display:flex;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(126,200,255,0.12);}
-      .mg-footer .mg-btn{flex:1;justify-content:center;text-align:center;padding:12px 14px;font-size:13px;}
+      .mg-footer{display:flex;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(126,200,255,0.12);flex-shrink:0;background:rgba(3,16,34,0.96);position:sticky;bottom:0;}
+      .mg-footer .mg-btn{flex:1;justify-content:center;text-align:center;padding:12px 14px;font-size:13px;min-height:44px;}
       .mg-input-row .mg-btn{min-width:100px;}
       @media (max-width:900px){.mg-layout{grid-template-columns:1fr;}.mg-visual{min-height:280px;height:320px;}.mg-question{font-size:20px;}}
       @media (max-width:560px){#minigameModal{padding:10px;}.mg-card{padding:12px;}.mg-status{grid-template-columns:1fr 1fr 1fr;}.mg-footer{flex-direction:column;}}
