@@ -2006,7 +2006,7 @@
       goBackBtn.disabled = facilityNow || perspective === 0;
       goForwardBtn.style.opacity = goForwardBtn.disabled ? '0.45' : '1';
       goBackBtn.style.opacity = goBackBtn.disabled ? '0.45' : '1';
-      goForwardBtn.textContent = perspective === 1 ? 'forward view' : 'go forwards';
+      goForwardBtn.textContent = 'go forwards';
       document.body.classList.toggle('photo-mode', photoMode);
       discoverHint.textContent = `discoveries: ${discoveries.length}/${DISCOVERY_DEFS.length} found • depth: ${depthLabel(cameraTarget)}`;
       renderDiscoveries();
