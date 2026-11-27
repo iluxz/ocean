@@ -202,7 +202,7 @@
     let photoMode = false;
     let forcedMode = 'night'; // 'day' | 'night' | null
     let manualDayPhase = 0.75;
-    let weatherMode = 'auto'; // auto|clear|rain|storm
+    let weatherMode = 'auto'; // auto|clear|rain|storm|snow
     let weatherIntensity = 0;
     let weatherTarget = 0;
     let dayFactor = 0;
@@ -252,6 +252,7 @@
       const sf = JSON.parse(localStorage.getItem('ocean_facility') || 'null');
       if (sf && typeof sf === 'object') facility = { ...facility, ...sf, code:'BLUE' };
     } catch (_) {}
+    let shipLooted = localStorage.getItem('ocean_ship_looted') === '1';
     let viewPush = 0; // forward/back camera push animation
     // lore: Deep Blue (guard) protects The Deep Blue, a submarine-ish facility controlling the ocean.
 
@@ -566,6 +567,7 @@
       { id:'scarletveil', name:'Scarlet Veil', desc:'A red hadal drifter with fins like torn silk in crushing pressure.', emoji:'🩸', c1:'#2a0a18', c2:'#d26780', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.scarletveil) },
       { id:'basinlantern', name:'Basin Lantern', desc:'A lantern-lit hadal fish, glowing softly where light shouldn\'t exist.', emoji:'🏮', c1:'#2a1230', c2:'#e7839b', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.basinlantern) },
       { id:'emberwhip', name:'Ember Whip', desc:'A hot-tailed hadal fish with an ember glow trailing behind it.', emoji:'🔥', c1:'#301018', c2:'#ef9b80', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.emberwhip) },
+      { id:'shipwreck', name:'Sunken Wreck', desc:'A broken wooden ship resting in the hadal dark. you looted what was left inside.', emoji:'🚢', c1:'#2a1e15', c2:'#8a6b4e' },
       { id:'palesentinel', name:'Pale Sentinel', desc:'A pale void watcher, drifting silently through the black like a ghost.', emoji:'👻', c1:'#0b1028', c2:'#778ac1', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.palesentinel) },
       { id:'thewatcher', name:'The Watcher', desc:'It doesn\'t swim so much as observe. the void stares back.', emoji:'👁️', c1:'#050510', c2:'#7777a5', img: () => window.OceanFish && 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(window.OceanFish.SVGs.thewatcher) },
       { id:'void_octopus', name:'Void Octopus', desc:'A massive void octopus rose from the hadal dark. you survived the encounter.', emoji:'🦑', c1:'#08162a', c2:'#5d49a8', img: () => 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(VOID_OCTOPUS_SVG) }
@@ -610,6 +612,7 @@
         localStorage.setItem('ocean_void_quest', JSON.stringify(quest));
         localStorage.setItem('ocean_facility', JSON.stringify(facility));
         localStorage.setItem('ocean_perspective', String(perspective));
+        localStorage.setItem('ocean_ship_looted', shipLooted ? '1' : '0');
       } catch (_) {}
     }
     function loadSettings() {
@@ -620,7 +623,7 @@
         if (typeof s.dayCycle === 'boolean') dayCycle = s.dayCycle;
         if (typeof s.cycleSpeed === 'number') cycleSpeed = Math.max(0.2, Math.min(3, s.cycleSpeed));
         if (s.forcedMode === 'day' || s.forcedMode === 'night' || s.forcedMode === null) forcedMode = s.forcedMode;
-        if (['auto','clear','rain','storm'].includes(s.weatherMode)) weatherMode = s.weatherMode;
+        if (['auto','clear','rain','storm','snow'].includes(s.weatherMode)) weatherMode = s.weatherMode;
         if (typeof s.reducedMotion === 'boolean') reducedMotion = s.reducedMotion;
       } catch (_) {}
     }
@@ -629,7 +632,7 @@
     const SAVE_KEYS = [
       'ocean_settings','ocean_discoveries','ocean_achievements','ocean_equipped',
       'ocean_clicks','ocean_photos','ocean_bottles_found','ocean_bottom_trips',
-      'ocean_click_lock_until','ocean_void_quest','ocean_facility','ocean_perspective',
+      'ocean_click_lock_until','ocean_void_quest','ocean_facility','ocean_perspective','ocean_ship_looted',
       'ocean_void_octopus_defeated'
     ];
     const SAVE_FORMAT = 'ocsv';
@@ -1311,6 +1314,7 @@
     }
 
     const rainDrops = Array.from({ length: 220 }, () => ({ x: Math.random(), y: Math.random(), l: 8 + Math.random()*16, s: 0.6 + Math.random()*1.2 }));
+    const snowFlakes = Array.from({ length: 180 }, () => ({ x: Math.random(), y: Math.random(), r: 1.2 + Math.random()*2.8, s: 0.35 + Math.random()*0.8, ph: Math.random()*Math.PI*2, drift: 0.3 + Math.random()*0.8 }));
     const birds = Array.from({ length: 5 }, (_, i) => ({ x: Math.random(), y: 0.08 + i*0.03, s: 0.5 + Math.random()*0.6, sp: 0.00001 + Math.random()*0.00001, ph: Math.random()*10 }));
     const bottle = {
       x: -0.2,
@@ -1468,8 +1472,35 @@
 
     function drawWeather() {
       if (weatherIntensity <= 0.01) return;
-      const count = Math.min(rainDrops.length, Math.floor((reducedMotion ? 20 : 40) + weatherIntensity * (reducedMotion ? 70 : 140)));
       const horizon = h * 0.58;
+      const isSnow = weatherMode === 'snow';
+      if (isSnow) {
+        const count = Math.min(snowFlakes.length, Math.floor((reducedMotion ? 20 : 40) + weatherIntensity * (reducedMotion ? 50 : 90)));
+        ctx.save();
+        for (let i=0; i<count; i++) {
+          const f = snowFlakes[i];
+          const x = ((f.x * w) + Math.sin(animTime * 0.00035 * f.drift + f.ph) * 22 * f.drift + animTime * 0.01 * f.drift) % (w + 20) - 10;
+          const travel = h + 30;
+          const yRaw = f.y * h + animTime * (0.03 + weatherIntensity * 0.025) * f.s * 60;
+          const prev = f._yRaw ?? yRaw;
+          const y = (yRaw % travel) - 20;
+          const prevY = (prev % travel) - 20;
+          const waterY = getWaveY(x, horizon);
+          const crossed = (prevY < waterY && y >= waterY) || (yRaw - prev > travel * 0.5);
+          if (crossed && Math.random() < 0.25) {
+            ripples.push({ x, y: waterY + 1, r: 1 + Math.random()*1.8, age: 0, life: 450 + Math.random()*300, rain: true });
+            if (ripples.length > 140) ripples.splice(0, ripples.length - 140);
+          }
+          f._yRaw = yRaw;
+          if (y >= waterY) continue;
+          const a = 0.35 + weatherIntensity * 0.25 + f.r * 0.04;
+          ctx.fillStyle = `rgba(235,245,255,${Math.min(0.95,a).toFixed(3)})`;
+          ctx.beginPath(); ctx.arc(x, y, f.r, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+        return;
+      }
+      const count = Math.min(rainDrops.length, Math.floor((reducedMotion ? 20 : 40) + weatherIntensity * (reducedMotion ? 70 : 140)));
       ctx.save();
       ctx.lineCap = 'round';
       for (let i=0; i<count; i++) {
@@ -2475,6 +2506,7 @@
       if (weatherMode === 'clear') weatherTarget = 0;
       else if (weatherMode === 'rain') weatherTarget = 1;
       else if (weatherMode === 'storm') weatherTarget = 1.8;
+      else if (weatherMode === 'snow') weatherTarget = 0.9;
       else {
         const phase = getCyclePhase();
         const night = Math.cos(phase * Math.PI * 2) < -0.1 ? 1 : 0;
@@ -2487,7 +2519,7 @@
       // lightning
       lightning = Math.max(0, lightning - dt * 2.2);
       nextLightning -= dt * 1000;
-      if (weatherIntensity > 1.2 && nextLightning <= 0) {
+      if (weatherIntensity > 1.2 && nextLightning <= 0 && weatherMode !== 'snow') {
         lightning = 0.8 + Math.random() * 0.6;
         nextLightning = (3500 + Math.random() * 7000) / Math.max(0.5, weatherIntensity - 0.4);
         sfxThunder();
@@ -2621,6 +2653,78 @@
         ctx.strokeStyle='rgba(255,100,150,0.18)'; ctx.lineWidth=2;
         for(let i=0;i<5;i++){ const fx=w*(0.15+i*0.18); ctx.beginPath(); ctx.moveTo(fx,h*0.9); ctx.lineTo(fx+20,h*0.65); ctx.lineTo(fx-10,h*0.45); ctx.stroke(); }
         const rg=ctx.createRadialGradient(w*0.5,h*0.75,10,w*0.5,h*0.75,w*0.4); rg.addColorStop(0,'rgba(255,60,120,0.08)'); rg.addColorStop(1,'rgba(255,60,120,0)'); ctx.fillStyle=rg; ctx.fillRect(0,0,w,h);
+                // sunken wooden ship
+        const sx=w*0.52, sy=h*0.8, sw=Math.min(w*0.34, 520), sh=sw*0.22;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(-0.22);
+        // seabed shadow
+        ctx.fillStyle='rgba(0,0,0,0.28)';
+        ctx.beginPath(); ctx.ellipse(0, sh*0.55, sw*0.52, sh*0.22, 0, 0, Math.PI*2); ctx.fill();
+        // hull
+        ctx.fillStyle='rgba(36,24,16,0.9)';
+        ctx.beginPath();
+        ctx.moveTo(-sw*0.52, -sh*0.05);
+        ctx.quadraticCurveTo(-sw*0.56, sh*0.28, -sw*0.3, sh*0.48);
+        ctx.lineTo(sw*0.28, sh*0.42);
+        ctx.quadraticCurveTo(sw*0.52, sh*0.34, sw*0.58, sh*0.05);
+        ctx.lineTo(sw*0.5, -sh*0.12);
+        ctx.lineTo(-sw*0.46, -sh*0.18);
+        ctx.closePath();
+        ctx.fill();
+        // deck rim
+        ctx.fillStyle='rgba(58,40,28,0.95)';
+        ctx.beginPath();
+        ctx.moveTo(-sw*0.46, -sh*0.18);
+        ctx.lineTo(sw*0.5, -sh*0.12);
+        ctx.lineTo(sw*0.46, -sh*0.02);
+        ctx.lineTo(-sw*0.42, -sh*0.08);
+        ctx.closePath();
+        ctx.fill();
+        // hull planks
+        ctx.strokeStyle='rgba(95,68,45,0.28)';
+        ctx.lineWidth=Math.max(1, sw*0.004);
+        for(let i=-4;i<=4;i++){
+          const px=i*sw*0.095;
+          ctx.beginPath(); ctx.moveTo(px-sw*0.02,-sh*0.14); ctx.lineTo(px+sw*0.02,sh*0.42); ctx.stroke();
+        }
+        for(let i=0;i<4;i++){
+          const yy=-sh*0.02 + i*sh*0.13;
+          ctx.beginPath(); ctx.moveTo(-sw*0.48,yy-i*0.8); ctx.quadraticCurveTo(0,yy+sh*0.04,sw*0.52,yy-sh*0.02); ctx.stroke();
+        }
+        // broken mast
+        ctx.save();
+        ctx.translate(-sw*0.08, -sh*0.12);
+        ctx.rotate(-0.08);
+        ctx.fillStyle='rgba(52,36,24,0.95)';
+        ctx.fillRect(-sw*0.012,-sh*1.55, sw*0.024, sh*1.55);
+        ctx.fillStyle='rgba(45,31,21,0.9)';
+        ctx.fillRect(sw*0.12,-sh*1.05, sw*0.02, sh*1.0);
+        // yardarm
+        ctx.fillRect(-sw*0.2,-sh*1.22, sw*0.34, sh*0.045);
+        // torn sail
+        ctx.fillStyle='rgba(150,165,180,0.12)';
+        ctx.beginPath();
+        ctx.moveTo(-sw*0.18,-sh*1.18);
+        ctx.lineTo(sw*0.12,-sh*1.18);
+        ctx.lineTo(sw*0.08,-sh*0.62);
+        ctx.lineTo(-sw*0.02,-sh*0.45);
+        ctx.lineTo(-sw*0.16,-sh*0.72);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle='rgba(190,205,220,0.12)';
+        ctx.lineWidth=1;
+        ctx.stroke();
+        ctx.restore();
+        // bow break / hole
+        ctx.fillStyle='rgba(5,8,14,0.45)';
+        ctx.beginPath(); ctx.ellipse(sw*0.18, sh*0.12, sw*0.08, sh*0.09, 0.2, 0, Math.PI*2); ctx.fill();
+        // cabin stub
+        ctx.fillStyle='rgba(44,31,22,0.88)';
+        ctx.fillRect(sw*0.2,-sh*0.34, sw*0.16, sh*0.24);
+        ctx.fillStyle='rgba(10,12,18,0.35)';
+        ctx.fillRect(sw*0.24,-sh*0.28, sw*0.04, sh*0.08);
+        ctx.restore();
         ctx.restore();
       } else if (perspective === 2) {
         ctx.save();
@@ -2985,6 +3089,24 @@
       if (perspective === 1 && cameraY < 0.5) {
         const bergs = getIcebergs();
         for (const b of bergs) { if (Math.abs(x-b.x)<b.w*0.45 && Math.abs(y-b.y)<b.h*0.6) { sfxClick(); feedbackStatus.textContent='you tapped an iceberg. it does nothing. majestic.'; return; } }
+      }
+      if (perspective === 1 && cameraY >= 3.5 && cameraY < 4.5) {
+        const localY = worldY - h * 4;
+        const sx=w*0.52, sy=h*0.8, sw=Math.min(w*0.34, 520), sh=sw*0.22;
+        if (x > sx-sw*0.62 && x < sx+sw*0.62 && localY > sy-sh*1.7 && localY < sy+sh*0.75) {
+          if (shipLooted) {
+            showToast('sunken ship', 'you already looted this wreck.', 2200);
+          } else if (confirm('Loot the sunken ship?')) {
+            shipLooted = true;
+            discoveries = Array.from(new Set([...(discoveries||[]), 'shipwreck']));
+            bottlesFound += 1;
+            recordDiscovery('shipwreck');
+            saveGameState();
+            sfxDiscovery();
+            showToast('shipwreck looted', 'you found an old bottle inside the wreck.', 4200);
+          }
+          return;
+        }
       }
 
       const hitFish = window.OceanFish ? window.OceanFish.hitTest(x, worldY) : null;
