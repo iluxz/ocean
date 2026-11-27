@@ -6,7 +6,7 @@ tiny 2d animated ocean page — for dark rooms, made this because idk im BORED
 - layered ocean waves + reflection
 - dive underwater for fish, coral, seaweed
 - settings menu for sound, day/night, and feedback
-- background audio: `DeepBlue.wav` (starts on first interaction)
+- background music: `DeepBlue.wav` → `assets/slime-sea-sunlit-waves.mp3` → `assets/slime-sea-moonlit-calm.mp3` → repeat, with 4-second crossfades (starts on first interaction)
 
 ## live
 

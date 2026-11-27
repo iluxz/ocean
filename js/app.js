@@ -60,7 +60,7 @@
           masterGain.disconnect(audioCtx.destination); // stop live evolving audio
         }
       } catch (_) {}
-      try { bgm.pause(); } catch (_) {}
+      try { pauseBgmAll(false); } catch (_) {}
       try { playCrashLoopFromCapture(); } catch (_) {}
       try {
         playWiiCrashBuzz();
@@ -111,6 +111,108 @@
     const ctx = createOceanContext(canvas);
     window.__oceanCanvasColorOpt = ctx && ctx.__oceanColorOpt ? ctx.__oceanColorOpt : { default: true };
     const bgm = document.getElementById('bgm');
+    const bgm2 = document.getElementById('bgm2');
+    const BGM_PLAYLIST = [
+      { src: 'DeepBlue.wav', label: 'deep blue' },
+      { src: 'assets/slime-sea-sunlit-waves.mp3', label: 'sunlit waves' },
+      { src: 'assets/slime-sea-moonlit-calm.mp3', label: 'moonlit calm' }
+    ];
+    const BGM_CROSSFADE = 4;
+    let bgmIndex = 0;
+    let activeBgm = bgm;
+    let idleBgm = bgm2;
+    let bgmTransition = null;
+
+    function bgmApplySources() {
+      try {
+        if (!bgm.getAttribute('src')) bgm.src = BGM_PLAYLIST[bgmIndex].src;
+        const nextSrc = BGM_PLAYLIST[(bgmIndex + 1) % BGM_PLAYLIST.length].src;
+        if (idleBgm.getAttribute('src') !== nextSrc) {
+          idleBgm.src = nextSrc;
+          idleBgm.load();
+        }
+      } catch (_) {}
+    }
+
+    function pauseBgmAll(clearSources) {
+      bgmTransition = null;
+      [bgm, bgm2].forEach(a => {
+        try { a.pause(); } catch (_) {}
+        try { a.muted = true; a.volume = 0; } catch (_) {}
+        if (clearSources) {
+          try { a.removeAttribute('src'); a.load(); } catch (_) {}
+        }
+      });
+    }
+
+    async function startPlaylist() {
+      if (corrupted || !soundEnabled) return false;
+      bgmApplySources();
+      try {
+        idleBgm.muted = false;
+        activeBgm.muted = false;
+        if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+        if (activeBgm.paused) await activeBgm.play();
+        return true;
+      } catch (e) {
+        console.warn('bgm playlist play blocked/failed', e);
+        return false;
+      }
+    }
+
+    async function startBgmTransition(force = false) {
+      if (bgmTransition || corrupted || !soundEnabled) return;
+      if (!force && activeBgm.paused && !activeBgm.ended) return;
+      const nextIndex = (bgmIndex + 1) % BGM_PLAYLIST.length;
+      const nextSrc = BGM_PLAYLIST[nextIndex].src;
+      try {
+        if (idleBgm.getAttribute('src') !== nextSrc) {
+          idleBgm.src = nextSrc;
+          idleBgm.load();
+        }
+        idleBgm.currentTime = 0;
+        idleBgm.muted = false;
+        if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+        await idleBgm.play();
+        bgmTransition = {
+          from: activeBgm,
+          to: idleBgm,
+          toIndex: nextIndex,
+          startedAt: performance.now()
+        };
+      } catch (e) {
+        console.warn('bgm next track blocked/failed', e);
+      }
+    }
+
+    function bgmFades() {
+      if (!bgmTransition) return activeBgm === bgm ? [1, 0] : [0, 1];
+      const t = bgmTransition;
+      const raw = Math.max(0, Math.min(1, (performance.now() - t.startedAt) / (BGM_CROSSFADE * 1000)));
+      const p = raw * raw * (3 - 2 * raw);
+      if (raw >= 1) {
+        try { t.from.pause(); } catch (_) {}
+        bgmIndex = t.toIndex;
+        activeBgm = t.to;
+        idleBgm = t.from;
+        bgmTransition = null;
+        bgmApplySources();
+        return activeBgm === bgm ? [1, 0] : [0, 1];
+      }
+      return t.from === bgm ? [1 - p, p] : [p, 1 - p];
+    }
+
+    [bgm, bgm2].forEach(a => {
+      a.addEventListener('ended', () => {
+        if (a === activeBgm) startBgmTransition(true);
+      });
+      a.addEventListener('timeupdate', () => {
+        if (bgmTransition || !soundEnabled || a !== activeBgm) return;
+        const dur = Number.isFinite(a.duration) ? a.duration : 0;
+        if (dur > 0 && a.currentTime >= dur - BGM_CROSSFADE) startBgmTransition();
+      });
+    });
+
     const hint = document.getElementById('hint');
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsPanel = document.getElementById('settingsPanel');
@@ -495,6 +597,7 @@
       if (oxygenText) oxygenText.textContent = Math.ceil(Math.max(0, oxygen)) + '%';
     }
     bgm.volume = masterVolume;
+    bgm2.volume = 0;
 
     function svgThumb(title, emoji, c1, c2) {
       const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'>
@@ -819,7 +922,7 @@
       if (corrupted) return;
       corrupted = true;
       try { if (rafId) cancelAnimationFrame(rafId); } catch (_) {}
-      try { bgm.pause(); bgm.muted = true; bgm.volume = 0; bgm.src = ''; } catch (_) {}
+      try { pauseBgmAll(true); } catch (_) {}
       try { if (masterGain) masterGain.gain.value = 0; } catch (_) {}
       try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch (_) {}
       try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.suspend().catch(()=>{}); } catch (_) {}
@@ -971,6 +1074,7 @@
       syncSettingsUI();
     }
     const UPDATE_LOG = [
+      { date: '2026-11-27', title: 'music playlist', detail: 'DeepBlue now rotates into Slime Sea Sunlit Waves and Slime Sea Moonlit Calm, then loops back. tracks use a 4-second crossfade so the seam stays smooth, with depth muffling and mute settings preserved.' },
       { date: '2026-11-27', title: 'deep layer fish', detail: 'added 8 new deep-sea fish across trenches, hadal, and the void: Shearfin, Ribbon Pike, Stoneback, Scarlet Veil, Basin Lantern, Ember Whip, Pale Sentinel, and The Watcher. each has its own discovery card and new layer-fauna achievements.' },
       { date: '2026-11-27', title: 'the deep blue facility', detail: 'the deepest layer is now The Deep Blue: a submarine-ish facility guarded by Deep Blue. solve 3 encounters (seal valve, enter BLUE code, bypass guard) to stop the scientists\' ocean wipeout supply. added forward/back perspectives for every non-deepest layer, including tappable arctic icebergs on the surface. facility and perspective state now persist.' },
       { date: '2026-11-26', title: 'lux studios splash', detail: 'every load now opens with the lux studios intro: a wireframe cube rolls in, speeds up, explodes into lines, and reveals the wordmark before fading into the ocean.' },
@@ -1026,7 +1130,7 @@
     // --- audio sfx ---
     let audioCtx = null, masterGain = null, rainGain = null, windGain = null, underwaterGain = null, dayGain = null, nightGain = null;
     let rainNoise = null, windNoise = null, underwaterNoise = null, dayNoise = null, nightNoise = null;
-    let bgmNode = null, bgmFilter = null, captureDest = null, mediaRecorder = null, audioChunks = [], crashLoopAudio = null;
+    let bgmFilters = [], captureDest = null, mediaRecorder = null, audioChunks = [], crashLoopAudio = null;
     function ensureAudio() {
       if (corrupted) return;
       if (audioCtx) return;
@@ -1045,18 +1149,19 @@
       masterGain.connect(captureDest);
       try {
         if (location.protocol !== 'file:') {
-          bgm.crossOrigin = 'anonymous';
-          bgmFilter = audioCtx.createBiquadFilter();
-          bgmFilter.type = 'lowpass';
-          bgmFilter.frequency.value = 14000;
-          bgmFilter.Q.value = 0.7;
-          bgmNode = audioCtx.createMediaElementSource(bgm);
-          bgmNode.connect(bgmFilter);
-          bgmFilter.connect(masterGain);
-        } else {
-          bgmFilter = null; // avoid file:// cross-origin media silence in WebAudio
+          [bgm, bgm2].forEach(a => {
+            a.crossOrigin = 'anonymous';
+            const f = audioCtx.createBiquadFilter();
+            f.type = 'lowpass';
+            f.frequency.value = 14000;
+            f.Q.value = 0.7;
+            const n = audioCtx.createMediaElementSource(a);
+            n.connect(f);
+            f.connect(masterGain);
+            bgmFilters.push(f);
+          });
         }
-      } catch (_) { bgmFilter = null; }
+      } catch (_) { /* keep direct element audio if routing fails */ }
       try {
         audioChunks = [];
         mediaRecorder = new MediaRecorder(captureDest.stream);
@@ -1131,17 +1236,22 @@
     function isAtBottom() { return cameraY >= currentBottomDepth() - 0.05; }
 
     function updateAudioMix() {
-      if (corrupted) { try { bgm.pause(); } catch(_) {} return; }
-      bgm.muted = !soundEnabled;
+      if (corrupted) { try { pauseBgmAll(false); } catch(_) {} return; }
+      const bgmMuted = !soundEnabled;
+      bgm.muted = bgmMuted;
+      bgm2.muted = bgmMuted;
       const bottomDepth = currentBottomDepth();
       const depthRaw = Number.isFinite(cameraY) ? Math.max(0, Math.min(bottomDepth, cameraY)) : 0;
       const under = Math.min(1, depthRaw);
       const abyss = Math.max(0, depthRaw - 1);
       const volBase = Number.isFinite(masterVolume) ? Math.max(0, Math.min(1, masterVolume)) : 0.65;
       const bottomFade = Math.max(0, Math.min(1, (bottomDepth - 0.35 - depthRaw) / 0.65));
-      const duck = bgmFilter ? bottomFade : lerp(1, 0.22, Math.pow(depthRaw / Math.max(1, bottomDepth), 1.1)) * bottomFade;
+      const duck = bgmFilters.length ? bottomFade : lerp(1, 0.22, Math.pow(depthRaw / Math.max(1, bottomDepth), 1.1)) * bottomFade;
       const vol = volBase * (Number.isFinite(duck) ? duck : 1);
-      bgm.volume = Number.isFinite(vol) ? Math.max(0, Math.min(1, vol)) : volBase;
+      const mixVol = Number.isFinite(vol) ? Math.max(0, Math.min(1, vol)) : volBase;
+      const [fadeA, fadeB] = bgmFades();
+      bgm.volume = Math.max(0, Math.min(1, mixVol * fadeA));
+      bgm2.volume = Math.max(0, Math.min(1, mixVol * fadeB));
       if (!audioCtx) return;
       const on = soundEnabled ? 1 : 0;
       masterGain.gain.setTargetAtTime(on * masterVolume, audioCtx.currentTime, 0.08);
@@ -1154,10 +1264,14 @@
       nightGain.gain.setTargetAtTime(surface * (1-d) * 0.01, audioCtx.currentTime, 0.4);
       if (rainNoise) rainNoise.f.frequency.setTargetAtTime(900 + weatherIntensity * 700, audioCtx.currentTime, 0.2);
       if (windNoise) windNoise.f.frequency.setTargetAtTime(400 + weatherIntensity * 250, audioCtx.currentTime, 0.2);
-      if (bgmFilter) {
+      if (bgmFilters.length) {
         const cutoff = lerp(14000, 320, Math.pow(depthRaw / Math.max(1, bottomDepth), 1.25));
-        bgmFilter.frequency.setTargetAtTime(Math.max(120, cutoff * (0.55 + 0.45 * bottomFade)), audioCtx.currentTime, 0.18);
-        bgmFilter.Q.setTargetAtTime(0.7 + Math.min(1, depthRaw) * 0.8, audioCtx.currentTime, 0.18);
+        const fFreq = Math.max(120, cutoff * (0.55 + 0.45 * bottomFade));
+        const fQ = 0.7 + Math.min(1, depthRaw) * 0.8;
+        bgmFilters.forEach(f => {
+          f.frequency.setTargetAtTime(fFreq, audioCtx.currentTime, 0.18);
+          f.Q.setTargetAtTime(fQ, audioCtx.currentTime, 0.18);
+        });
       }
     }
 
@@ -2928,14 +3042,10 @@
       if (audioCtx && audioCtx.state === 'suspended') {
         try { await audioCtx.resume(); } catch (e) {}
       }
-      try {
-        bgm.muted = false;
-        bgm.volume = masterVolume;
-        if (bgm.paused) await bgm.play();
+      const ok = await startPlaylist();
+      if (ok) {
         started = true;
         hint.classList.add('hidden');
-      } catch (e) {
-        console.warn('audio play blocked/failed', e);
       }
       syncSettingsUI();
     }
@@ -2952,7 +3062,7 @@
       }
     });
 
-    setSound.addEventListener('change', () => { soundEnabled = setSound.checked; if (soundEnabled) startAudio(); else bgm.pause(); sfxClick(); syncSettingsUI(); saveSettings(); });
+    setSound.addEventListener('change', () => { soundEnabled = setSound.checked; if (soundEnabled) startAudio(); else pauseBgmAll(false); sfxClick(); syncSettingsUI(); saveSettings(); });
     setCycle.addEventListener('change', () => { dayCycle = setCycle.checked; if (!dayCycle) manualDayPhase = getCyclePhase(); sfxClick(); syncSettingsUI(); saveSettings(); });
     setSpeed.addEventListener('input', () => { cycleSpeed = Number(setSpeed.value)/100; speedLabel.textContent = cycleSpeed.toFixed(1)+'x'; saveSettings(); });
     setDay.addEventListener('change', () => {
