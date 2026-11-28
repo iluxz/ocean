@@ -262,11 +262,6 @@
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsPanel = document.getElementById('settingsPanel');
     const setSound = document.getElementById('setSound');
-    const setCycle = document.getElementById('setCycle');
-    const setSpeed = document.getElementById('setSpeed');
-    const speedLabel = document.getElementById('speedLabel');
-    const setDay = document.getElementById('setDay');
-    const setNight = document.getElementById('setNight');
     const setWeather = document.getElementById('setWeather');
     const setMotion = document.getElementById('setMotion');
     const setPhoto = document.getElementById('setPhoto');
@@ -378,17 +373,17 @@
     let lastT = 0;
     let simTime = 0;
     let animTime = 0;
+    let rainPhase = 0;
+    let snowPhase = 0;
     let motionMul = 1;
     let dt = 0;
     let started = false;
     let soundEnabled = true;
     let masterVolume = 0.65;
-    let dayCycle = true;
-    let cycleSpeed = 1;
+    const DAY_CYCLE_MS = 8 * 60 * 1000; // one full day = 4 min day + 4 min night
     let reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let photoMode = false;
-    let forcedMode = 'night'; // 'day' | 'night' | null
-    let manualDayPhase = 0.75;
+    let lastStockWindow = null;
     let weatherMode = 'auto'; // auto|clear|rain|storm|snow
     let weatherIntensity = 0;
     let weatherTarget = 0;
@@ -502,12 +497,29 @@
       { name:'abyss crawler', maxLayer:4, interval:4500,  damage:10, drain:40, waste:0.05, breakdown:0.05, note:'hadal specialist. fast, reliable, burns battery fastest.' }
     ];
     const CONTRACTS = [
-      { id:'iron',     title:'first sample',  need:{ iron:6 },                    pickaxe:1, auto:1, line:'bring me 6 iron. i will fix that useless pump.' },
-      { id:'gold',     title:'bright seam',   need:{ gold:5 },                    pickaxe:2, auto:2, line:'5 gold buys a better head and a reef rig.' },
-      { id:'diamond',  title:'hard proof',    need:{ diamond:4 },                 pickaxe:3, auto:3, line:'4 diamond. then you get the real crawler.' },
+      { id:'iron',     title:'first sample',  need:{ iron:6 },                    pickaxe:1, auto:1, line:'bring me 6 iron. that pick won\'t build itself.' },
+      { id:'gold',     title:'bright seam',   need:{ gold:5 },                    pickaxe:2, auto:2, line:'5 gold buys a better head.' },
+      { id:'diamond',  title:'hard proof',    need:{ diamond:4 },                 pickaxe:3, auto:3, line:'4 diamond. then you get the real bite.' },
       { id:'abyss',    title:'deep receipt',  need:{ abyssite:3, voidglass:2 },   pickaxe:4, auto:0, line:'3 abyssite and 2 voidglass. last upgrade. no refunds.' }
     ];
+    // Contracts unlock blueprints; rigs are bought separately in the machines tab.
+    const MACHINE_COSTS = [
+      null,
+      { contract:'iron',    cost:{ iron:4 } },
+      { contract:'gold',    cost:{ gold:4 } },
+      { contract:'diamond', cost:{ diamond:3 } }
+    ];
     const TABLET_COST = { iron:2, gold:1 };
+    // The keeper's shelf rotates with the sun. 'day'/'night' windows lock until the cycle flips.
+    const BATTERY_PACK_COST = { iron:3, gold:1 };
+    const BATTERIES_PER_PACK = 4;
+    const BATTERY_CHARGE = 50; // one cell = half a machine battery
+    const STOCK = {
+      contract: { iron:'always', gold:'day', diamond:'night', abyss:'always' },
+      rig: { 1:'always', 2:'day', 3:'night' },
+      tablet: 'night',
+      pack: 'always'
+    };
     // Manual mining has a deliberate rhythm. Clicking faster than a human-scale
     // swing keeps adding recovery time, so autoclickers just stall themselves.
     const MANUAL_MINE_COOLDOWN_MS = 600;
@@ -609,6 +621,7 @@
         nodeRespawn: {},
         nodeOre: {},
         tablet: false,
+        batteries: 0,
         tipSeen: false,
         machines: Array.from({ length: MACHINE_PAD_COUNT }, defaultMachineState),
         activeMachine: 0
@@ -631,6 +644,8 @@
           for (const c of CONTRACTS) mining.pinged[c.id] = !!sm.pinged[c.id];
         }
         mining.tablet = !!sm.tablet;
+        const bv = Number(sm.batteries);
+        mining.batteries = Number.isFinite(bv) ? Math.max(0, Math.floor(bv)) : 0;
         mining.tipSeen = !!sm.tipSeen;
         if (sm.nodeOre && typeof sm.nodeOre === 'object') {
           for (const n of ORE_NODES) {
@@ -1144,7 +1159,7 @@
     syncBottleDef();
 
     function saveSettings() {
-      try { localStorage.setItem('ocean_settings', codecStringify({ soundEnabled, dayCycle, cycleSpeed, forcedMode, weatherMode, reducedMotion })); } catch (_) {}
+      try { localStorage.setItem('ocean_settings', codecStringify({ soundEnabled, weatherMode, reducedMotion })); } catch (_) {}
     }
     function saveGameState() {
       try {
@@ -1171,9 +1186,6 @@
         const s = codecParse(localStorage.getItem('ocean_settings') || 'null');
         if (!s) return;
         if (typeof s.soundEnabled === 'boolean') soundEnabled = s.soundEnabled;
-        if (typeof s.dayCycle === 'boolean') dayCycle = s.dayCycle;
-        if (typeof s.cycleSpeed === 'number') cycleSpeed = Math.max(0.2, Math.min(3, s.cycleSpeed));
-        if (s.forcedMode === 'day' || s.forcedMode === 'night' || s.forcedMode === null) forcedMode = s.forcedMode;
         if (['auto','clear','rain','storm','snow'].includes(s.weatherMode)) weatherMode = s.weatherMode;
         if (typeof s.reducedMotion === 'boolean') reducedMotion = s.reducedMotion;
       } catch (_) {}
@@ -1807,14 +1819,16 @@
     function machinePadRects() {
       const padW = Math.min(250, Math.max(176, w * 0.25));
       const padH = Math.min(150, Math.max(108, h * 0.17));
-      const baseY = h * 0.61;
       const t = simTime * motionMul;
-      const sway = i => Math.sin(t * 0.0007 + i * 2.2) * 3;
+      const sway = i => Math.sin(animTime * 0.00045 + i * 1.7) * 12 + Math.sin(animTime * 0.00018 + i * 2.9) * 5;
       const bob = i => Math.sin(t * 0.00105 + i * 1.8) * 5 + Math.sin(t * 0.00048 + i * 2.6) * 3;
-      return [
-        { x: w * 0.13 + sway(0), y: baseY + bob(0), w: padW, h: padH },
-        { x: w * 0.40 + sway(1), y: baseY + h * 0.022 + bob(1), w: padW * 0.95, h: padH * 0.95 }
-      ];
+      const place = (i, xFactor, extraY) => {
+        const x = w * xFactor + sway(i);
+        const ph = i ? padH * 0.95 : padH;
+        const waterY = getWaveY(x, h * 0.58);
+        return { x, y: waterY + ph * 0.45 + bob(i) * 0.35 + extraY, w: i ? padW * 0.95 : padW, h: ph };
+      };
+      return [place(0, 0.13, 0), place(1, 0.40, h * 0.022)];
     }
     function machinePadRect(i = 0) {
       const rects = machinePadRects();
@@ -2146,40 +2160,62 @@
         beginRigTravel(work, true, i);
       }
     }
+    function activeMachineIndex() { return Math.min(MACHINE_PAD_COUNT - 1, Math.max(0, mining.activeMachine | 0)); }
+    function canAffordOre(cost) {
+      return Object.keys(cost).every(id => (mining.ores[id] || 0) >= cost[id]);
+    }
+    function oreCostLabel(cost) {
+      return Object.keys(cost).map(id => `${cost[id]} ${ORE_DEFS[id].name}`).join(' + ');
+    }
+    function machineBlueprintReady(tier) {
+      const plan = MACHINE_COSTS[tier];
+      return !!plan && !!mining.contracts[plan.contract];
+    }
     function claimContract(id) {
       const c = CONTRACTS.find(x => x.id === id);
       if (!c || mining.contracts[id]) return;
+      if (!stockOpen(STOCK.contract[c.id])) { showToast('out of stock', `the keeper only takes that one in the ${STOCK.contract[c.id]}.`, 2200); return; }
       if (!contractReady(c)) { showToast('not enough ore', 'the keeper taps the checklist. keep mining.', 2200); return; }
       for (const oreId of Object.keys(c.need)) mining.ores[oreId] -= c.need[oreId];
       mining.contracts[id] = true;
-      const rewards = [];
-      if (c.pickaxe > mining.pickaxe) {
-        mining.pickaxe = c.pickaxe;
-        rewards.push(PICKAXES[c.pickaxe].name);
-      }
-      if (c.auto > 0) {
-        const slot = mining.machines.findIndex(m => !m.tier);
-        const target = slot >= 0 ? slot : mining.activeMachine;
-        const m = mining.machines[target];
-        m.tier = c.auto;
-        m.battery = 100;
-        m.broken = false;
-        m.progress = 0;
-        m.message = 'machine online';
-        mining.activeMachine = target;
-        rewards.push(`${AUTO_TIERS[c.auto].name} · pad ${target + 1}`);
-      }
+      const reward = c.pickaxe > mining.pickaxe ? PICKAXES[c.pickaxe].name : 'paid in full';
+      if (c.pickaxe > mining.pickaxe) mining.pickaxe = c.pickaxe;
       saveGameState();
       syncMiningHud();
       renderShop();
       sfxDiscovery();
-      showToast('contract complete', rewards.length ? `unlocked: ${rewards.join(' + ')}` : 'paid in full.', 3800);
+      showToast('contract complete', `pick unlocked: ${reward}`, 3800);
     }
-    function activeMachineIndex() { return Math.min(MACHINE_PAD_COUNT - 1, Math.max(0, mining.activeMachine | 0)); }
+    function buildMachine(tier) {
+      const plan = MACHINE_COSTS[tier];
+      if (!plan) return;
+      if (!stockOpen(STOCK.rig[tier])) { showToast('out of stock', `that rig is ${STOCK.rig[tier]}-shift stock only.`, 2200); return; }
+      if (!machineBlueprintReady(tier)) { showToast('blueprint locked', 'claim the matching pick contract first.', 2200); return; }
+      const i = activeMachineIndex();
+      const m = mining.machines[i];
+      if (m.tier >= tier) {
+        showToast('already installed', m.tier === tier ? `pad ${i + 1} already has ${AUTO_TIERS[tier].name}.` : `pad ${i + 1} already has a better rig.`, 2200);
+        return;
+      }
+      if (!canAffordOre(plan.cost)) { showToast('not enough ore', `this rig needs ${oreCostLabel(plan.cost)}.`, 2200); return; }
+      for (const oreId of Object.keys(plan.cost)) mining.ores[oreId] -= plan.cost[oreId];
+      m.tier = tier;
+      m.battery = 100;
+      m.broken = false;
+      m.progress = 0;
+      m.message = 'machine online';
+      resetRigState(i);
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxDiscovery();
+      showToast('machine built', `${AUTO_TIERS[tier].name} parked on pad ${i + 1}.`, 3200);
+    }
     function repairAuto() {
       const i = activeMachineIndex();
       const m = mining.machines[i];
-      if (!m.tier) { showToast('no machine', 'this pad is empty. build one from a contract.', 2000); return; }
+      if (!m.tier) { showToast('no machine', 'this pad is empty. build one in the machines tab.', 2000); return; }
       if (!m.broken) { showToast('already running', 'nothing to fix right now.', 1800); return; }
       if ((mining.ores.iron || 0) < 3) { showToast('needs parts', 'repair costs 3 iron.', 2200); return; }
       mining.ores.iron -= 3;
@@ -2194,7 +2230,7 @@
     function rechargeAuto() {
       const i = activeMachineIndex();
       const m = mining.machines[i];
-      if (!m.tier) { showToast('no machine', 'this pad is empty. build one from a contract.', 2000); return; }
+      if (!m.tier) { showToast('no machine', 'this pad is empty. build one in the machines tab.', 2000); return; }
       if (!isShore()) { showToast('shore only', 'bring the machine back to the supply dock.', 2200); return; }
       m.battery = 100;
       m.progress = 0;
@@ -2241,6 +2277,7 @@
     }
     function buyTablet() {
       if (mining.tablet) return;
+      if (!stockOpen(STOCK.tablet)) { showToast('out of stock', 'the keeper only sells tablets at night.', 2200); return; }
       if (!canBuyTablet()) { showToast('not enough ore', 'the tablet costs 2 iron + 1 gold.', 2200); return; }
       for (const id of Object.keys(TABLET_COST)) mining.ores[id] -= TABLET_COST[id];
       mining.tablet = true;
@@ -2250,6 +2287,37 @@
       renderTablet();
       sfxDiscovery();
       showToast('tablet acquired', 'machine stats are now in your shore ledger.', 3200);
+    }
+    function canBuyBatteryPack() {
+      return Object.keys(BATTERY_PACK_COST).every(id => (mining.ores[id] || 0) >= BATTERY_PACK_COST[id]);
+    }
+    function buyBatteryPack() {
+      if (!stockOpen(STOCK.pack)) { showToast('out of stock', 'the keeper is fresh out. try again later.', 2200); return; }
+      if (!canBuyBatteryPack()) { showToast('not enough ore', `a pack costs ${oreCostLabel(BATTERY_PACK_COST)}.`, 2200); return; }
+      for (const id of Object.keys(BATTERY_PACK_COST)) mining.ores[id] -= BATTERY_PACK_COST[id];
+      mining.batteries += BATTERIES_PER_PACK;
+      saveGameState();
+      renderShop();
+      syncMiningHud();
+      renderTablet();
+      sfxDiscovery();
+      showToast('battery pack', `+${BATTERIES_PER_PACK} cells. swap them from the tablet anywhere.`, 3200);
+    }
+    function useBattery() {
+      const i = activeMachineIndex();
+      const m = mining.machines[i];
+      if (!m.tier) { showToast('no machine', 'this pad is empty. build one in the machines tab.', 2000); return; }
+      if (mining.batteries <= 0) { showToast('no spare cells', 'buy a battery pack from the shore keeper.', 2200); return; }
+      if (m.battery >= 100) { showToast('already full', 'save the cell for when the claw runs dry.', 2000); return; }
+      mining.batteries -= 1;
+      m.battery = Math.min(100, m.battery + BATTERY_CHARGE);
+      m.message = 'cell swapped';
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxClick();
+      showToast('cell swapped', `pad ${i + 1} at ${Math.round(m.battery)}% · ${mining.batteries} spare.`, 2400);
     }
     function machineStateLabel(m = mining.auto) {
       if (!m.tier) return 'not built';
@@ -2282,7 +2350,7 @@
       tabletStats.innerHTML = `
         <div class="tablet-head"><strong>${tier.name} · pad ${active + 1}</strong><span class="badge ${mining.auto.broken ? 'bug' : 'suggestion'}">${machineStateLabel(mining.auto)}</span></div>
         <div class="tablet-cell"><b>pads</b><div class="shop-foot">${pads}</div></div>
-        <div class="tablet-cell"><b>battery</b><div class="battery-row"><span>cell</span><div class="battery-bar"><div class="battery-fill" style="width:${pct}%" ${pct < 25 ? 'data-low="1"' : ''}></div></div><span>${Math.round(pct)}%</span></div></div>
+        <div class="tablet-cell"><b>battery</b><div class="battery-row"><span>cell</span><div class="battery-bar"><div class="battery-fill" style="width:${pct}%" ${pct < 25 ? 'data-low="1"' : ''}></div></div><span>${Math.round(pct)}%</span></div><div class="shop-foot"><span>${mining.batteries} spare cells · each = +50%</span><button class="btn" type="button" data-battery="use" ${!mining.auto.tier || mining.batteries <= 0 || mining.auto.battery >= 100 ? 'disabled' : ''}>swap cell</button></div></div>
         <div class="tablet-grid">
           <div class="tablet-cell"><b>next strike</b><span>${next}${tier.interval ? 's' : ''}</span></div>
           <div class="tablet-cell"><b>reach</b><span>${mining.auto.tier ? `layer ${tier.maxLayer}` : 'none'}</span></div>
@@ -2296,7 +2364,7 @@
         </div>
         <div class="tablet-cell"><b>ore ledger</b><span>${ores}</span></div>
         <div class="tablet-cell contracts"><b>contracts</b><span>${contractLine}</span></div>
-        <div class="modal-note">live readout from the tablet. ${mining.auto.broken ? 'repair it at the shore supply dock.' : mining.auto.tier ? 'dead battery? hit recharge at the dock to wake the claw.' : 'bring the keeper an ore contract to park a claw rig on the surface rock.'}</div>`;
+        <div class="modal-note">live readout from the tablet. ${mining.auto.broken ? 'repair it at the shore supply dock.' : mining.auto.tier ? 'dead battery? swap a cell here, or hit recharge at the dock for a full charge.' : 'build a claw rig in the shore machines tab to park it on the surface rock.'}</div>`;
     }
     function openTablet() {
       if (!mining.tablet) { showToast('no tablet', 'the shore keeper sells one for 2 iron + 1 gold.', 2400); return; }
@@ -2327,7 +2395,7 @@
         const active = activeMachineIndex();
         const tier = AUTO_TIERS[mining.auto.tier];
         const state = !mining.auto.tier ? 'not built' : mining.auto.broken ? 'jammed' : mining.auto.battery <= 0 ? 'dead battery' : tier.name;
-        autoStatus.textContent = `auto: ${state}${MACHINE_PAD_COUNT > 1 ? ` · pad ${active + 1}` : ''}`;
+        autoStatus.textContent = `auto: ${state}${MACHINE_PAD_COUNT > 1 ? ` · pad ${active + 1}` : ''} · ${mining.batteries} cells`;
       }
       const recoveryMs = Math.max(0, manualMineNextAt - performance.now());
       if (miningRecovery) {
@@ -2344,22 +2412,23 @@
     }
     function renderShop() {
       if (!shopModal) return;
-      if (shopLine) shopLine.textContent = mining.auto.tier ? 'you built the machine. now keep it fed.' : 'ore goes in. better tools come out. no haggling.';
+      if (shopLine) shopLine.textContent = `shelf rotates with the sun · ${isDaytime() ? 'day' : 'night'} shift. ${mining.auto.tier ? 'keep the claw fed. rigs are built on the machines tab.' : 'contracts pay in picks. rigs are built on the machines tab.'}`;
       if (shopContracts) {
         shopContracts.innerHTML = CONTRACTS.map(c => {
           const done = !!mining.contracts[c.id];
           const ready = contractReady(c);
+          const stocked = stockOpen(STOCK.contract[c.id]);
           const need = Object.keys(c.need).map(id => {
             const have = mining.ores[id] || 0;
             const want = c.need[id];
             return `<span class="ore-need ${have >= want ? 'ok' : ''}">${ORE_DEFS[id].name} ${Math.min(have, want)}/${want}</span>`;
           }).join('');
-          const rewards = [c.pickaxe ? PICKAXES[c.pickaxe].name : null, c.auto ? AUTO_TIERS[c.auto].name : null].filter(Boolean).join(' + ');
-          return `<div class="shop-item ${done ? 'done' : ''}">
-            <div class="shop-item-top"><strong>${c.title}</strong><span class="badge ${done ? '' : ready ? 'suggestion' : 'other'}">${done ? 'paid' : ready ? 'ready' : 'open'}</span></div>
+          const reward = c.pickaxe ? PICKAXES[c.pickaxe].name : 'paid in full';
+          return `<div class="shop-item ${done ? 'done' : ''} ${!stocked ? 'stock-out' : ''}">
+            <div class="shop-item-top"><strong>${c.title}</strong><span class="badge ${done ? '' : !stocked ? 'other' : ready ? 'suggestion' : 'other'}">${done ? 'paid' : !stocked ? 'out of stock' : ready ? 'ready' : 'open'}</span></div>
             <div class="shop-needs">${need}</div>
             <div class="shop-note">${c.line}</div>
-            <div class="shop-foot"><span>reward: ${rewards}</span><button class="btn" type="button" data-contract="${c.id}" ${done || !ready ? 'disabled' : ''}>${done ? 'claimed' : 'turn in'}</button></div>
+            <div class="shop-foot"><span>reward: ${reward} · ${stockBadge(STOCK.contract[c.id])}</span><button class="btn" type="button" data-contract="${c.id}" ${done || !ready || !stocked ? 'disabled' : ''}>${done ? 'claimed' : 'turn in'}</button></div>
           </div>`;
         }).join('');
       }
@@ -2369,22 +2438,48 @@
           const want = TABLET_COST[id];
           return `<span class="ore-need ${have >= want ? 'ok' : ''}">${ORE_DEFS[id].name} ${Math.min(have, want)}/${want}</span>`;
         }).join('');
-        shopTools.innerHTML = `<div class="shop-item"><div class="shop-item-top"><strong>${PICKAXES[mining.pickaxe].name}</strong><span class="badge">equipped</span></div><div class="shop-note">${PICKAXES[mining.pickaxe].note} • ${PICKAXES[mining.pickaxe].damage} damage per swing</div><div class="shop-foot"><span>manual swings have a ${(MANUAL_MINE_COOLDOWN_MS / 1000).toFixed(1)}s recovery. spam clicks add a growing spam lock. deeper veins hit harder.</span></div></div>
-        <div class="shop-item ${mining.tablet ? 'done' : ''}"><div class="shop-item-top"><strong>machine tablet</strong><span class="badge ${mining.tablet ? '' : canBuyTablet() ? 'suggestion' : 'other'}">${mining.tablet ? 'owned' : canBuyTablet() ? 'ready' : 'locked'}</span></div><div class="shop-needs">${tabletNeed}</div><div class="shop-note">a pocket readout for the machine parked on the surface rock. works anywhere, so you don't have to waddle back here.</div><div class="shop-foot"><span>${mining.tablet ? 'tap machine tablet in your shore ledger' : '2 iron + 1 gold. no haggling.'}</span><button class="btn" type="button" data-shop="tablet" ${mining.tablet || !canBuyTablet() ? 'disabled' : ''}>${mining.tablet ? 'owned' : 'buy tablet'}</button></div></div>
-        <div class="shop-item"><div class="shop-item-top"><strong>mining rules</strong></div><div class="shop-note">iron in the upper layer, abyssite in hadal, and rare gold/diamond/voidglass scattered in empty veins. only the default perspective has ore. no veins in the facility or boss fight, and nothing in abyss or void.</div></div>`;
+        const nextPick = Math.min(PICKAXES.length - 1, mining.pickaxe + 1);
+        const nextPickSrc = CONTRACTS.find(c => c.pickaxe === nextPick);
+        const packNeed = Object.keys(BATTERY_PACK_COST).map(id => {
+          const have = mining.ores[id] || 0;
+          const want = BATTERY_PACK_COST[id];
+          return `<span class="ore-need ${have >= want ? 'ok' : ''}">${ORE_DEFS[id].name} ${Math.min(have, want)}/${want}</span>`;
+        }).join('');
+        const tabletStocked = stockOpen(STOCK.tablet);
+        const packStocked = stockOpen(STOCK.pack);
+        shopTools.innerHTML = `<div class="shop-item"><div class="shop-item-top"><strong>${PICKAXES[mining.pickaxe].name}</strong><span class="badge">equipped</span></div><div class="shop-note">${PICKAXES[mining.pickaxe].note} • ${PICKAXES[mining.pickaxe].damage} damage per swing</div><div class="shop-foot"><span>${mining.pickaxe >= PICKAXES.length - 1 ? 'top pick. nothing left to unlock.' : `next: ${PICKAXES[nextPick].name} · ${stockBadge(STOCK.contract[nextPickSrc.id])}`}</span></div></div>
+        <div class="shop-item ${mining.tablet ? 'done' : ''} ${!tabletStocked ? 'stock-out' : ''}"><div class="shop-item-top"><strong>machine tablet</strong><span class="badge ${mining.tablet ? '' : !tabletStocked ? 'other' : canBuyTablet() ? 'suggestion' : 'other'}">${mining.tablet ? 'owned' : !tabletStocked ? 'out of stock' : canBuyTablet() ? 'ready' : 'locked'}</span></div><div class="shop-needs">${tabletNeed}</div><div class="shop-note">a pocket readout for the machine parked on the surface rock. works anywhere, so you don't have to waddle back here.</div><div class="shop-foot"><span>${mining.tablet ? 'tap machine tablet in your shore ledger' : `2 iron + 1 gold · ${stockBadge(STOCK.tablet)}`}</span><button class="btn" type="button" data-shop="tablet" ${mining.tablet || !canBuyTablet() || !tabletStocked ? 'disabled' : ''}>${mining.tablet ? 'owned' : 'buy tablet'}</button></div></div>
+        <div class="shop-item ${!packStocked ? 'stock-out' : ''}"><div class="shop-item-top"><strong>battery pack</strong><span class="badge ${!packStocked ? 'other' : canBuyBatteryPack() ? 'suggestion' : 'other'}">${!packStocked ? 'out of stock' : canBuyBatteryPack() ? 'ready' : 'need ore'}</span></div><div class="shop-needs">${packNeed}</div><div class="shop-note">4 spare cells. each one refills half a machine battery, and you can swap them from the tablet without coming back to shore.</div><div class="shop-foot"><span>${oreCostLabel(BATTERY_PACK_COST)} · ${mining.batteries} spare cells · ${stockBadge(STOCK.pack)}</span><button class="btn" type="button" data-shop="battery-pack" ${!canBuyBatteryPack() || !packStocked ? 'disabled' : ''}>buy pack</button></div></div>
+        <div class="shop-item"><div class="shop-item-top"><strong>mining rules</strong></div><div class="shop-note">iron in the upper layer, abyssite in hadal, and rare gold/diamond/voidglass scattered in empty veins. only the default perspective has ore. no veins in the facility or boss fight, and nothing in abyss or void. stock rotates between day and night shifts.</div></div>`;
       }
       if (shopAuto) {
         const active = activeMachineIndex();
-        const tier = AUTO_TIERS[mining.auto.tier];
-        const pct = Math.max(0, Math.min(100, mining.auto.battery));
+        const activePad = mining.machines[active];
+        const tier = AUTO_TIERS[activePad.tier];
+        const pct = Math.max(0, Math.min(100, activePad.battery));
         const padButtons = mining.machines.map((m, idx) => `<button class="btn" type="button" data-machine="${idx}" ${idx === active ? 'disabled' : ''}>pad ${idx + 1}: ${m.tier ? AUTO_TIERS[m.tier].name : 'empty'}</button>`).join(' ');
-        shopAuto.innerHTML = `<div class="shop-item"><div class="shop-item-top"><strong>${tier.name} · pad ${active + 1}</strong><span class="badge ${mining.auto.broken ? 'bug' : 'suggestion'}">${mining.auto.broken ? 'jammed' : tier.name === 'not built' ? 'locked' : 'online'}</span></div>
+        const buildCards = [1, 2, 3].map(rigTier => {
+          const plan = MACHINE_COSTS[rigTier];
+          const blueprintReady = machineBlueprintReady(rigTier);
+          const affordable = canAffordOre(plan.cost);
+          const installed = activePad.tier >= rigTier;
+          const need = Object.keys(plan.cost).map(id => {
+            const have = mining.ores[id] || 0;
+            const want = plan.cost[id];
+            return `<span class="ore-need ${have >= want ? 'ok' : ''}">${ORE_DEFS[id].name} ${Math.min(have, want)}/${want}</span>`;
+          }).join('');
+          const source = CONTRACTS.find(c => c.id === plan.contract);
+          const stocked = stockOpen(STOCK.rig[rigTier]);
+          const state = !stocked ? 'out of stock' : installed ? (activePad.tier === rigTier ? 'installed' : 'outclassed') : !blueprintReady ? 'blueprint locked' : affordable ? 'ready' : 'need ore';
+          return `<div class="shop-item ${installed ? 'done' : ''} ${!stocked ? 'stock-out' : ''}"><div class="shop-item-top"><strong>${AUTO_TIERS[rigTier].name}</strong><span class="badge ${installed ? '' : stocked && blueprintReady && affordable ? 'suggestion' : 'other'}">${state}</span></div><div class="shop-needs">${need}</div><div class="shop-note">unlock with the ${source.title} pick contract, then build it here on pad ${active + 1}.</div><div class="shop-foot"><span>${oreCostLabel(plan.cost)} · ${stockBadge(STOCK.rig[rigTier])}</span><button class="btn" type="button" data-machine-build="${rigTier}" ${!stocked || installed || !blueprintReady || !affordable ? 'disabled' : ''}>${activePad.tier > rigTier ? 'built already' : activePad.tier === rigTier ? 'installed' : 'build rig'}</button></div></div>`;
+        }).join('');
+        shopAuto.innerHTML = `${buildCards}<div class="shop-item"><div class="shop-item-top"><strong>${tier.name} · pad ${active + 1}</strong><span class="badge ${activePad.broken ? 'bug' : 'suggestion'}">${activePad.broken ? 'jammed' : tier.name === 'not built' ? 'locked' : 'online'}</span></div>
           <div class="shop-note">${tier.note}</div>
           <div class="shop-foot">${padButtons}</div>
-          ${mining.auto.tier ? `<div class="battery-row"><span>battery</span><div class="battery-bar"><div class="battery-fill" style="width:${pct}%" ${pct < 25 ? 'data-low="1"' : ''}></div></div><span>${Math.round(pct)}%</span></div>` : ''}
-          ${mining.auto.tier ? `<div class="shop-meta">burn: ${tier.drain}% / ${(tier.interval / 1000).toFixed(1)}s • waste: ${Math.round(tier.waste * 100)}% • jams: ${Math.round(tier.breakdown * 100)}% • reaches: layer ${tier.maxLayer}</div>` : ''}
-          <div class="shop-meta">status: ${mining.auto.message}</div>
-          <div class="shop-foot"><button class="btn" type="button" data-auto="recharge" ${!mining.auto.tier || mining.auto.broken ? 'disabled' : ''}>recharge at dock</button><button class="btn" type="button" data-auto="repair" ${!mining.auto.tier || !mining.auto.broken ? 'disabled' : ''}>repair · 3 iron</button><button class="btn" type="button" data-machine-disassemble="${active}" ${!mining.auto.tier ? 'disabled' : ''}>disassemble pad ${active + 1}</button></div>
+          ${activePad.tier ? `<div class="battery-row"><span>battery</span><div class="battery-bar"><div class="battery-fill" style="width:${pct}%" ${pct < 25 ? 'data-low="1"' : ''}></div></div><span>${Math.round(pct)}%</span></div>` : ''}
+          ${activePad.tier ? `<div class="shop-meta">burn: ${tier.drain}% / ${(tier.interval / 1000).toFixed(1)}s • waste: ${Math.round(tier.waste * 100)}% • jams: ${Math.round(tier.breakdown * 100)}% • reaches: layer ${tier.maxLayer}</div>` : ''}
+          <div class="shop-meta">status: ${activePad.message}</div>
+          <div class="shop-foot"><button class="btn" type="button" data-auto="recharge" ${!activePad.tier || activePad.broken ? 'disabled' : ''}>recharge at dock</button><button class="btn" type="button" data-battery="use" ${!activePad.tier || mining.batteries <= 0 || activePad.battery >= 100 ? 'disabled' : ''}>swap cell · ${mining.batteries} left</button><button class="btn" type="button" data-auto="repair" ${!activePad.tier || !activePad.broken ? 'disabled' : ''}>repair · 3 iron</button><button class="btn" type="button" data-machine-disassemble="${active}" ${!activePad.tier ? 'disabled' : ''}>disassemble pad ${active + 1}</button></div>
           </div>`;
       }
     }
@@ -2580,16 +2675,18 @@
       ctx.fillRect(0, y0, w, y1 - y0);
     }
     function getCyclePhase() {
-      if (forcedMode === 'day') return 0.25;
-      if (forcedMode === 'night') return 0.75;
-      if (!dayCycle) return manualDayPhase;
-      const speed = reducedMotion ? Math.min(cycleSpeed, 0.35) : cycleSpeed;
-      return ((simTime * 0.00003 * speed) % 1 + 1) % 1;
+      // 0 sunrise, 0.25 noon, 0.5 sunset, 0.75 midnight. no switches, no pause.
+      return ((simTime % DAY_CYCLE_MS) + DAY_CYCLE_MS) % DAY_CYCLE_MS / DAY_CYCLE_MS;
     }
     function getDayFactor() {
       const phase = getCyclePhase();
-      // 0 sunrise, 0.25 noon, 0.5 sunset, 0.75 midnight
       return Math.sin(phase * Math.PI * 2) * 0.5 + 0.5;
+    }
+    function isDaytime() { return Math.sin(getCyclePhase() * Math.PI * 2) >= 0; }
+    function stockOpen(window) { return window === 'always' || window === (isDaytime() ? 'day' : 'night'); }
+    function stockBadge(window) {
+      if (window === 'always') return 'in stock';
+      return `${window} only · ${stockOpen(window) ? 'in stock' : 'out of stock'}`;
     }
 
     function bodyPos(phase) {
@@ -2659,21 +2756,19 @@
       const padY = p.y - p.h * 0.42;
       const tier = m && AUTO_TIERS[m.tier];
       const active = activeMachineIndex() === i;
-      const statusColor = !m || !m.tier ? 'rgba(150,165,185,0.75)' : m.broken ? '#ff6f8a' : m.battery <= 0 ? '#ffb36b' : '#8dffc4';
+      const statusColor = !m || !m.tier ? '#96a5b9' : m.broken ? '#ff6f8a' : m.battery <= 0 ? '#ffb36b' : '#8dffc4';
       ctx.save();
-      for (const [ox, oy, rr] of [[-0.72, 0.22, 0.28], [0.72, 0.18, 0.24], [0.28, 0.34, 0.2]]) {
-        ctx.fillStyle = 'rgba(33,42,55,0.96)';
+      for (const [ox, oy, rr] of [[-0.72, 0.22, 0.28], [0.72, 0.18, 0.24]]) {
+        ctx.fillStyle = '#212a37';
         ctx.beginPath();
         ctx.ellipse(cx + p.w * ox, p.y + p.h * oy, p.w * rr, p.h * rr * 0.7, ox * 0.4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = 'rgba(72,88,106,0.38)';
+        ctx.fillStyle = '#48586a';
         ctx.beginPath();
         ctx.ellipse(cx + p.w * ox - p.w * rr * 0.2, p.y + p.h * oy - p.h * rr * 0.2, p.w * rr * 0.45, p.h * rr * 0.24, ox * 0.4, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.fillStyle = 'rgba(1,6,14,0.34)';
-      ctx.beginPath(); ctx.ellipse(cx, p.y + p.h * 0.36, p.w * 0.62, p.h * 0.16, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(39,48,61,0.97)';
+      ctx.fillStyle = '#27303d';
       ctx.beginPath();
       ctx.moveTo(cx - p.w * 0.59, p.y + p.h * 0.32);
       ctx.lineTo(cx - p.w * 0.5, p.y - p.h * 0.27);
@@ -2682,40 +2777,40 @@
       ctx.lineTo(cx + p.w * 0.51, p.y - p.h * 0.23);
       ctx.lineTo(cx + p.w * 0.6, p.y + p.h * 0.31);
       ctx.closePath(); ctx.fill();
-      ctx.fillStyle = 'rgba(70,84,100,0.55)';
+      ctx.fillStyle = '#465464';
       ctx.beginPath();
       ctx.moveTo(cx - p.w * 0.5, p.y - p.h * 0.27);
       ctx.lineTo(cx - p.w * 0.23, p.y - p.h * 0.49);
       ctx.lineTo(cx + p.w * 0.19, p.y - p.h * 0.5);
       ctx.lineTo(cx + p.w * 0.03, p.y - p.h * 0.28);
       ctx.closePath(); ctx.fill();
-      ctx.fillStyle = 'rgba(17,26,38,0.98)';
+      ctx.fillStyle = '#111a26';
       ctx.fillRect(cx - p.w * 0.36, padY, p.w * 0.72, p.h * 0.17);
-      ctx.strokeStyle = active ? 'rgba(183,124,255,0.9)' : 'rgba(150,180,205,0.42)'; ctx.lineWidth = active ? 3 : 2;
+      ctx.strokeStyle = active ? '#b77cff' : '#96b4cd'; ctx.lineWidth = active ? 3 : 2;
       ctx.strokeRect(cx - p.w * 0.36, padY, p.w * 0.72, p.h * 0.17);
       for (const bx of [cx - p.w * 0.31, cx + p.w * 0.31]) {
-        ctx.fillStyle = 'rgba(190,215,235,0.6)';
+        ctx.fillStyle = '#bed7eb';
         ctx.beginPath(); ctx.arc(bx, padY + p.h * 0.085, 2.6, 0, Math.PI * 2); ctx.fill();
       }
       if (!m || !m.tier) {
-        ctx.strokeStyle = 'rgba(125,145,165,0.5)'; ctx.lineWidth = 4;
+        ctx.strokeStyle = '#7d91a5'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.moveTo(cx - p.w * 0.13, padY); ctx.lineTo(cx - p.w * 0.13, padY - p.h * 0.18); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(cx + p.w * 0.13, padY); ctx.lineTo(cx + p.w * 0.13, padY - p.h * 0.18); ctx.stroke();
       } else {
         const mastW = Math.max(12, p.w * 0.085);
         const mastBottom = p.y - p.h * 0.12;
-        ctx.fillStyle = 'rgba(27,41,57,0.98)';
+        ctx.fillStyle = '#1b2939';
         ctx.fillRect(cx - mastW * 0.5, g.beamY, mastW, mastBottom - g.beamY);
-        ctx.strokeStyle = 'rgba(130,170,200,0.34)'; ctx.lineWidth = 2;
+        ctx.strokeStyle = '#82aac8'; ctx.lineWidth = 2;
         ctx.strokeRect(cx - mastW * 0.5, g.beamY, mastW, mastBottom - g.beamY);
-        ctx.strokeStyle = 'rgba(110,150,180,0.3)'; ctx.lineWidth = 3;
+        ctx.strokeStyle = '#6e96b4'; ctx.lineWidth = 3;
         for (let by = g.beamY + 18; by < mastBottom - 10; by += 24) {
           ctx.beginPath(); ctx.moveTo(cx - mastW * 0.5, by); ctx.lineTo(cx + mastW * 0.5, by + 12); ctx.stroke();
         }
         const boomH = Math.max(10, p.h * 0.1);
-        ctx.fillStyle = 'rgba(42,60,80,0.98)';
+        ctx.fillStyle = '#2a3c50';
         ctx.fillRect(g.beamStart, g.beamY - boomH * 0.5, g.beamEnd - g.beamStart, boomH);
-        ctx.strokeStyle = 'rgba(145,185,215,0.4)'; ctx.lineWidth = 2;
+        ctx.strokeStyle = '#91b9d7'; ctx.lineWidth = 2;
         ctx.strokeRect(g.beamStart, g.beamY - boomH * 0.5, g.beamEnd - g.beamStart, boomH);
         ctx.save();
         ctx.beginPath(); ctx.rect(g.beamStart, g.beamY - boomH * 0.5, g.beamEnd - g.beamStart, boomH); ctx.clip();
@@ -2729,7 +2824,7 @@
           ctx.closePath(); ctx.fill();
         }
         ctx.restore();
-        ctx.strokeStyle = 'rgba(165,205,230,0.42)'; ctx.lineWidth = 2;
+        ctx.strokeStyle = '#a5cde6'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(cx, g.beamY - boomH * 0.5); ctx.lineTo(g.beamEnd, g.beamY - boomH * 0.1); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(cx, g.beamY - boomH * 0.5); ctx.lineTo(cx + (g.beamEnd - cx) * 0.55, g.beamY + boomH * 0.5); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(cx, g.beamY - boomH * 0.5); ctx.lineTo(g.beamStart, g.beamY - boomH * 0.1); ctx.stroke();
@@ -2741,11 +2836,11 @@
       ctx.shadowBlur = 0;
       ctx.textAlign = 'center';
       ctx.font = `${Math.max(10, Math.min(13, w * 0.014))}px Consolas, monospace`;
-      ctx.fillStyle = 'rgba(226,238,250,0.78)';
+      ctx.fillStyle = '#e2eefa';
       ctx.fillText(m && m.tier ? `PAD ${i + 1} · ${tier.name.toUpperCase()}` : `PAD ${i + 1} · EMPTY`, cx, p.y + p.h * 0.52);
       if (m && m.tier && mining.tablet) {
         ctx.font = `${Math.max(9, Math.min(11, w * 0.012))}px Consolas, monospace`;
-        ctx.fillStyle = 'rgba(183,124,255,0.85)';
+        ctx.fillStyle = '#b77cff';
         ctx.fillText(`${Math.round(m.battery)}%`, cx, p.y + p.h * 0.67);
       }
       ctx.restore();
@@ -3145,18 +3240,18 @@
           const f = snowFlakes[i];
           const x = ((f.x * w) + Math.sin(animTime * 0.00035 * f.drift + f.ph) * 22 * f.drift + animTime * 0.01 * f.drift) % (w + 20) - 10;
           const travel = h + 30;
-          const yRaw = f.y * h + animTime * (0.03 + weatherIntensity * 0.025) * f.s * 60;
+          const yRaw = f.y * h + snowPhase * f.s;
           const prev = f._yRaw ?? yRaw;
           const y = (yRaw % travel) - 20;
           const prevY = (prev % travel) - 20;
-          const waterY = getWaveY(x, horizon);
-          const crossed = (prevY < waterY && y >= waterY) || (yRaw - prev > travel * 0.5);
-          if (crossed && Math.random() < 0.25) {
-            ripples.push({ x, y: waterY + 1, r: 1 + Math.random()*1.8, age: 0, life: 450 + Math.random()*300, rain: true });
+          const surface = weatherLandingAt(x, horizon);
+          const crossed = (prevY < surface.y && y >= surface.y) || (yRaw - prev > travel * 0.5);
+          if (!surface.solid && crossed && Math.random() < 0.25) {
+            ripples.push({ x, y: surface.y + 1, r: 1 + Math.random()*1.8, age: 0, life: 450 + Math.random()*300, rain: true });
             if (ripples.length > 140) ripples.splice(0, ripples.length - 140);
           }
           f._yRaw = yRaw;
-          if (y >= waterY) continue;
+          if (y >= surface.y) continue;
           const a = 0.35 + weatherIntensity * 0.25 + f.r * 0.04;
           ctx.fillStyle = `rgba(235,245,255,${Math.min(0.95,a).toFixed(3)})`;
           ctx.beginPath(); ctx.arc(x, y, f.r, 0, Math.PI*2); ctx.fill();
@@ -3172,24 +3267,24 @@
         if (!d) continue;
         const x = ((d.x * w) + animTime * 0.03 * d.s) % w;
         const travel = h + 30;
-        const yRaw = d.y * h + animTime * (0.35 + weatherIntensity*0.35) * d.s;
+        const yRaw = d.y * h + rainPhase * d.s;
         const prev = d._yRaw ?? yRaw;
         const y = (yRaw % travel) - 20;
         const prevY = (prev % travel) - 20;
-        const waterY = getWaveY(x, horizon);
-        const crossed = (prevY < waterY && y >= waterY) || (yRaw - prev > travel * 0.5);
-        if (crossed && Math.random() < 0.45) {
-          ripples.push({ x, y: waterY + 1, r: 1.5 + Math.random()*2.5, age: 0, life: 550 + Math.random()*350, rain: true });
+        const surface = weatherLandingAt(x, horizon);
+        const crossed = (prevY < surface.y && y >= surface.y) || (yRaw - prev > travel * 0.5);
+        if (!surface.solid && crossed && Math.random() < 0.45) {
+          ripples.push({ x, y: surface.y + 1, r: 1.5 + Math.random()*2.5, age: 0, life: 550 + Math.random()*350, rain: true });
           if (ripples.length > 140) ripples.splice(0, ripples.length - 140);
         }
         d._yRaw = yRaw;
         const x2 = x - 2.2 * d.s;
         const y2 = y + d.l * 1.15;
-        if (y >= waterY) continue;
+        if (y >= surface.y) continue;
         let drawY2 = y2, drawX2 = x2;
-        if (y2 > waterY) {
-          const tHit = (waterY - y) / ((y2 - y) || 1);
-          drawY2 = waterY; drawX2 = x + (x2 - x) * tHit;
+        if (y2 > surface.y) {
+          const tHit = (surface.y - y) / ((y2 - y) || 1);
+          drawY2 = surface.y; drawX2 = x + (x2 - x) * tHit;
         }
         const a = 0.22 + weatherIntensity * 0.2 + d.s * 0.08;
         ctx.strokeStyle = `rgba(210,235,255,${a.toFixed(3)})`;
@@ -3467,6 +3562,20 @@
       let y = h;
       for (const l of layers) y = Math.min(y, waveY(l.base, l.amp, l.freq, l.phase, x));
       return y;
+    }
+    function weatherLandingAt(x, horizon) {
+      const waterY = getWaveY(x, horizon);
+      if (perspective !== 0 || cameraY > 0.2) return { y: waterY, solid: false };
+      let solidY = null;
+      for (let i = 0; i < MACHINE_PAD_COUNT; i++) {
+        const g = machineRigGeom(i);
+        const dx = (x - g.baseX) / (g.p.w * 0.56);
+        if (Math.abs(dx) > 1) continue;
+        const dome = Math.sqrt(Math.max(0, 1 - dx * dx));
+        const rockY = g.p.y - g.p.h * (0.2 + 0.3 * dome);
+        solidY = solidY == null ? rockY : Math.min(solidY, rockY);
+      }
+      return solidY != null && solidY < waterY ? { y: solidY, solid: true } : { y: waterY, solid: false };
     }
 
     function drawWave(layer) {
@@ -4170,6 +4279,12 @@
       simTime += dt * 1000;
       motionMul = reducedMotion ? 0.25 : 1;
       animTime += dt * 1000 * motionMul;
+      const stockWindow = isDaytime() ? 'day' : 'night';
+      if (stockWindow !== lastStockWindow) {
+        lastStockWindow = stockWindow;
+        if (shopModal && shopModal.classList.contains('open')) renderShop();
+        if (tabletModal && tabletModal.classList.contains('open')) renderTablet();
+      }
 
       // weather: manual or dynamic
       if (weatherMode === 'clear') weatherTarget = 0;
@@ -4183,6 +4298,9 @@
         weatherTarget = night * 0.45 + wave * 0.9;
       }
       weatherIntensity += (weatherTarget - weatherIntensity) * Math.min(1, dt * 0.8);
+      const weatherStep = dt * 1000 * motionMul;
+      rainPhase += weatherStep * (0.35 + weatherIntensity * 0.35);
+      snowPhase += weatherStep * (0.03 + weatherIntensity * 0.025) * 60;
       viewPush *= Math.pow(0.001, dt); // decay fast
 
       // lightning
@@ -4260,7 +4378,6 @@
       } else {
         drawSurfaceLife();
         drawEquippedSurface();
-        drawMachineRocks();
         if (perspective === 1) drawIcebergs();
         if (perspective === 2) drawSurfacePerspective2();
       }
@@ -4270,6 +4387,7 @@
       }
       drawRipplesAndBubbles();
       ctx.restore();
+      drawMachineRocks();
       drawWeather();
 
       ctx.save();
@@ -4487,11 +4605,6 @@
     }
     function syncSettingsUI() {
       setSound.checked = soundEnabled;
-      setCycle.checked = dayCycle;
-      setSpeed.value = String(Math.round(cycleSpeed * 100));
-      speedLabel.textContent = cycleSpeed.toFixed(1) + 'x';
-      setDay.checked = forcedMode === 'day';
-      setNight.checked = forcedMode === 'night';
       setWeather.value = weatherMode;
       setMotion.checked = reducedMotion;
       setPhoto.checked = photoMode;
@@ -4650,18 +4763,6 @@
     });
 
     setSound.addEventListener('change', () => { soundEnabled = setSound.checked; if (soundEnabled) startAudio(); else { saveBgmState(true); pauseBgmAll(false); } sfxClick(); syncSettingsUI(); saveSettings(); });
-    setCycle.addEventListener('change', () => { dayCycle = setCycle.checked; if (!dayCycle) manualDayPhase = getCyclePhase(); sfxClick(); syncSettingsUI(); saveSettings(); });
-    setSpeed.addEventListener('input', () => { cycleSpeed = Number(setSpeed.value)/100; speedLabel.textContent = cycleSpeed.toFixed(1)+'x'; saveSettings(); });
-    setDay.addEventListener('change', () => {
-      if (setDay.checked) { forcedMode = 'day'; setNight.checked = false; dayCycle = false; setCycle.checked = false; }
-      else if (!setNight.checked) { forcedMode = null; }
-      sfxClick(); syncSettingsUI(); saveSettings();
-    });
-    setNight.addEventListener('change', () => {
-      if (setNight.checked) { forcedMode = 'night'; setDay.checked = false; dayCycle = false; setCycle.checked = false; }
-      else if (!setDay.checked) { forcedMode = null; }
-      sfxClick(); syncSettingsUI(); saveSettings();
-    });
     setWeather.addEventListener('change', () => { weatherMode = setWeather.value; sfxClick(); saveSettings(); });
     setMotion.addEventListener('change', () => { reducedMotion = setMotion.checked; sfxClick(); saveSettings(); });
     function setPhotoMode(on) {
@@ -4702,9 +4803,13 @@
       const contractBtn = e.target.closest('[data-contract]');
       if (contractBtn) { e.stopPropagation(); claimContract(contractBtn.getAttribute('data-contract')); return; }
       const buyBtn = e.target.closest('[data-shop]');
-      if (buyBtn) { e.stopPropagation(); if (buyBtn.getAttribute('data-shop') === 'tablet') buyTablet(); return; }
+      if (buyBtn) { e.stopPropagation(); if (buyBtn.getAttribute('data-shop') === 'tablet') buyTablet(); else if (buyBtn.getAttribute('data-shop') === 'battery-pack') buyBatteryPack(); return; }
+      const cellBtn = e.target.closest('[data-battery]');
+      if (cellBtn) { e.stopPropagation(); if (cellBtn.getAttribute('data-battery') === 'use') useBattery(); return; }
       const autoBtn = e.target.closest('[data-auto]');
       if (autoBtn) { e.stopPropagation(); if (autoBtn.getAttribute('data-auto') === 'repair') repairAuto(); else rechargeAuto(); return; }
+      const buildBtn = e.target.closest('[data-machine-build]');
+      if (buildBtn) { e.stopPropagation(); buildMachine(Number(buildBtn.getAttribute('data-machine-build'))); return; }
       const disBtn = e.target.closest('[data-machine-disassemble]');
       if (disBtn) { e.stopPropagation(); disassembleMachine(Number(disBtn.getAttribute('data-machine-disassemble'))); return; }
       const padBtn = e.target.closest('[data-machine]');
@@ -4712,6 +4817,8 @@
     });
     tabletModal.addEventListener('click', (e) => {
       if (!e.target.closest) return;
+      const cellBtn = e.target.closest('[data-battery]');
+      if (cellBtn) { e.stopPropagation(); if (cellBtn.getAttribute('data-battery') === 'use') useBattery(); return; }
       const padBtn = e.target.closest('[data-machine]');
       if (padBtn) { e.stopPropagation(); selectMachine(Number(padBtn.getAttribute('data-machine'))); }
     });

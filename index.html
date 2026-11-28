@@ -184,7 +184,8 @@
     .shop-keeper p { margin:0; font-size:11px; color:var(--muted); line-height:1.45; }
     #shopModal .modal-card { max-height:calc(100dvh - 24px); display:flex; flex-direction:column; overflow:hidden; }
     #shopModal .shop-keeper, #shopModal .tabs, #shopModal .modal-actions { flex-shrink:0; }
-    #shopModal .shop-list, #shopModal .tab-pane.shop-list.active { display:grid; flex:1 1 auto; min-height:0; max-height:none; overflow-y:auto; overscroll-behavior:contain; gap:8px; padding-right:4px; scrollbar-width:thin; }
+    #shopModal .tab-pane.shop-list { display:none; }
+    #shopModal .tab-pane.shop-list.active { display:grid; flex:1 1 auto; min-height:0; max-height:none; overflow-y:auto; overscroll-behavior:contain; gap:8px; padding-right:4px; scrollbar-width:thin; }
     .shop-list::-webkit-scrollbar { width:8px; }
     .shop-list::-webkit-scrollbar-thumb { background:rgba(126,200,255,0.25); border-radius:999px; }
     #adminModal { z-index:99998; }
@@ -209,6 +210,8 @@
     .battery-bar { height:8px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; border:1px solid rgba(126,200,255,0.12); }
     .battery-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#7ec8ff,#cdb8ff); transition:width .2s ease; }
     .battery-fill[data-low] { background:linear-gradient(90deg,#ff6f8a,#ffb36b); }
+    .shop-item.stock-out { opacity:0.5; }
+    .stock-tag { font-size:10px; color:#ffcf8a; letter-spacing:.04em; }
     .hurt-vignette { position:fixed; inset:0; z-index:13; pointer-events:none; opacity:0; transition:opacity .25s ease; box-shadow: inset 0 0 130px 28px rgba(255,60,80,0.5), inset 0 0 24px rgba(255,60,80,0.3); background:radial-gradient(ellipse at center, transparent 55%, rgba(120,10,30,0.32)), rgba(255,45,75,0.05); }
     .hurt-vignette.active { opacity:1; animation:hurtPulse 1.8s ease-in-out infinite; }
     .hurt-timer { position:fixed; right:18px; top:18px; z-index:15; display:none; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; border:1px solid rgba(255,120,120,0.4); background:rgba(40,6,14,0.62); backdrop-filter:blur(8px); color:#ffc4c4; font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
@@ -328,10 +331,7 @@
     <div class="settings-panel" id="settingsPanel">
       <div class="settings-title">ocean settings</div>
       <div class="setting-row"><label for="setSound">sound<small>music + sfx</small></label><input class="toggle" id="setSound" type="checkbox" checked></div>
-      <div class="setting-row"><label for="setCycle">day n night cycle<small>sun/moon orbit</small></label><input class="toggle" id="setCycle" type="checkbox" checked></div>
-      <div class="setting-row"><label for="setSpeed">cycle speed<small id="speedLabel">1.0x</small></label><input id="setSpeed" type="range" min="20" max="300" value="100"></div>
-      <div class="setting-row"><label for="setDay">day<small>force daytime</small></label><input class="toggle" id="setDay" type="checkbox"></div>
-      <div class="setting-row"><label for="setNight">night<small>force nighttime</small></label><input class="toggle" id="setNight" type="checkbox" checked></div>
+      <div class="setting-row"><label>day n night<small>always cycling · 4 min each</small></label><span class="badge suggestion">automatic</span></div>
       <div class="setting-row"><label for="setWeather">weather<small>dynamic by default</small></label>
         <select id="setWeather"><option value="auto">auto</option><option value="clear">clear</option><option value="rain">rain</option><option value="storm">storm</option><option value="snow">snow</option></select>
       </div>
@@ -414,7 +414,7 @@
       <div class="tabs">
         <button class="tab active" id="shopTabContracts" type="button">contracts</button>
         <button class="tab" id="shopTabTools" type="button">tools</button>
-        <button class="tab" id="shopTabAuto" type="button">auto tab</button>
+        <button class="tab" id="shopTabAuto" type="button">machines</button>
       </div>
       <div class="tab-pane active shop-list" id="shopContracts"></div>
       <div class="tab-pane shop-list" id="shopTools"></div>
