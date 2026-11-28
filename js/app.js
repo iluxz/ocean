@@ -118,10 +118,51 @@
       { src: 'assets/slime-sea-moonlit-calm.mp3', label: 'moonlit calm' }
     ];
     const BGM_CROSSFADE = 4;
+    const BGM_STATE_KEY = 'ocean_bgm_state';
     let bgmIndex = 0;
     let activeBgm = bgm;
     let idleBgm = bgm2;
     let bgmTransition = null;
+    let lastBgmSaveAt = 0;
+    let bgmRestoreDone = false;
+
+    function saveBgmState(force = false) {
+      try {
+        if (corrupted || !bgmRestoreDone) return;
+        const now = Date.now();
+        if (!force && now - lastBgmSaveAt < 1000) return;
+        lastBgmSaveAt = now;
+        const t = Number(activeBgm && activeBgm.currentTime);
+        localStorage.setItem(BGM_STATE_KEY, codecStringify({ index: bgmIndex, time: Number.isFinite(t) && t > 0 ? t : 0 }));
+      } catch (_) {}
+    }
+
+    function restoreBgmState() {
+      try {
+        const s = codecParse(localStorage.getItem(BGM_STATE_KEY) || 'null');
+        const idx = s && Number(s.index);
+        const t = s && Number(s.time);
+        if (!s || !Number.isInteger(idx) || idx < 0 || idx >= BGM_PLAYLIST.length || !Number.isFinite(t) || t < 0) return false;
+        bgmIndex = idx;
+        bgmTransition = null;
+        activeBgm = bgm;
+        idleBgm = bgm2;
+        bgm.src = BGM_PLAYLIST[bgmIndex].src;
+        bgm.load();
+        bgmApplySources();
+        const applyTime = () => {
+          try {
+            const dur = Number(bgm.duration);
+            bgm.currentTime = Number.isFinite(dur) && dur > 0 ? Math.min(t, Math.max(0, dur - 0.25)) : t;
+          } catch (_) {}
+          bgmRestoreDone = true;
+        };
+        applyTime();
+        if (bgm.readyState < 1) bgm.addEventListener('loadedmetadata', applyTime, { once: true });
+        else bgmRestoreDone = true;
+        return true;
+      } catch (_) { return false; }
+    }
 
     function bgmApplySources() {
       try {
@@ -197,6 +238,7 @@
         idleBgm = t.from;
         bgmTransition = null;
         bgmApplySources();
+        saveBgmState(true);
         return activeBgm === bgm ? [1, 0] : [0, 1];
       }
       return t.from === bgm ? [1 - p, p] : [p, 1 - p];
@@ -208,10 +250,13 @@
       });
       a.addEventListener('timeupdate', () => {
         if (bgmTransition || !soundEnabled || a !== activeBgm) return;
+        saveBgmState();
         const dur = Number.isFinite(a.duration) ? a.duration : 0;
         if (dur > 0 && a.currentTime >= dur - BGM_CROSSFADE) startBgmTransition();
       });
     });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveBgmState(true); });
+    window.addEventListener('pagehide', () => saveBgmState(true));
 
     const hint = document.getElementById('hint');
     const settingsBtn = document.getElementById('settingsBtn');
@@ -1139,7 +1184,7 @@
       'ocean_settings','ocean_discoveries','ocean_achievements','ocean_equipped',
       'ocean_clicks','ocean_photos','ocean_bottles_found','ocean_bottle_note','ocean_bottom_trips',
       'ocean_click_lock_until','ocean_void_quest','ocean_facility','ocean_perspective','ocean_ship_looted',
-      'ocean_mining','ocean_void_octopus_defeated','ocean_blackout_until'
+      'ocean_mining','ocean_void_octopus_defeated','ocean_blackout_until','ocean_bgm_state'
     ];
     const SAVE_FORMAT = 'ocsv';
     const SAVE_VERSION = 3;
@@ -1565,6 +1610,7 @@
       });
     }
     loadSettings();
+    if (!restoreBgmState()) bgmRestoreDone = true;
 
     // --- audio sfx ---
     let audioCtx = null, masterGain = null, rainGain = null, windGain = null, underwaterGain = null, dayGain = null, nightGain = null;
@@ -4603,7 +4649,7 @@
       }
     });
 
-    setSound.addEventListener('change', () => { soundEnabled = setSound.checked; if (soundEnabled) startAudio(); else pauseBgmAll(false); sfxClick(); syncSettingsUI(); saveSettings(); });
+    setSound.addEventListener('change', () => { soundEnabled = setSound.checked; if (soundEnabled) startAudio(); else { saveBgmState(true); pauseBgmAll(false); } sfxClick(); syncSettingsUI(); saveSettings(); });
     setCycle.addEventListener('change', () => { dayCycle = setCycle.checked; if (!dayCycle) manualDayPhase = getCyclePhase(); sfxClick(); syncSettingsUI(); saveSettings(); });
     setSpeed.addEventListener('input', () => { cycleSpeed = Number(setSpeed.value)/100; speedLabel.textContent = cycleSpeed.toFixed(1)+'x'; saveSettings(); });
     setDay.addEventListener('change', () => {
