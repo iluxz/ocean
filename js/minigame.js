@@ -181,6 +181,7 @@
     let move = 0, total = 0, depth = 0, used = [], finished = false, busy = false;
     let targetDepth = 0, displayDepth = 0, bubbles = [], popups = [], particles = [], lastTs = 0;
     let runId = 0;
+    let rafId = 0;
 
     function pickQuestion() {
       const pool = QUESTIONS.filter(q => !used.includes(q.q));
@@ -228,7 +229,7 @@
     }
 
     function drawVisual(ts) {
-      if (!modal.classList.contains('open')) { requestAnimationFrame(drawVisual); return; }
+      if (!modal.classList.contains('open')) { rafId = 0; return; }
       if (!lastTs) lastTs = ts;
       const dt = Math.min(0.05, (ts - lastTs) / 1000);
       lastTs = ts;
@@ -305,7 +306,7 @@
       ctx.fillStyle = 'rgba(220,245,255,0.25)'; ctx.font = '9px Consolas, monospace';
       for (let m = 0; m <= 1000; m += 100) { const y = 30 + (m / 1000) * (h - 80); ctx.fillRect(w - 18, y, 10, 1); ctx.fillText(String(m), w - 38, y + 3); }
 
-      requestAnimationFrame(drawVisual);
+      rafId = requestAnimationFrame(drawVisual);
     }
 
     function endGame() {
@@ -363,8 +364,17 @@
       setTimeout(() => input.focus(), 20);
     }
 
-    function closeGame() { modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); }
-    function openGame() { modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); resizeCanvas(); renderState(); setTimeout(() => input.focus(), 50); }
+    function stopLoop() {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = 0; lastTs = 0;
+    }
+    function startLoop() {
+      if (rafId) return;
+      lastTs = 0;
+      rafId = requestAnimationFrame(drawVisual);
+    }
+    function closeGame() { modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); stopLoop(); }
+    function openGame() { modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); resizeCanvas(); renderState(); setTimeout(() => input.focus(), 50); startLoop(); }
 
     const mgBtn = document.getElementById('minigameBtn');
     if (mgBtn) mgBtn.addEventListener('click', (e) => {
@@ -382,7 +392,6 @@
     window.addEventListener('resize', () => { if (modal.classList.contains('open')) resizeCanvas(); });
 
     renderState();
-    requestAnimationFrame(drawVisual);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

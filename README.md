@@ -11,7 +11,7 @@ tiny 2d animated ocean page — for dark rooms, made this because idk im BORED
 ## live
 
 - GitHub Pages: https://iluxz.github.io/ocean/
-- githack: https://raw.githack.com/iluxz/ocean/master/index.html
+- githack: https://raw.githack.com/iluxz/ocean/main/index.html
 
 ## run locally
 
@@ -19,4 +19,4 @@ open `index.html` in a browser. click anywhere to start audio.
 
 ## feedback
 
-use the in-page **send feedback** button. it classifies messages locally (bug/suggestion/spam/harassment) and opens a prefilled GitHub issue draft for legit feedback.
+use the in-page **send feedback** button. it auto-translates feedback and opens a prefilled GitHub issue draft for legit feedback.

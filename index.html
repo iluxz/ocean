@@ -52,6 +52,8 @@
     }
     .btn:hover { transform: translateY(-1px); background: rgba(10, 36, 68, 0.55); border-color: rgba(126, 200, 255, 0.38); }
     .btn:active { transform: translateY(0); }
+    .btn.danger { border-color: rgba(255, 120, 120, 0.35); color: #ffb0b0; }
+    .btn.armed { border-color: rgba(255, 184, 92, 0.7); color: #ffd9a8; background: rgba(80, 44, 12, 0.55); }
     .btn.locked {
       position:relative; cursor:not-allowed; opacity:0.86;
       background: linear-gradient(180deg, rgba(58,66,78,0.42), rgba(24,28,36,0.58)) !important;
@@ -104,6 +106,7 @@
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .toast .toast-title { display:block; font-size:11px; color: var(--muted); text-transform:uppercase; letter-spacing:.14em; margin-bottom:4px; }
+    .toast .toast-sub { display:block; margin-top:6px; font-size:11px; color:rgba(236,247,255,0.68); }
     .action-row { display:flex; gap:8px; padding-top:10px; border-top:1px solid rgba(126,200,255,0.08); }
     .action-row .btn { flex:1; text-align:center; padding:9px 10px; }
     .setting-row input[type="range"] { width: 120px; accent-color: #7ec8ff; }
@@ -164,6 +167,9 @@
     .update-item strong { display:block; font-size:12px; color:var(--text); margin-bottom:4px; }
     .update-item span { font-size:11px; color:var(--muted); line-height:1.45; display:block; }
     .update-item em { font-size:10px; color:rgba(126,200,255,0.55); font-style:normal; letter-spacing:.08em; text-transform:uppercase; display:block; margin-bottom:4px; }
+    .update-tier { display:inline-block; margin-left:8px; padding:2px 7px; border-radius:999px; font-style:normal; font-size:9px; letter-spacing:.08em; color:rgba(180,220,255,0.78); border:1px solid rgba(126,200,255,0.2); background:rgba(126,200,255,0.07); }
+    .update-tier.tier-major-update { color:#e7d6ff; border-color:rgba(183,124,255,0.34); background:rgba(183,124,255,0.12); }
+    .update-tier.tier-bug-fix { color:#ffc4c4; border-color:rgba(255,120,140,0.26); background:rgba(255,90,120,0.08); }
     .badge { padding:4px 8px; border-radius:999px; border:1px solid rgba(126,200,255,0.2); font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
     .badge.bug { color:#9fd0ff; }
     .badge.suggestion { color:#b8e0ff; }
@@ -172,6 +178,44 @@
     .badge.other { color:#d4dbe6; }
     .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
     .modal-note { margin-top:8px; font-size:11px; color:var(--muted); line-height:1.4; }
+    .shop-card { width:min(680px, calc(100vw - 32px)); }
+    .shop-keeper { padding-bottom:12px; margin-bottom:10px; border-bottom:1px solid rgba(126,200,255,0.12); }
+    .shop-keeper strong { display:block; font-size:13px; color:var(--text); margin-bottom:4px; }
+    .shop-keeper p { margin:0; font-size:11px; color:var(--muted); line-height:1.45; }
+    #shopModal .modal-card { max-height:calc(100dvh - 24px); display:flex; flex-direction:column; overflow:hidden; }
+    #shopModal .shop-keeper, #shopModal .tabs, #shopModal .modal-actions { flex-shrink:0; }
+    #shopModal .shop-list, #shopModal .tab-pane.shop-list.active { display:grid; flex:1 1 auto; min-height:0; max-height:none; overflow-y:auto; overscroll-behavior:contain; gap:8px; padding-right:4px; scrollbar-width:thin; }
+    .shop-list::-webkit-scrollbar { width:8px; }
+    .shop-list::-webkit-scrollbar-thumb { background:rgba(126,200,255,0.25); border-radius:999px; }
+    #adminModal { z-index:99998; }
+    #adminModal .modal-card { max-height:calc(100dvh - 24px); overflow-y:auto; }
+    .admin-label { margin-top:12px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.12em; }
+    .admin-grid { display:grid; gap:8px; grid-template-columns:1fr 1fr; }
+    .shop-item { padding:10px 12px; border-radius:12px; border:1px solid rgba(126,200,255,0.12); background:rgba(255,255,255,0.025); min-width:0; }
+    .shop-item.done { opacity:0.72; border-color:rgba(140,255,190,0.18); }
+    .shop-item-top { display:flex; justify-content:space-between; gap:8px; align-items:center; font-size:12px; color:var(--text); min-width:0; }
+    .shop-item-top strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .shop-item-top .badge { flex-shrink:0; }
+    .shop-needs { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .ore-need { font-size:10px; letter-spacing:.06em; padding:3px 7px; border-radius:999px; background:rgba(255,120,140,0.08); border:1px solid rgba(255,120,140,0.2); color:#ffb0b0; text-transform:uppercase; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ore-need.ok { background:rgba(140,255,190,0.08); border-color:rgba(140,255,190,0.24); color:#a8ffd0; }
+    .shop-note { font-size:11px; color:var(--muted); line-height:1.45; margin-top:8px; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+    .shop-meta { font-size:10px; color:rgba(236,247,255,0.5); margin-top:6px; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .shop-foot { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:10px; font-size:10px; color:var(--muted); min-width:0; }
+    .shop-foot span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .shop-foot .btn { flex-shrink:0; padding:7px 11px; font-size:11px; }
+    .shop-foot .btn:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+    .battery-row { display:grid; grid-template-columns:48px 1fr 34px; gap:8px; align-items:center; margin-top:10px; font-size:10px; color:var(--muted); }
+    .battery-bar { height:8px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; border:1px solid rgba(126,200,255,0.12); }
+    .battery-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#7ec8ff,#cdb8ff); transition:width .2s ease; }
+    .battery-fill[data-low] { background:linear-gradient(90deg,#ff6f8a,#ffb36b); }
+    .hurt-vignette { position:fixed; inset:0; z-index:13; pointer-events:none; opacity:0; transition:opacity .25s ease; box-shadow: inset 0 0 130px 28px rgba(255,60,80,0.5), inset 0 0 24px rgba(255,60,80,0.3); background:radial-gradient(ellipse at center, transparent 55%, rgba(120,10,30,0.32)), rgba(255,45,75,0.05); }
+    .hurt-vignette.active { opacity:1; animation:hurtPulse 1.8s ease-in-out infinite; }
+    .hurt-timer { position:fixed; right:18px; top:18px; z-index:15; display:none; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; border:1px solid rgba(255,120,120,0.4); background:rgba(40,6,14,0.62); backdrop-filter:blur(8px); color:#ffc4c4; font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
+    .hurt-timer.active { display:flex; }
+    .hurt-timer .dot { width:7px; height:7px; border-radius:50%; background:#ff5f7a; box-shadow:0 0 10px #ff5f7a; animation:hurtBlink 1s steps(2,end) infinite; }
+    @keyframes hurtPulse { 0%,100% { opacity:.72; } 50% { opacity:1; } }
+    @keyframes hurtBlink { 0%,100% { opacity:1; } 50% { opacity:.3; } }
     .hint {
       position: fixed;
       left: 18px;
@@ -192,6 +236,39 @@
     .oxygen-fill { height:100%; width:100%; background: linear-gradient(90deg, #7ec8ff, #b8ecff); box-shadow: 0 0 12px rgba(126,200,255,0.45); transition: width .15s linear, background .2s ease; }
     .oxygen-hud.low .oxygen-fill { background: linear-gradient(90deg, #ff9d6b, #ffd08a); box-shadow: 0 0 12px rgba(255,160,120,0.45); }
     .oxygen-hud.critical .oxygen-fill { background: linear-gradient(90deg, #ff5f7a, #ff9d6b); }
+    .blackout-overlay { position:fixed; inset:0; z-index:99998; display:none; place-items:center; background:#000; color:var(--text); text-align:center; user-select:none; touch-action:none; }
+    .blackout-overlay.open { display:grid; }
+    .blackout-card { max-width:min(460px, calc(100vw - 40px)); padding:24px; }
+    .blackout-title { font-size:13px; letter-spacing:.22em; text-transform:uppercase; color:rgba(236,247,255,0.52); margin-bottom:16px; }
+    .blackout-timer { font-family:Consolas, "Courier New", monospace; font-size:clamp(56px, 13vw, 104px); font-weight:300; letter-spacing:.04em; line-height:1; }
+    .blackout-note { margin-top:18px; font-size:11px; letter-spacing:.08em; line-height:1.6; color:rgba(236,247,255,0.34); }
+    .mining-hud { position:fixed; left:18px; top:84px; z-index:12; width:min(260px, calc(100vw - 110px)); padding:10px 12px; border-radius:14px; border:1px solid rgba(180,140,255,0.2); background:rgba(8,10,30,0.52); backdrop-filter:blur(8px); box-shadow:0 10px 30px rgba(0,0,0,0.25); }
+    .mining-hud.hidden { display:none; }
+    .mining-head { display:flex; justify-content:space-between; gap:8px; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:rgba(236,247,255,0.52); margin-bottom:7px; }
+    .mining-head span:last-child { color:#cdb8ff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mining-tip { margin-bottom:8px; padding:7px 9px; border-radius:9px; border:1px dashed rgba(183,124,255,0.28); background:rgba(183,124,255,0.07); color:#e7d6ff; font-size:10px; line-height:1.45; letter-spacing:.02em; }
+    .mining-tip.hidden { display:none; }
+    .ore-chips { display:flex; flex-wrap:wrap; gap:5px; }
+    .ore-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 7px; border-radius:999px; font-size:10px; color:rgba(236,247,255,0.78); background:rgba(255,255,255,0.04); border:1px solid color-mix(in srgb, var(--ore) 45%, transparent); }
+    .ore-chip b { font-size:9px; color:var(--ore); letter-spacing:.08em; }
+    .mining-auto { margin-top:6px; font-size:10px; letter-spacing:.06em; color:rgba(236,247,255,0.58); }
+    .mining-recovery { margin-top:8px; padding-top:8px; border-top:1px solid rgba(183,124,255,0.16); }
+    .mining-recovery.hidden { display:none; }
+    .mining-recovery-head { display:flex; justify-content:space-between; gap:8px; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#e7d6ff; margin-bottom:5px; }
+    .mining-recovery-head span:last-child { color:rgba(236,247,255,0.72); }
+    .mining-recovery-bar { height:6px; border-radius:999px; overflow:hidden; background:rgba(255,255,255,0.07); border:1px solid rgba(183,124,255,0.2); }
+    .mining-recovery-fill { height:100%; width:0%; background:linear-gradient(90deg,#b77cff,#ff9d6b); transition:width .12s linear; }
+    .tablet-btn { margin-top:8px; width:100%; padding:7px 10px; border-radius:999px; border:1px solid rgba(183,124,255,0.36); background:rgba(183,124,255,0.12); color:#e7d6ff; font:inherit; font-size:10px; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }
+    .tablet-btn.hidden { display:none; }
+    .tablet-btn:hover { background:rgba(183,124,255,0.2); }
+    .tablet-stats { display:grid; gap:10px; max-height:min(58vh,520px); overflow:auto; padding-right:4px; }
+    .tablet-head { display:flex; justify-content:space-between; gap:10px; align-items:center; padding-bottom:10px; border-bottom:1px solid rgba(126,200,255,0.12); }
+    .tablet-head strong { font-size:14px; color:var(--text); }
+    .tablet-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .tablet-cell { padding:10px; border-radius:10px; border:1px solid rgba(126,200,255,0.12); background:rgba(255,255,255,0.025); font-size:11px; color:var(--muted); line-height:1.45; }
+    .tablet-cell b { display:block; font-size:10px; color:rgba(236,247,255,0.5); text-transform:uppercase; letter-spacing:.1em; margin-bottom:4px; }
+    .tablet-cell span { color:var(--text); }
+    .tablet-cell.contracts span { display:block; line-height:1.6; }
     .boss-ui { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); z-index: 14; padding: 14px; border-radius: 16px; border: 1px solid rgba(140,120,255,0.28); background: rgba(6,10,28,0.72); backdrop-filter: blur(10px); box-shadow: 0 20px 50px rgba(0,0,0,0.45); display:none; }
     .boss-ui.open { display:block; }
     .boss-title { font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:#cbbcff; margin-bottom:10px; text-align:center; }
@@ -204,7 +281,7 @@
     .boss-actions .btn { flex:1; padding:10px 8px; }
     .boss-actions .btn:disabled { opacity:0.45; cursor:not-allowed; transform:none; }
     .boss-log { min-height:20px; font-size:12px; color:rgba(236,247,255,0.8); text-align:center; line-height:1.4; }
-    @media (max-width:640px) { .boss-actions { flex-direction:column; } .oxygen-hud { left:12px; top:12px; width:170px; } }
+    @media (max-width:640px) { .boss-actions { flex-direction:column; } .oxygen-hud { left:12px; top:12px; width:170px; } .mining-hud { left:12px; top:72px; width:170px; } }
   </style>
 </head>
 <body>
@@ -214,6 +291,17 @@
   <div class="oxygen-hud ui" id="oxygenHud" aria-live="polite">
     <div class="oxygen-label"><span>O2</span><span id="oxygenText">100%</span></div>
     <div class="oxygen-bar"><div class="oxygen-fill" id="oxygenFill"></div></div>
+  </div>
+  <div class="mining-hud ui" id="miningHud" aria-live="polite">
+    <div class="mining-head"><span>shore ledger</span><span id="pickaxeLabel">starter pick</span></div>
+    <div class="mining-tip" id="miningTip">tap glowing veins to mine. swings need a short recovery, so do not mash.</div>
+    <div class="ore-chips" id="oreCounts"></div>
+    <div class="mining-auto" id="autoStatus">auto: not built</div>
+    <div class="mining-recovery hidden" id="miningRecovery" aria-live="polite">
+      <div class="mining-recovery-head"><span id="miningRecoveryLabel">swing recovery</span><span id="miningRecoveryText">0.0s</span></div>
+      <div class="mining-recovery-bar"><div class="mining-recovery-fill" id="miningRecoveryFill"></div></div>
+    </div>
+    <button class="tablet-btn hidden" id="tabletBtn" type="button">machine tablet</button>
   </div>
   <div class="boss-ui ui" id="bossUi" aria-hidden="true">
     <div class="boss-title" id="bossTitle">VOID OCTOPUS</div>
@@ -225,6 +313,14 @@
       <button class="btn" id="bossHealBtn" type="button">recharge</button>
     </div>
     <div class="boss-log" id="bossLog">a void octopus rises from the hadal dark...</div>
+  </div>
+
+  <div class="blackout-overlay" id="blackoutOverlay" aria-hidden="true" role="alert">
+    <div class="blackout-card">
+      <div class="blackout-title">you blacked out</div>
+      <div class="blackout-timer" id="blackoutTimer">5:00</div>
+      <div class="blackout-note">no air down there. you wake at the surface when the timer runs out.</div>
+    </div>
   </div>
 
   <div class="settings-wrap ui">
@@ -250,6 +346,9 @@
         <button class="btn" id="goBackBtn" type="button">go back</button>
       </div>
       <div class="action-row">
+        <button class="btn" id="shopBtn" type="button">shore supply</button>
+      </div>
+      <div class="action-row">
         <button class="btn" id="photoBtn" type="button">save photo</button>
         <button class="btn" id="logBtn" type="button">discoveries</button>
       </div>
@@ -266,6 +365,9 @@
       <div class="action-row">
         <button class="btn" id="exportSaveBtn" type="button">export save</button>
         <button class="btn" id="importSaveBtn" type="button">import save</button>
+      </div>
+      <div class="action-row">
+        <button class="btn danger" id="resetSaveBtn" type="button">reset save</button>
       </div>
       <input id="importSaveInput" type="file" accept=".ocsv,.json,.txt,.sav,*/*" style="display:none">
       <div class="action-row">
@@ -303,6 +405,32 @@
     </div>
   </div>
 
+  <div class="modal" id="shopModal" aria-hidden="true">
+    <div class="modal-card shop-card" role="dialog" aria-modal="true" aria-label="Shore supply">
+      <h2>shore supply</h2>
+      <div class="shop-keeper">
+        <strong>the shore keeper</strong><p id="shopLine">ore goes in. better tools come out. no haggling.</p>
+      </div>
+      <div class="tabs">
+        <button class="tab active" id="shopTabContracts" type="button">contracts</button>
+        <button class="tab" id="shopTabTools" type="button">tools</button>
+        <button class="tab" id="shopTabAuto" type="button">auto tab</button>
+      </div>
+      <div class="tab-pane active shop-list" id="shopContracts"></div>
+      <div class="tab-pane shop-list" id="shopTools"></div>
+      <div class="tab-pane shop-list" id="shopAuto"></div>
+      <div class="modal-actions"><button class="btn" id="shopClose" type="button">close</button></div>
+    </div>
+  </div>
+
+  <div class="modal" id="tabletModal" aria-hidden="true">
+    <div class="modal-card shop-card" role="dialog" aria-modal="true" aria-label="Machine tablet">
+      <h2>machine tablet</h2>
+      <div class="tablet-stats" id="tabletStats"></div>
+      <div class="modal-actions"><button class="btn" id="tabletClose" type="button">close</button></div>
+    </div>
+  </div>
+
   <div class="modal" id="errorModal" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-label="Something went wrong">
       <h2>:( ocean crashed</h2>
@@ -319,11 +447,33 @@
     <div class="modal-card" role="dialog" aria-modal="true" aria-label="Admin panel" style="width:min(520px,calc(100vw - 32px));">
       <h2>admin panel</h2>
       <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;">secret ocean controls. use responsibly, or don't, i'm not your mom.</div>
-      <div style="display:grid;gap:8px;">
+      <div class="admin-grid">
         <button class="btn" id="adminSpawnBottle" type="button">spawn bottle</button>
         <button class="btn" id="adminAllDiscoveries" type="button">get all discoveries</button>
         <button class="btn" id="adminAllAchievements" type="button">get all achievements</button>
         <button class="btn" id="adminFinishQuest" type="button">finish quest</button>
+      </div>
+      <div class="admin-label">mining + shore</div>
+      <div class="admin-grid">
+        <button class="btn" id="adminMiningKit" type="button">max mining kit</button>
+        <button class="btn" id="adminBuildRigs" type="button">build both rigs</button>
+        <button class="btn" id="adminChargeRigs" type="button">charge + repair</button>
+        <button class="btn" id="adminRerollVeins" type="button">reroll veins</button>
+      </div>
+      <div class="admin-label">diving + blackout</div>
+      <div class="admin-grid">
+        <button class="btn" id="adminRefillOxygen" type="button">refill oxygen</button>
+        <button class="btn" id="adminSkipBlackout" type="button">skip blackout</button>
+        <button class="btn" id="adminTriggerBlackout" type="button">trigger blackout</button>
+        <button class="btn" id="adminGoShore" type="button">go to shore</button>
+      </div>
+      <div class="admin-label">world flags</div>
+      <div class="admin-grid">
+        <button class="btn" id="adminLootShip" type="button">loot shipwreck</button>
+        <button class="btn" id="adminSealDeep" type="button">seal deep blue</button>
+        <button class="btn" id="adminUnsealDeep" type="button">unseal facility</button>
+        <button class="btn" id="adminSpawnOctopus" type="button">spawn octopus</button>
+        <button class="btn" id="adminDefeatOctopus" type="button">defeat octopus</button>
       </div>
       <div id="adminStatus" style="margin-top:12px;font-size:12px;color:var(--muted);min-height:18px;">status: waiting...</div>
       <div class="modal-actions"><button class="btn" id="adminClose" type="button">close</button></div>

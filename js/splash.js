@@ -57,6 +57,7 @@
   function finish() {
     if (done) return;
     done = true;
+    window.removeEventListener('keydown', skip);
     overlay.classList.add('fade');
     setTimeout(() => overlay.remove(), 900);
   }

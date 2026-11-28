@@ -239,6 +239,7 @@
     const exportSaveBtn = document.getElementById('exportSaveBtn');
     const importSaveBtn = document.getElementById('importSaveBtn');
     const importSaveInput = document.getElementById('importSaveInput');
+    const resetSaveBtn = document.getElementById('resetSaveBtn');
     const feedbackStatus = document.getElementById('feedbackStatus');
     const toastEl = document.getElementById('toast');
     let toastTimer = 0;
@@ -253,6 +254,28 @@
     const oxygenHud = document.getElementById('oxygenHud');
     const oxygenFill = document.getElementById('oxygenFill');
     const oxygenText = document.getElementById('oxygenText');
+    const blackoutOverlay = document.getElementById('blackoutOverlay');
+    const blackoutTimer = document.getElementById('blackoutTimer');
+    const miningHud = document.getElementById('miningHud');
+    const oreCounts = document.getElementById('oreCounts');
+    const pickaxeLabel = document.getElementById('pickaxeLabel');
+    const autoStatus = document.getElementById('autoStatus');
+    const miningRecovery = document.getElementById('miningRecovery');
+    const miningRecoveryLabel = document.getElementById('miningRecoveryLabel');
+    const miningRecoveryText = document.getElementById('miningRecoveryText');
+    const miningRecoveryFill = document.getElementById('miningRecoveryFill');
+    const miningTip = document.getElementById('miningTip');
+    const shopBtn = document.getElementById('shopBtn');
+    const shopModal = document.getElementById('shopModal');
+    const shopClose = document.getElementById('shopClose');
+    const shopLine = document.getElementById('shopLine');
+    const shopContracts = document.getElementById('shopContracts');
+    const shopTools = document.getElementById('shopTools');
+    const shopAuto = document.getElementById('shopAuto');
+    const tabletBtn = document.getElementById('tabletBtn');
+    const tabletModal = document.getElementById('tabletModal');
+    const tabletClose = document.getElementById('tabletClose');
+    const tabletStats = document.getElementById('tabletStats');
     const bossUi = document.getElementById('bossUi');
     const bossHpFill = document.getElementById('bossHpFill');
     const playerHpFill = document.getElementById('playerHpFill');
@@ -287,6 +310,23 @@
     const adminAllAchievements = document.getElementById('adminAllAchievements');
     const adminFinishQuest = document.getElementById('adminFinishQuest');
     const adminStatus = document.getElementById('adminStatus');
+    const adminMiningKit = document.getElementById('adminMiningKit');
+    const adminBuildRigs = document.getElementById('adminBuildRigs');
+    const adminChargeRigs = document.getElementById('adminChargeRigs');
+    const adminRerollVeins = document.getElementById('adminRerollVeins');
+    const adminRefillOxygen = document.getElementById('adminRefillOxygen');
+    const adminTriggerBlackout = document.getElementById('adminTriggerBlackout');
+    const adminSkipBlackout = document.getElementById('adminSkipBlackout');
+    const adminGoShore = document.getElementById('adminGoShore');
+    const adminLootShip = document.getElementById('adminLootShip');
+    const adminSealDeep = document.getElementById('adminSealDeep');
+    const adminUnsealDeep = document.getElementById('adminUnsealDeep');
+    const adminSpawnOctopus = document.getElementById('adminSpawnOctopus');
+    const adminDefeatOctopus = document.getElementById('adminDefeatOctopus');
+    function anyUiModalOpen() {
+      return [adminModal, shopModal, tabletModal, logModal, achModal, updateModal, feedbackModal]
+        .some(m => m && m.classList.contains('open'));
+    }
 
     let w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
     let t = 0;
@@ -307,11 +347,55 @@
     let weatherMode = 'auto'; // auto|clear|rain|storm|snow
     let weatherIntensity = 0;
     let weatherTarget = 0;
+
+    // JSON codec that keeps non-finite numbers intact across saves.
+    // Tagged objects decode back to Infinity/-Infinity/NaN; plain old JSON still parses.
+    const CODEC_NUM_TAG = '__ocean_number__';
+    function codecReplacer(key, value) {
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        return { [CODEC_NUM_TAG]: Number.isNaN(value) ? 'NaN' : value > 0 ? 'Infinity' : '-Infinity' };
+      }
+      return value;
+    }
+    function codecReviver(key, value) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const keys = Object.keys(value);
+        if (keys.length === 1 && keys[0] === CODEC_NUM_TAG) {
+          const tag = value[CODEC_NUM_TAG];
+          if (tag === 'Infinity') return Infinity;
+          if (tag === '-Infinity') return -Infinity;
+          if (tag === 'NaN') return NaN;
+        }
+      }
+      return value;
+    }
+    function codecStringify(value) { return JSON.stringify(value, codecReplacer); }
+    function codecParse(text) {
+      const raw = String(text == null ? '' : text);
+      const bare = raw.trim();
+      if (bare === 'Infinity') return Infinity;
+      if (bare === '-Infinity') return -Infinity;
+      if (bare === 'NaN') return NaN;
+      return JSON.parse(raw, codecReviver);
+    }
+    function safeIdArray(text) {
+      try {
+        const parsed = codecParse(text);
+        return Array.isArray(parsed) ? parsed.filter(id => typeof id === 'string') : [];
+      } catch (_) {
+        return [];
+      }
+    }
+    function safeNum(value, fallback = 0) {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
     let dayFactor = 0;
     let cameraY = 0;
     let cameraTarget = 0;
     let camAnim = null;
-    let perspective = Math.max(0, Math.min(2, Number(localStorage.getItem('ocean_perspective') || 0))); // 0=main,1=forward,2=forward deep (not for facility)
+    let perspective = Math.max(0, Math.min(3, Math.floor(safeNum(localStorage.getItem('ocean_perspective'), 0)))); // 0=main,1=kelp,2=deep,3=shore supply
     const MAX_DEPTH = 5; // base max; quest unlocks 6
     const DEPTH_LAYERS = [
       { id:'surface', name:'surface', min:0, max:0.5 },
@@ -322,6 +406,69 @@
       { id:'void', name:'the void', min:4.5, max:5.5 },
       { id:'facility', name:'the deep blue facility', min:5.5, max:6.5 }
     ];
+
+    // Shore mining economy. Every swimmable band has veins except the void and facility.
+    // Common veins are fixed; rare ores roll into empty vein slots on load/respawn.
+    const ORE_DEFS = {
+      iron:      { name:'iron',        layer:1, color:'#b9c8d6', vein:'#7f99af', hp:5,  respawn:42000,  label:'FE', rare:false },
+      brine:     { name:'brine glass', layer:2, color:'#7ee0d0', vein:'#2c8f86', hp:9,  respawn:52000,  label:'BR', rare:false },
+      trench:    { name:'trench shard',layer:3, color:'#8fa9ff', vein:'#425a9c', hp:12, respawn:66000,  label:'TR', rare:false },
+      gold:      { name:'gold',        layer:0, color:'#ffd36a', vein:'#b8862f', hp:8,  respawn:56000,  label:'AU', rare:true },
+      diamond:   { name:'diamond',     layer:0, color:'#94eaff', vein:'#3aa5c9', hp:11, respawn:70000,  label:'DM', rare:true },
+      abyssite:  { name:'abyssite',    layer:4, color:'#ff74a8', vein:'#a63b68', hp:15, respawn:88000,  label:'AB', rare:false },
+      voidglass: { name:'voidglass',   layer:0, color:'#c8a8ff', vein:'#6b48a8', hp:20, respawn:105000, label:'VG', rare:true }
+    };
+    const RARE_ORES = ['gold', 'diamond', 'voidglass'];
+    const RARE_SPAWN_CHANCE = 0.35;
+    const MACHINE_PAD_COUNT = 2;
+    const ORE_NODES = [
+      { id:'u0',  layer:1, ore:'iron',     x:0.11, y:0.83 },
+      { id:'u1',  layer:1, ore:'iron',     x:0.41, y:0.91 },
+      { id:'u2',  layer:1, ore:'iron',     x:0.74, y:0.79 },
+      { id:'ur0', layer:1, ore:null,       x:0.27, y:0.71 },
+      { id:'ur1', layer:1, ore:null,       x:0.59, y:0.87 },
+      { id:'ur2', layer:1, ore:null,       x:0.89, y:0.82 },
+      { id:'a0',  layer:2, ore:'brine',    x:0.19, y:0.83 },
+      { id:'a1',  layer:2, ore:'brine',    x:0.63, y:0.77 },
+      { id:'ar0', layer:2, ore:null,       x:0.38, y:0.89 },
+      { id:'ar1', layer:2, ore:null,       x:0.84, y:0.71 },
+      { id:'t0',  layer:3, ore:'trench',   x:0.24, y:0.86 },
+      { id:'t1',  layer:3, ore:'trench',   x:0.70, y:0.79 },
+      { id:'tr0', layer:3, ore:null,       x:0.47, y:0.70 },
+      { id:'tr1', layer:3, ore:null,       x:0.91, y:0.87 },
+      { id:'h0',  layer:4, ore:'abyssite', x:0.15, y:0.87 },
+      { id:'h1',  layer:4, ore:'abyssite', x:0.51, y:0.76 },
+      { id:'h2',  layer:4, ore:'abyssite', x:0.80, y:0.92 },
+      { id:'hr0', layer:4, ore:null,       x:0.33, y:0.69 },
+      { id:'hr1', layer:4, ore:null,       x:0.66, y:0.85 },
+      { id:'hr2', layer:4, ore:null,       x:0.93, y:0.74 }
+    ];
+    const PICKAXES = [
+      { name:'starter pick', damage:1, note:'free. slow, blunt, honest.' },
+      { name:'iron pick',    damage:2, note:'twice the bite. still a workout.' },
+      { name:'gold pick',    damage:3, note:'soft metal, sharp edge.' },
+      { name:'diamond pick', damage:4, note:'bites clean through pretty rocks.' },
+      { name:'abyss pick',   damage:6, note:'voidglass head. barely legal.' }
+    ];
+    const AUTO_TIERS = [
+      { name:'not built',     maxLayer:0, interval:0,    damage:0,  drain:0,  waste:0,    breakdown:0,    note:'the shore keeper has a machine for this.' },
+      { name:'tide pump',     maxLayer:1, interval:12000, damage:1,  drain:32, waste:0.35, breakdown:0.24, note:'upper veins only. slow, leaky, and wasteful.' },
+      { name:'reef rig',      maxLayer:3, interval:8500,  damage:3,  drain:34, waste:0.16, breakdown:0.12, note:'reaches the trenches. steadier, still thirsty.' },
+      { name:'abyss crawler', maxLayer:4, interval:4500,  damage:10, drain:40, waste:0.05, breakdown:0.05, note:'hadal specialist. fast, reliable, burns battery fastest.' }
+    ];
+    const CONTRACTS = [
+      { id:'iron',     title:'first sample',  need:{ iron:6 },                    pickaxe:1, auto:1, line:'bring me 6 iron. i will fix that useless pump.' },
+      { id:'gold',     title:'bright seam',   need:{ gold:5 },                    pickaxe:2, auto:2, line:'5 gold buys a better head and a reef rig.' },
+      { id:'diamond',  title:'hard proof',    need:{ diamond:4 },                 pickaxe:3, auto:3, line:'4 diamond. then you get the real crawler.' },
+      { id:'abyss',    title:'deep receipt',  need:{ abyssite:3, voidglass:2 },   pickaxe:4, auto:0, line:'3 abyssite and 2 voidglass. last upgrade. no refunds.' }
+    ];
+    const TABLET_COST = { iron:2, gold:1 };
+    // Manual mining has a deliberate rhythm. Clicking faster than a human-scale
+    // swing keeps adding recovery time, so autoclickers just stall themselves.
+    const MANUAL_MINE_COOLDOWN_MS = 600;
+    const MANUAL_MINE_FAST_MS = 450;
+    const MANUAL_MINE_PENALTY_MS = 550;
+    const MANUAL_MINE_MAX_PENALTY_MS = 5000;
     let lightning = 0;
     let nextLightning = 4000 + Math.random() * 8000;
     const ripples = [];
@@ -332,36 +479,171 @@
     const trenchParticles = Array.from({ length: 55 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random()*1.4+0.2, ph: Math.random()*10, sp: 0.000008+Math.random()*0.000015, c: Math.random()<0.5?'120,220,255':'180,140,255' }));
     const hadalSpores = Array.from({ length: 80 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random()*2.2+0.4, ph: Math.random()*10, sp: 0.000006+Math.random()*0.000012 }));
     const voidEyes = Array.from({ length: 14 }, () => ({ x: Math.random(), y: 0.15 + Math.random()*0.7, ph: Math.random()*10, blink: Math.random()*6 }));
-    const discoveries = JSON.parse(localStorage.getItem('ocean_discoveries') || '[]');
-    const achievements = JSON.parse(localStorage.getItem('ocean_achievements') || '[]');
+    const discoveries = safeIdArray(localStorage.getItem('ocean_discoveries'));
+    const achievements = safeIdArray(localStorage.getItem('ocean_achievements'));
     let equippedDiscovery = localStorage.getItem('ocean_equipped') || '';
-    let clicks = Number(localStorage.getItem('ocean_clicks') || 0);
-    let photoCount = Number(localStorage.getItem('ocean_photos') || 0);
-    let bottlesFound = Number(localStorage.getItem('ocean_bottles_found') || 0);
-    let bottomTrips = Number(localStorage.getItem('ocean_bottom_trips') || 0);
+    let clicks = Math.max(0, safeNum(localStorage.getItem('ocean_clicks')));
+    let photoCount = Math.max(0, safeNum(localStorage.getItem('ocean_photos')));
+    let bottlesFound = Math.max(0, safeNum(localStorage.getItem('ocean_bottles_found')));
+    const storedBottleNote = safeNum(localStorage.getItem('ocean_bottle_note'), -1);
+    let bottleNoteIndex = Number.isFinite(storedBottleNote) ? storedBottleNote : -1;
+    let bottomTrips = Math.max(0, safeNum(localStorage.getItem('ocean_bottom_trips')));
     let reachedTopSinceBottom = true;
-    let clickLockUntil = Number(localStorage.getItem('ocean_click_lock_until') || 0);
+    let clickLockUntil = Math.max(0, safeNum(localStorage.getItem('ocean_click_lock_until')));
     let quest = null;
-    try { quest = JSON.parse(localStorage.getItem('ocean_void_quest') || 'null'); } catch (_) {}
-    if (!quest || typeof quest !== 'object') {
-      quest = { offered: false, accepted: false, completed: false, unlockedDeep: false, bottlesAtAccept: bottlesFound, fishAtAccept: discoveries.filter(id => ['clownfish','pufferfish','shark','betta','koi'].includes(id)).length, tripsAtAccept: bottomTrips };
+    try { quest = codecParse(localStorage.getItem('ocean_void_quest') || 'null'); } catch (_) {}
+    if (!quest || typeof quest !== 'object' || Array.isArray(quest)) {
+      quest = { offered: false, accepted: false, completed: false, unlockedDeep: false, deepBlueSealed: false, bottlesAtAccept: bottlesFound, fishAtAccept: discoveries.filter(id => ['clownfish','pufferfish','shark','betta','koi'].includes(id)).length, tripsAtAccept: bottomTrips };
+    } else {
+      const baseQuest = { offered: false, accepted: false, completed: false, unlockedDeep: false, deepBlueSealed: false, bottlesAtAccept: bottlesFound, fishAtAccept: discoveries.filter(id => ['clownfish','pufferfish','shark','betta','koi'].includes(id)).length, tripsAtAccept: bottomTrips };
+      quest = { ...baseQuest, ...quest };
+      for (const key of ['bottlesAtAccept','fishAtAccept','tripsAtAccept']) quest[key] = Math.max(0, safeNum(quest[key], baseQuest[key]));
+      for (const key of ['offered','accepted','completed','unlockedDeep','deepBlueSealed']) quest[key] = !!quest[key];
     }
     let voidTalkTimer = 0;
     let voidDialogue = null;
     let voidEntity = { x: 0.5, y: 0.5, r: 70, pulse: 0 };
     let facility = { puzzleA:false, puzzleB:false, encounterDone:false, complete:false, code:'BLUE', unlocked:false };
     try {
-      const sf = JSON.parse(localStorage.getItem('ocean_facility') || 'null');
-      if (sf && typeof sf === 'object') facility = { ...facility, ...sf, code:'BLUE' };
+      const sf = codecParse(localStorage.getItem('ocean_facility') || 'null');
+      if (sf && typeof sf === 'object' && !Array.isArray(sf)) facility = { ...facility, ...sf, code:'BLUE' };
     } catch (_) {}
+    for (const key of ['puzzleA','puzzleB','encounterDone','complete','unlocked']) facility[key] = !!facility[key];
+    if (!quest.deepBlueSealed && facility.complete) quest.deepBlueSealed = true;
     let shipLooted = localStorage.getItem('ocean_ship_looted') === '1';
     let viewPush = 0; // forward/back camera push animation
+
+    // Camera movement throttle. Stops rapid clicks from stacking cameraTarget
+    // and turning a six-layer climb into one instant teleport. Kept at or above
+    // the 1600ms camera animation so a new dive never interrupts the last one.
+    const NAV_COOLDOWN_MS = 1700;
+    let navCooldownUntil = 0;
+    let navCooldownTimer = 0;
+    function navOnCooldown() { return performance.now() < navCooldownUntil; }
+    function armNavCooldown() {
+      navCooldownUntil = performance.now() + NAV_COOLDOWN_MS;
+      clearTimeout(navCooldownTimer);
+      navCooldownTimer = setTimeout(() => {
+        navCooldownUntil = 0;
+        syncSettingsUI();
+      }, NAV_COOLDOWN_MS);
+      syncSettingsUI();
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      if (performance.now() >= navCooldownUntil) {
+        clearTimeout(navCooldownTimer);
+        navCooldownUntil = 0;
+      }
+      syncSettingsUI();
+    });
+
+    function defaultMachineState() {
+      return { tier: 0, battery: 100, broken: false, progress: 0, message: 'machine not built' };
+    }
+    function sanitizeMachine(raw) {
+      const m = defaultMachineState();
+      if (!raw || typeof raw !== 'object') return m;
+      const tv = Number(raw.tier), bv = Number(raw.battery), pr = Number(raw.progress);
+      m.tier = Number.isFinite(tv) ? Math.max(0, Math.min(AUTO_TIERS.length - 1, Math.floor(tv))) : 0;
+      m.battery = Number.isFinite(bv) ? Math.max(0, Math.min(100, bv)) : 100;
+      m.broken = !!raw.broken;
+      m.progress = Number.isFinite(pr) ? Math.max(0, pr) : 0;
+      m.message = typeof raw.message === 'string' ? raw.message.slice(0, 120) : 'machine not built';
+      return m;
+    }
+    function defaultMiningState() {
+      const ores = {};
+      for (const id of Object.keys(ORE_DEFS)) ores[id] = 0;
+      return {
+        ores,
+        pickaxe: 0,
+        contracts: {},
+        pinged: {},
+        nodeHp: {},
+        nodeRespawn: {},
+        nodeOre: {},
+        tablet: false,
+        tipSeen: false,
+        machines: Array.from({ length: MACHINE_PAD_COUNT }, defaultMachineState),
+        activeMachine: 0
+      };
+    }
+    let mining = defaultMiningState();
+    try {
+      const sm = codecParse(localStorage.getItem('ocean_mining') || 'null');
+      if (sm && typeof sm === 'object') {
+        for (const id of Object.keys(ORE_DEFS)) {
+          const v = Number(sm.ores && sm.ores[id]);
+          mining.ores[id] = Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+        }
+        const pv = Number(sm.pickaxe);
+        mining.pickaxe = Number.isFinite(pv) ? Math.max(0, Math.min(PICKAXES.length - 1, Math.floor(pv))) : 0;
+        if (sm.contracts && typeof sm.contracts === 'object') {
+          for (const c of CONTRACTS) mining.contracts[c.id] = !!sm.contracts[c.id];
+        }
+        if (sm.pinged && typeof sm.pinged === 'object') {
+          for (const c of CONTRACTS) mining.pinged[c.id] = !!sm.pinged[c.id];
+        }
+        mining.tablet = !!sm.tablet;
+        mining.tipSeen = !!sm.tipSeen;
+        if (sm.nodeOre && typeof sm.nodeOre === 'object') {
+          for (const n of ORE_NODES) {
+            const id = sm.nodeOre[n.id];
+            if (!n.ore && RARE_ORES.includes(id)) mining.nodeOre[n.id] = id;
+          }
+        }
+        if (sm.nodeHp && typeof sm.nodeHp === 'object') {
+          for (const n of ORE_NODES) {
+            const v = Number(sm.nodeHp[n.id]);
+            const oreId = n.ore || mining.nodeOre[n.id];
+            if (Number.isFinite(v) && oreId && ORE_DEFS[oreId]) mining.nodeHp[n.id] = Math.max(0, Math.min(ORE_DEFS[oreId].hp, v));
+          }
+        }
+        if (sm.nodeRespawn && typeof sm.nodeRespawn === 'object') {
+          for (const n of ORE_NODES) {
+            const v = Number(sm.nodeRespawn[n.id]);
+            if (Number.isFinite(v)) mining.nodeRespawn[n.id] = Math.max(0, v);
+          }
+        }
+        if (Array.isArray(sm.machines)) {
+          for (let i = 0; i < MACHINE_PAD_COUNT; i++) mining.machines[i] = sanitizeMachine(sm.machines[i]);
+        } else if (sm.auto && typeof sm.auto === 'object') {
+          mining.machines[0] = sanitizeMachine(sm.auto);
+        }
+        const av = Number(sm.activeMachine);
+        mining.activeMachine = Number.isFinite(av) ? Math.max(0, Math.min(MACHINE_PAD_COUNT - 1, Math.floor(av))) : 0;
+      }
+    } catch (_) {}
+    function activeMachine() { return mining.machines[Math.min(MACHINE_PAD_COUNT - 1, Math.max(0, mining.activeMachine | 0))] || mining.machines[0]; }
+    Object.defineProperty(mining, 'auto', { enumerable: false, configurable: true, get: activeMachine });
+    let swingFx = null;
+    const autoFx = [];
+    function makeRigState() {
+      return {
+        x: null, y: null, fromX: 0, fromY: 0, strikeY: 0, lift: 68,
+        targetId: null, queueId: null, lastStrikeId: null,
+        mode: 'idle', modeT: 0, pending: false, moving: false
+      };
+    }
+    const machineRigs = Array.from({ length: MACHINE_PAD_COUNT }, makeRigState);
+    let lastStrikeAt = 0;
+    let manualMineNextAt = 0;
+    let manualMinePenalty = 0;
+    let miningHudClock = 0;
     // lore: Deep Blue (guard) protects The Deep Blue, a submarine-ish facility controlling the ocean.
 
     // Oxygen: drains everywhere except surface and facility. Refills at surface.
     let oxygenMax = 100;
     let oxygen = oxygenMax;
     let oxygenWarned = false;
+
+    // Blackout: running dry is a real 5 minute penalty, not a free ride upward.
+    const BLACKOUT_MS = 5 * 60 * 1000;
+    const BLACKOUT_KEY = 'ocean_blackout_until';
+    let blackoutUntil = 0;
+    let blackoutActive = false;
+    let blackoutShownSec = -1;
 
     // Void Octopus bossfight: forward x2 + dive to hadal
     const VOID_OCTOPUS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 520" width="600" height="520">
@@ -416,7 +698,7 @@
     };
 
     function isOctopusArena() { return perspective === 2 && cameraY >= 3.5 && cameraY < 4.5 && !isFacilityLayer(); }
-    function canStartOctopus() { return !voidOctopusDefeated && isOctopusArena() && !boss.active; }
+    function canStartOctopus() { return !voidOctopusDefeated && isOctopusArena() && !boss.active && !camAnim; }
 
     function setBossLog(text) { boss.log = text; if (bossLog) bossLog.textContent = text; }
     function syncBossUi() {
@@ -566,26 +848,113 @@
       if (boss.playerFlash > 0) { ctx.fillStyle = `rgba(255,80,110,${boss.playerFlash*0.22})`; ctx.fillRect(0,0,w,h); }
     }
 
+    function formatBlackoutTime(ms) {
+      const total = Math.max(0, Math.ceil(ms / 1000));
+      const mins = Math.floor(total / 60);
+      const secs = total % 60;
+      return `${mins}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function syncBlackoutTimer(force = false) {
+      if (!blackoutTimer) return;
+      const remaining = Math.max(0, blackoutUntil - Date.now());
+      const shown = Math.ceil(remaining / 1000);
+      if (!force && shown === blackoutShownSec) return;
+      blackoutShownSec = shown;
+      blackoutTimer.textContent = formatBlackoutTime(remaining);
+    }
+
+    function startBlackout(until, restored = false) {
+      if (blackoutActive) return;
+      const now = Date.now();
+      blackoutUntil = Number.isFinite(until) && until > now ? until : now + BLACKOUT_MS;
+      blackoutActive = true;
+      blackoutShownSec = -1;
+      oxygen = 0;
+      oxygenWarned = true;
+      camAnim = null;
+      if (oxygenFill) oxygenFill.style.width = '0%';
+      if (oxygenText) oxygenText.textContent = '0%';
+      if (photoMode) setPhotoMode(false);
+      try { closeAdmin(); closeFeedback(); closeTablet(); closeShop(); } catch (_) {}
+      [logModal, achModal, updateModal].forEach(m => {
+        if (!m) return;
+        m.classList.remove('open');
+        m.setAttribute('aria-hidden', 'true');
+      });
+      if (settingsPanel) {
+        settingsPanel.classList.remove('open');
+        if (settingsBtn) settingsBtn.setAttribute('aria-expanded', 'false');
+      }
+      if (boss.active) {
+        endVoidOctopus(false);
+        boss.active = false;
+        bossUi.classList.remove('open');
+        syncBossUi();
+      }
+      try { localStorage.setItem(BLACKOUT_KEY, String(blackoutUntil)); } catch (_) {}
+      if (blackoutOverlay) {
+        blackoutOverlay.classList.add('open');
+        blackoutOverlay.setAttribute('aria-hidden', 'false');
+      }
+      syncBlackoutTimer(true);
+      if (!restored) showToast('out of oxygen', 'you blacked out. five minutes later you wake up at the surface.', 3200);
+    }
+
+    function finishBlackout(restored = false) {
+      if (!blackoutActive && !restored) return;
+      blackoutActive = false;
+      blackoutUntil = 0;
+      blackoutShownSec = -1;
+      try { localStorage.removeItem(BLACKOUT_KEY); } catch (_) {}
+      if (blackoutOverlay) {
+        blackoutOverlay.classList.remove('open');
+        blackoutOverlay.setAttribute('aria-hidden', 'true');
+      }
+      oxygen = oxygenMax;
+      oxygenWarned = false;
+      cameraY = 0;
+      cameraTarget = 0;
+      camAnim = null;
+      saveGameState();
+      syncSettingsUI();
+      updateOxygen(0);
+      if (!restored) showToast('surface', 'you wake up where the air is.<br><span class="toast-sub">oxygen restored. the ocean pretends nothing happened.</span>', 3200);
+    }
+
+    function updateBlackout() {
+      if (!blackoutActive) return false;
+      if (Date.now() >= blackoutUntil) {
+        finishBlackout();
+        return false;
+      }
+      syncBlackoutTimer();
+      return true;
+    }
+
+    function restoreBlackout() {
+      let stored = 0;
+      try { stored = Number(localStorage.getItem(BLACKOUT_KEY) || 0); } catch (_) {}
+      if (!Number.isFinite(stored) || stored <= 0) return;
+      if (stored > Date.now()) startBlackout(stored, true);
+      else finishBlackout(true);
+    }
+
     function updateOxygen(dt) {
-      if (corrupted) return;
+      if (corrupted || blackoutActive) return;
       const onSurface = cameraY <= 0.2;
       const inFacility = isFacilityLayer();
       if (onSurface) {
         oxygen = Math.min(oxygenMax, oxygen + dt * 28);
         oxygenWarned = false;
       } else if (!inFacility) {
-        const drain = boss.active ? 0.35 : (1.15 + Math.max(0, cameraY - 0.5) * 0.16);
+        const depth = Math.max(0, cameraY - 0.2);
+        const drain = boss.active ? 0.35 : (1.05 + depth * 0.52 + Math.pow(depth, 1.4) * 0.09);
         oxygen = Math.max(0, oxygen - dt * drain);
         if (oxygen <= 25 && !oxygenWarned && !boss.active) { oxygenWarned = true; showToast('oxygen low', 'head up before you run out of air.', 2400); }
         if (oxygen <= 0) {
-          oxygen = oxygenMax;
-          oxygenWarned = false;
-          if (boss.active) {
-            endVoidOctopus(false);
-          } else {
-            showToast('out of oxygen', 'you blacked out and drifted back to the surface.', 3200);
-            setCamera(0);
-          }
+          startBlackout();
+          return;
         }
       }
       if (oxygenHud) {
@@ -644,8 +1013,37 @@
     anglerImg.decoding = 'async';
     anglerImg.src = ANGLER_IMG_URL;
 
+    // dev notes shoved into bottles. yes, lux wrote these by proxy.
+    const BOTTLE_NOTES = [
+      'you found my bottle. congrats. i wrote this at 2am instead of sleeping. the ocean is just a blue loading screen with fish.',
+      'if the claw looks suspicious, that is because it is. i made it hit rocks with its face. you are welcome.',
+      'the deep blue is not a mood ring. stop staring at him. he is staring back.',
+      'there are no ores in the void. i checked. then i checked again because i do not trust my own code.',
+      'the machine pads got moved up because the rocks were eating them. yes, rocks can eat. do not ask.',
+      'you clicked a bottle in a browser about the ocean. that is basically marine archaeology.',
+      'if you are reading this underwater, please blink twice so i know the oxygen meter is still lying.',
+      'this note is load-bearing. remove it and the vibes collapse.',
+      'the claw used to carry a pickaxe. i deleted it. now it just headbutts the ore like a champ.',
+      'rare ores hide in empty veins because i got bored of predictable loot. no map, no mercy.',
+      'five minute blackout rule added because touching the surface after drowning was too easy. suffer in style.'
+    ];
+    function bottleNoteText(index) {
+      const i = Number.isFinite(index) && index >= 0 ? index % BOTTLE_NOTES.length : 0;
+      return `${BOTTLE_NOTES[i]} — lux`;
+    }
+    function nextBottleNote() {
+      let next = Math.floor(Math.random() * BOTTLE_NOTES.length);
+      if (BOTTLE_NOTES.length > 1 && next === bottleNoteIndex) next = (next + 1 + Math.floor(Math.random() * (BOTTLE_NOTES.length - 1))) % BOTTLE_NOTES.length;
+      bottleNoteIndex = next;
+      return bottleNoteText(next);
+    }
+    function syncBottleDef() {
+      const def = DISCOVERY_DEFS.find(d => d.id === 'bottle');
+      if (def) def.desc = `A weathered bottle drifted by with a tiny note inside. "${bottleNoteText(bottleNoteIndex)}"`;
+    }
+
     const DISCOVERY_DEFS = [
-      { id:'bottle', name:'Message in a Bottle', desc:'A weathered bottle drifted by with a tiny note inside. "the ocean remembers every ripple."', emoji:'🍾', c1:'#16406a', c2:'#2f7a9e' },
+      { id:'bottle', name:'Message in a Bottle', desc:'A weathered bottle drifted by with a tiny note inside.', emoji:'🍾', c1:'#16406a', c2:'#2f7a9e' },
       { id:'jelly', name:'Moon Jelly Drift', desc:'A rare jellyfish pulsed through the deep blue like a living lantern.', emoji:'🪼', c1:'#183a73', c2:'#6e86d6' },
       { id:'storm', name:'Storm Witness', desc:'You caught lightning splitting the clouds above a restless sea.', emoji:'⚡', c1:'#24304a', c2:'#6e7d96' },
       { id:'deep', name:'Deep Blue Descent', desc:'You reached the deep. The light thinned, the water darkened, and the ocean got quiet.', emoji:'🌊', c1:'#06203b', c2:'#0f5f89' },
@@ -698,29 +1096,34 @@
       { id:'deep_blue', name:'Deep Blue', desc:'Stop the wipeout supply in The Deep Blue facility.', check: () => achievements.includes('deep_blue') },
       { id:'octopus_slayer', name:'Octopus Slayer', desc:'Defeat the Void Octopus in the hadal depths.', check: () => achievements.includes('octopus_slayer') }
     ];
+    syncBottleDef();
 
     function saveSettings() {
-      try { localStorage.setItem('ocean_settings', JSON.stringify({ soundEnabled, dayCycle, cycleSpeed, forcedMode, weatherMode, reducedMotion })); } catch (_) {}
+      try { localStorage.setItem('ocean_settings', codecStringify({ soundEnabled, dayCycle, cycleSpeed, forcedMode, weatherMode, reducedMotion })); } catch (_) {}
     }
     function saveGameState() {
       try {
-        localStorage.setItem('ocean_discoveries', JSON.stringify(discoveries));
-        localStorage.setItem('ocean_achievements', JSON.stringify(achievements));
+        localStorage.setItem('ocean_discoveries', codecStringify(discoveries));
+        localStorage.setItem('ocean_achievements', codecStringify(achievements));
         localStorage.setItem('ocean_equipped', equippedDiscovery || '');
         localStorage.setItem('ocean_clicks', String(clicks));
         localStorage.setItem('ocean_photos', String(photoCount));
         localStorage.setItem('ocean_bottles_found', String(bottlesFound));
+        localStorage.setItem('ocean_bottle_note', String(bottleNoteIndex));
         localStorage.setItem('ocean_bottom_trips', String(bottomTrips));
         localStorage.setItem('ocean_click_lock_until', String(clickLockUntil));
-        localStorage.setItem('ocean_void_quest', JSON.stringify(quest));
-        localStorage.setItem('ocean_facility', JSON.stringify(facility));
+        localStorage.setItem('ocean_void_quest', codecStringify(quest));
+        localStorage.setItem('ocean_facility', codecStringify(facility));
         localStorage.setItem('ocean_perspective', String(perspective));
         localStorage.setItem('ocean_ship_looted', shipLooted ? '1' : '0');
+        localStorage.setItem('ocean_mining', codecStringify(mining));
+        if (blackoutActive) localStorage.setItem(BLACKOUT_KEY, String(blackoutUntil));
+        else localStorage.removeItem(BLACKOUT_KEY);
       } catch (_) {}
     }
     function loadSettings() {
       try {
-        const s = JSON.parse(localStorage.getItem('ocean_settings') || 'null');
+        const s = codecParse(localStorage.getItem('ocean_settings') || 'null');
         if (!s) return;
         if (typeof s.soundEnabled === 'boolean') soundEnabled = s.soundEnabled;
         if (typeof s.dayCycle === 'boolean') dayCycle = s.dayCycle;
@@ -734,13 +1137,26 @@
     // ---------- SAVE EXPORT / IMPORT / CORRUPTION ----------
     const SAVE_KEYS = [
       'ocean_settings','ocean_discoveries','ocean_achievements','ocean_equipped',
-      'ocean_clicks','ocean_photos','ocean_bottles_found','ocean_bottom_trips',
+      'ocean_clicks','ocean_photos','ocean_bottles_found','ocean_bottle_note','ocean_bottom_trips',
       'ocean_click_lock_until','ocean_void_quest','ocean_facility','ocean_perspective','ocean_ship_looted',
-      'ocean_void_octopus_defeated'
+      'ocean_mining','ocean_void_octopus_defeated','ocean_blackout_until'
     ];
     const SAVE_FORMAT = 'ocsv';
-    const SAVE_VERSION = 2;
+    const SAVE_VERSION = 3;
+    const SAVE_ALG = 'ocsv-xor-v2';
     const SAVE_SECRET = 'ocean::deep-blue::save::v2';
+    const SAVE_FEATURES = [
+      'shoreDock', 'mining', 'midwaterOres', 'blackout', 'bottleNotes', 'voidQuest', 'shipwreck', 'voidOctopus'
+    ];
+    const SAVE_FEATURE_KEYS = [
+      'ocean_perspective', 'ocean_mining', 'ocean_blackout_until', 'ocean_bottles_found',
+      'ocean_bottle_note', 'ocean_void_quest', 'ocean_facility', 'ocean_ship_looted', 'ocean_void_octopus_defeated'
+    ];
+    const SCALAR_SAVE_KEYS = [
+      'ocean_clicks', 'ocean_photos', 'ocean_bottles_found', 'ocean_bottle_note',
+      'ocean_bottom_trips', 'ocean_click_lock_until', 'ocean_perspective',
+      'ocean_ship_looted', 'ocean_blackout_until'
+    ];
     let corrupted = false;
     let corruptRaf = 0;
     const CORRUPT_SVGS = ["data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2Y2YjNjZCIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS03NyAwIFEtNDggLTI4IDIgLTI0IFE0MCAtMjAgNjkgMCBRMzkgMjQgLTIgMjUgUS00OCAyOCAtNzcgMFoiIGZpbGw9IiNiYjU1N2UiIC8+PHBhdGggZD0iTS03MiAwIC0xMjIgLTM5IC0xMTAgMCAtMTIyIDM4WiIgZmlsbD0iIzcxMzk1ZiIgLz48cGF0aCBkPSJNLTMwIC0yMiAwIC01MCAyOCAtMjBaIiBmaWxsPSIjZTc4MzliIiAvPjxwYXRoIGQ9Ik0tMjUgMjIgNCA0NyAyMCAyMFoiIGZpbGw9IiM4NzNmNzAiIC8+PGNpcmNsZSBjeD0iNDIiIGN5PSItNSIgcj0iNSIgZmlsbD0iI2ZmZTZjYyIgc3Ryb2tlPSJub25lIiAvPjxwYXRoIGQ9Ik0tNDUgLTE3djM0IE0tMjIgLTIzdjQ1IE0xIC0yM3Y0NCBNMjMgLTE3djM0IiBmaWxsPSJub25lIiBvcGFjaXR5PSIuNzUiIC8+PHBhdGggZD0iTS03IDBoNDgiIHN0cm9rZT0iI2ZmZDJkOCIgb3BhY2l0eT0iLjU1IiAvPg0KIDwvZz4=","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2ZmYzVhOSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS02NSAwIFEtMzkgLTI0IDQgLTIxIFEzNiAtMTggNTggMCBRMzUgMjIgMiAyMyBRLTQwIDI0IC02NSAwWiIgZmlsbD0iI2NmNmQ2OCIgLz48cGF0aCBkPSJNLTYyIDAgLTEwOSAtMzIgLTk5IDAgLTEwOSAzMVoiIGZpbGw9IiM4MDNkNTgiIC8+PHBhdGggZD0iTS0yMiAtMjAgNiAtNDggMjggLTE3WiIgZmlsbD0iI2VmOWI4MCIgLz48Y2lyY2xlIGN4PSIzNyIgY3k9Ii01IiByPSI1IiBmaWxsPSIjZmZmMWQwIiBzdHJva2U9Im5vbmUiIC8+PHBhdGggZD0iTS0zMCAtMTV2MzAgTS03IC0yMHY0MCBNMTYgLTE4djM1IiBmaWxsPSJub25lIiAvPjxwYXRoIGQ9Ik01OCAycTI2IDEgMjUgMThxLTIgMTItMTMgMTQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmOTM4ZSIgc3Ryb2tlLXdpZHRoPSI0IiAvPjxjaXJjbGUgY3g9IjcwIiBjeT0iMjAiIHI9IjMiIGZpbGw9IiNmZmYwY2EiIHN0cm9rZT0ibm9uZSIgLz4NCiA8L2c+","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnaG9zdCIgeDI9IjAiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjYzNkOWZmIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjNTU2NmE1Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PGcgIHN0cm9rZT0iI2M1ZDhmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS05MSAwIFEtNTcgLTM1IC0yIC0yOSBRNDMgLTI2IDc2IDAgUTQyIDI5IC00IDMxIFEtNjAgMzQgLTkxIDBaIiBmaWxsPSJ1cmwoI2dob3N0KSIgLz48cGF0aCBkPSJNLTg3IDAgLTEzNyAtMzggLTEyNSAwIC0xMzcgMzdaIiBmaWxsPSIjMzc0NTc5IiAvPjxwYXRoIGQ9Ik0tMzEgLTI4IDIgLTU1IDI3IC0yNVoiIGZpbGw9IiM3NzhhYzEiIC8+PHBhdGggZD0iTS0yOCAyOCA4IDQ3IDI3IDI1WiIgZmlsbD0iIzNjNGM4NSIgLz48cGF0aCBkPSJNNzYgMHEyMCAtMjAgMzYgLTdxLTcgOCAwIDE1UTk2IDIwIDc2IDBaIiBmaWxsPSIjNjM3N2I1IiAvPjxjaXJjbGUgY3g9IjQ4IiBjeT0iLTYiIHI9IjQuNSIgZmlsbD0iI2I5ZjhmZiIgc3Ryb2tlPSJub25lIiAvPjxjaXJjbGUgY3g9IjQ4IiBjeT0iLTYiIHI9IjEwIiBmaWxsPSJub25lIiBzdHJva2U9IiM4N2RmZmYiIG9wYWNpdHk9Ii42NSIgLz48cGF0aCBkPSJNLTU0IC0xM3ExNSAxNCAwIDI3IE0tMjAgLTI1cTEyIDI1IDAgNDkgTTEyIC0yNXExMiAyNSAwIDUwIiBmaWxsPSJub25lIiBvcGFjaXR5PSIuNjUiIC8+DQogPC9nPg==","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2I5ZThlZCIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS04NyAwIFEtNTcgLTI4IC0yIC0yNCBRMzYgLTIxIDY5IDAgUTM4IDI1IC00IDI1IFEtNTYgMjggLTg3IDBaIiBmaWxsPSIjNDk4YzljIiAvPjxwYXRoIGQ9Ik0tODIgMCAtMTI4IC0zMiAtMTE5IDAgLTEyOCAzMVoiIGZpbGw9IiMyODYwNzUiIC8+PHBhdGggZD0iTS0zNCAtMjIgMyAtNDggMjYgLTIwWiIgZmlsbD0iIzZmYjliYiIgLz48cGF0aCBkPSJNLTMwIDIxIDkgNDIgMjYgMjBaIiBmaWxsPSIjMmI3MTgxIiAvPjxjaXJjbGUgY3g9IjQzIiBjeT0iLTUiIHI9IjUiIGZpbGw9IiNmZmYwYjgiIHN0cm9rZT0ibm9uZSIgLz48cGF0aCBkPSJNLTUzIC0xM2w4IDEzIC04IDEzIE0tMjggLTE5bDggMTkgLTggMTggTS0zIC0yMiA1IDAgLTMgMjIiIGZpbGw9Im5vbmUiIG9wYWNpdHk9Ii42IiAvPg0KIDwvZz4=","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJyb3NlIiB4Mj0iMCIgeTI9IjEiPjxzdG9wIHN0b3AtY29sb3I9IiNmZmIxYWUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNhOTQwNjYiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48ZyAgc3Ryb2tlPSIjZmZiNGJjIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPg0KICA8cGF0aCBkPSJNLTk4IDAgUS02NSAtMzkgLTQgLTMxIFE0NSAtMjYgNzggMCBRNDUgMjggLTcgMzIgUS03MCAzOCAtOTggMFoiIGZpbGw9InVybCgjcm9zZSkiIC8+PHBhdGggZD0iTS05NSAwIC0xNDQgLTM0IC0xMzMgMCAtMTQ0IDM0WiIgZmlsbD0iIzhmMzk1YyIgLz48cGF0aCBkPSJNLTM2IC0zMCBRLTggLTYyIDI0IC0yOVoiIGZpbGw9IiNkMjY3ODAiIC8+PHBhdGggZD0iTS0yNCAyOSA4IDUzIDI5IDI3WiIgZmlsbD0iIzkxM2Q2NCIgLz48Y2lyY2xlIGN4PSI1MiIgY3k9Ii02IiByPSI1IiBmaWxsPSIjZmZmMWQ0IiBzdHJva2U9Im5vbmUiIC8+PHBhdGggZD0iTS01MyAtMTVxMTIgMTUgMCAzMCBNLTIyIC0yNXExNSAyNSAwIDUwIE05IC0yOHExNCAyOCAwIDU1IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmMwYmEiIG9wYWNpdHk9Ii43IiAvPjxjaXJjbGUgY3g9Ii0yMCIgY3k9Ii0yIiByPSIzIiBmaWxsPSIjZmZlM2M5IiBzdHJva2U9Im5vbmUiIC8+DQogPC9nPg==","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJzaWx2ZXIiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzllZTZlMSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzMxN2Y5MSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxnICBzdHJva2U9IiNiOGY0ZWQiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+DQogIDxwYXRoIGQ9Ik0tMTAwIDAgUS02MyAtNDIgMCAtMzQgUTQ1IC0yOCA3NyAwIFE0MiAzMSAtNyAzNCBRLTY2IDM4IC0xMDAgMFoiIGZpbGw9InVybCgjc2lsdmVyKSIgLz48cGF0aCBkPSJNLTk2IDAgLTE0MiAtMzQgLTEzMiAwIC0xNDIgMzRaIiBmaWxsPSIjMmY3ODhkIiAvPjxwYXRoIGQ9Ik0tMzAgLTMyIFEtOCAtNTggMjQgLTM0IiBmaWxsPSIjNGFhNmFmIiAvPjxwYXRoIGQ9Ik0tMjQgMzEgUS01IDUxIDI0IDMyIiBmaWxsPSIjMjY2NDdhIiAvPjxjaXJjbGUgY3g9IjUzIiBjeT0iLTUiIHI9IjUiIGZpbGw9IiNmZmYwYjgiIHN0cm9rZT0ibm9uZSIgLz48cGF0aCBkPSJNNzMgNWwxNCAzIiBmaWxsPSJub25lIiBzdHJva2U9IiNkMGZmZjYiIC8+DQogIDxwYXRoIGQ9Ik0tNTggLTEyIFEtOCAwIC0zNSAxOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOWNlNWRjIiBvcGFjaXR5PSIuOCIgLz48Y2lyY2xlIGN4PSItNTAiIGN5PSIwIiByPSIzIiBmaWxsPSIjZDlmZmZhIiBzdHJva2U9Im5vbmUiIC8+DQogPC9nPg==","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2VlZDJhNiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS04MiAwIFEtNTEgLTI0IDEgLTIyIFE0MCAtMTggNjUgMCBRMzYgMjIgLTUgMjMgUS01NSAyNSAtODIgMFoiIGZpbGw9IiNkMjliNjIiIC8+PHBhdGggZD0iTS03OCAwIC0xMjUgLTMxIC0xMTUgMCAtMTI1IDMwWiIgZmlsbD0iI2E5NjI1NSIgLz48cGF0aCBkPSJNLTMyIC0yMCAwIC00NCAyNCAtMThaIiBmaWxsPSIjZThiNjc2IiAvPjxjaXJjbGUgY3g9IjQyIiBjeT0iLTQiIHI9IjUiIGZpbGw9IiNmZmY0YzQiIHN0cm9rZT0ibm9uZSIgLz48cGF0aCBkPSJNLTQxIC0xN3YzNCBNLTE4IC0yMXY0MSBNNSAtMjB2NDAgTTI4IC0xNHYyOSIgZmlsbD0ibm9uZSIgb3BhY2l0eT0iLjY1IiAvPg0KIDwvZz4=","data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSItMTc1IC0xMDAgMzUwIDIwMCI+PGcgIHN0cm9rZT0iI2M1Y2FmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4NCiAgPHBhdGggZD0iTS05MiAwIFEtNTggLTM0IC03IC0yOSBRNDEgLTI1IDc3IDAgUTQ0IDI5IC02IDMxIFEtNjAgMzMgLTkyIDBaIiBmaWxsPSIjNTU1OTg4IiAvPjxwYXRoIGQ9Ik0tODggMCAtMTQxIC0zNyAtMTI4IDAgLTE0MSAzN1oiIGZpbGw9IiMyOTJlNTAiIC8+PHBhdGggZD0iTS0zMiAtMjcgMSAtNTUgMjggLTI0WiIgZmlsbD0iIzc3NzdhNSIgLz48cGF0aCBkPSJNLTMwIDI3IDggNDcgMjggMjRaIiBmaWxsPSIjMzYzYjY4IiAvPjxjaXJjbGUgY3g9IjQ3IiBjeT0iLTYiIHI9IjUiIGZpbGw9IiNlZGZmZmYiIHN0cm9rZT0ibm9uZSIgLz48Y2lyY2xlIGN4PSI0NyIgY3k9Ii02IiByPSIxMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTRlZWZmIiAvPjxwYXRoIGQ9Ik0tNTAgLTE0cTEyIDEzIDAgMjggTS0yMSAtMjVxMTMgMjUgMCA0OSBNOSAtMjVxMTMgMjUgMCA0OSIgZmlsbD0ibm9uZSIgb3BhY2l0eT0iLjU1IiAvPjxwYXRoIGQ9Ik03NyAwcTIwIC0xNiAyOCAtNHEtOCA4IDAgMTRxLTE0IDgtMjgtMTBaIiBmaWxsPSIjNmE3MDliIiAvPg0KIDwvZz4="];
@@ -822,18 +1238,25 @@
     }
 
     function buildSavePayload() {
+      saveGameState();
       const data = {};
       for (const k of SAVE_KEYS) {
         const raw = localStorage.getItem(k);
         if (raw === null) continue;
-        try { data[k] = JSON.parse(raw); }
+        try { data[k] = codecParse(raw); }
         catch (_) { data[k] = raw; }
+      }
+      const featureData = {};
+      for (const k of SAVE_FEATURE_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(data, k)) featureData[k] = data[k];
       }
       return {
         format: SAVE_FORMAT,
         version: SAVE_VERSION,
         game: 'ocean',
         exportedAt: new Date().toISOString(),
+        features: SAVE_FEATURES,
+        featureData,
         data
       };
     }
@@ -841,7 +1264,7 @@
     function exportSave() {
       try {
         const payload = buildSavePayload();
-        const plain = ocsvStrBytes(JSON.stringify(payload));
+        const plain = ocsvStrBytes(codecStringify(payload));
         const salt = ocsvRandomBytes(16);
         const cipher = ocsvCrypt(plain, salt);
         const saltB64 = ocsvBytesToB64(salt);
@@ -850,12 +1273,12 @@
           format: SAVE_FORMAT,
           version: SAVE_VERSION,
           game: 'ocean',
-          alg: 'ocsv-xor-v2',
+          alg: SAVE_ALG,
           salt: saltB64,
           payload: payloadB64,
           mac: ocsvMac(saltB64, payloadB64)
         };
-        const text = JSON.stringify(envelope);
+        const text = codecStringify(envelope);
         const blob = new Blob([text], { type: 'application/octet-stream' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -889,14 +1312,15 @@
       if (obj.version === 1 && obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) {
         return obj;
       }
-      if (obj.version !== SAVE_VERSION || obj.alg !== 'ocsv-xor-v2') return null;
+      const supportedVersion = obj.version === SAVE_VERSION || obj.version === 2;
+      if (!supportedVersion || obj.alg !== SAVE_ALG) return null;
       if (typeof obj.salt !== 'string' || typeof obj.payload !== 'string' || typeof obj.mac !== 'string') return null;
       if (obj.mac !== ocsvMac(obj.salt, obj.payload)) return null;
       try {
         const salt = ocsvB64ToBytes(obj.salt);
         const cipher = ocsvB64ToBytes(obj.payload);
         const plain = ocsvCrypt(cipher, salt);
-        const decoded = JSON.parse(ocsvBytesStr(plain));
+        const decoded = codecParse(ocsvBytesStr(plain));
         if (!isValidOceanSave(decoded)) return null;
         return decoded;
       } catch (_) {
@@ -905,13 +1329,21 @@
     }
 
     function applyImportedSave(obj) {
-      const data = obj.data || {};
+      const data = { ...(obj.data || {}) };
+      const featureData = obj.featureData && typeof obj.featureData === 'object' && !Array.isArray(obj.featureData) ? obj.featureData : {};
+      for (const k of SAVE_FEATURE_KEYS) {
+        if (!Object.prototype.hasOwnProperty.call(data, k) && Object.prototype.hasOwnProperty.call(featureData, k)) data[k] = featureData[k];
+      }
       // wipe known keys first, then apply imported ones (no save data lost on corruption path; this is a valid import)
       for (const k of SAVE_KEYS) localStorage.removeItem(k);
       for (const [k, v] of Object.entries(data)) {
         if (!SAVE_KEYS.includes(k)) continue;
         try {
-          localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v));
+          let raw;
+          if (k === 'ocean_ship_looted') raw = (v === true || v === 1 || v === '1') ? '1' : '0';
+          else if (SCALAR_SAVE_KEYS.includes(k) && typeof v === 'number') raw = String(v);
+          else raw = typeof v === 'string' ? v : codecStringify(v);
+          localStorage.setItem(k, raw);
         } catch (_) {}
       }
       feedbackStatus.textContent = 'save: imported .ocsv - reloading...';
@@ -921,6 +1353,9 @@
     function triggerCorruption() {
       if (corrupted) return;
       corrupted = true;
+      blackoutActive = false;
+      blackoutUntil = 0;
+      try { localStorage.removeItem(BLACKOUT_KEY); } catch (_) {}
       try { if (rafId) cancelAnimationFrame(rafId); } catch (_) {}
       try { pauseBgmAll(true); } catch (_) {}
       try { if (masterGain) masterGain.gain.value = 0; } catch (_) {}
@@ -929,7 +1364,7 @@
       try { document.querySelectorAll('audio').forEach(a => { if (a.id !== 'corruptAudio') { try { a.pause(); a.muted = true; a.volume = 0; } catch(_){} } }); } catch (_) {}
 
       // hide all UI
-      document.querySelectorAll('.ui, .modal, .hint, .settings-wrap, .photo-exit, .toast, #toast, #bossUi, #oxygenHud').forEach(el => {
+      document.querySelectorAll('.ui, .modal, .hint, .settings-wrap, .photo-exit, .toast, #toast, #bossUi, #oxygenHud, #blackoutOverlay').forEach(el => {
         el.style.display = 'none';
       });
       document.body.style.background = '#000';
@@ -1019,7 +1454,7 @@
         const text = await file.text();
         let obj;
         try {
-          obj = JSON.parse(text);
+          obj = codecParse(text);
         } catch (_) {
           triggerCorruption();
           return;
@@ -1074,25 +1509,29 @@
       syncSettingsUI();
     }
     const UPDATE_LOG = [
-      { date: '2026-11-27', title: 'music playlist', detail: 'DeepBlue now rotates into Slime Sea Sunlit Waves and Slime Sea Moonlit Calm, then loops back. tracks use a 4-second crossfade so the seam stays smooth, with depth muffling and mute settings preserved.' },
-      { date: '2026-11-27', title: 'deep layer fish', detail: 'added 8 new deep-sea fish across trenches, hadal, and the void: Shearfin, Ribbon Pike, Stoneback, Scarlet Veil, Basin Lantern, Ember Whip, Pale Sentinel, and The Watcher. each has its own discovery card and new layer-fauna achievements.' },
-      { date: '2026-11-27', title: 'the deep blue facility', detail: 'the deepest layer is now The Deep Blue: a submarine-ish facility guarded by Deep Blue. solve 3 encounters (seal valve, enter BLUE code, bypass guard) to stop the scientists\' ocean wipeout supply. added forward/back perspectives for every non-deepest layer, including tappable arctic icebergs on the surface. facility and perspective state now persist.' },
-      { date: '2026-11-26', title: 'lux studios splash', detail: 'every load now opens with the lux studios intro: a wireframe cube rolls in, speeds up, explodes into lines, and reveals the wordmark before fading into the ocean.' },
-      { date: '2026-11-25', title: 'deep dive minigame', detail: 'added a side arrow that opens a 10-move minigame. answer with the most underground picks to sink deeper and score higher.' },
-      { date: '2026-11-25', title: 'the great fish expansion', detail: 'added clownfish, pufferfish, great white sharks, betta fish, and koi across the ocean depths. pufferfish puff up when you click them.' },
-      { date: '2026-11-25', title: 'the void speaks', detail: 'bottom is now ambient-only (music fades out). the purple void entity talks after 3 seconds, gives a quest (3 bottles, 3 clicked fish, 3 top-to-bottom trips), and unlocks a deeper layer when complete. pufferfish sting locks clicking for 1 minute. fish must be clicked to discover.' },
-      { date: '2026-11-25', title: 'ocean: part 4 - deeper still', detail: 'added 3 more layers below the abyss: trenches, hadal, and the void. new biomes, particles, click discoveries, achievements, and depth tracking all the way down.' },
-      { date: '2026-11-25', title: 'ocean: part 3 - the abyss', detail: 'you can go down again past underwater into a new abyss layer, with a darker biome, new creatures/vent, new abyss discoveries, new achievements, and depth-aware audio/visuals.' },
-      { date: '2026-11-25', title: 'achievements + equipped discoveries', detail: 'split achievements into their own button, made discoveries into proper cards with lock states, and equipping now spawns the discovery in the world.' },
-      { date: '2026-11-25', title: 'photo mode + crash fixes', detail: 'added photo mode exit button, fixed rain clipping at the waterline, avoided file:// bgm CORS silence, and guarded audio volume from non-finite values.' },
-      { date: '2026-11-25', title: 'crash mode chaos', detail: 'added initiate crash, wii-style crash buzz, and last-second crash audio looping behavior.' },
-      { date: '2026-11-25', title: 'weather + audio feel', detail: 'added rain droplet ripples on the ocean surface and muffled music when diving underwater.' },
-      { date: '2026-11-25', title: 'big ocean pass', detail: 'thunder/lightning, saved settings, photo mode, click ripples/bubbles, surface life, deeper underwater variety, ambient sfx, message in a bottle, discoveries log, reduced motion, time speed slider, and mobile tuning.' },
-      { date: '2026-11-25', title: 'initial ocean release', detail: '2d animated ocean with DeepBlue.wav, day/night cycle, dive controls, settings, and feedback flow.' }
+      { date: '2026-11-27', tier: 'major update', title: 'Gameplay Update', detail: 'a final forward perspective reaches the shore supply dock: a keeper, ore contracts, pickaxe tiers, and up to two claw rigs with their own batteries. veins sit across the depth bands, take hard strikes that cost extra oxygen, and respawn. manual swings have a short recovery with a growing spam lock, while auto mining keeps its own rhythm. the ledger now teaches first-timers and tracks contract progress, empty veins show as dashed sockets beside solid respawn rings, and blackout wake-up gets an extra line. sealing The Deep Blue makes the abyss the floor.' },
+      { date: '2026-11-27', tier: 'feature', title: 'music playlist', detail: 'DeepBlue now rotates into Slime Sea Sunlit Waves and Slime Sea Moonlit Calm, then loops back. tracks use a 4-second crossfade so the seam stays smooth, with depth muffling and mute settings preserved.' },
+      { date: '2026-11-27', tier: 'feature', title: 'deep layer fish', detail: 'added 8 new deep-sea fish across trenches, hadal, and the void: Shearfin, Ribbon Pike, Stoneback, Scarlet Veil, Basin Lantern, Ember Whip, Pale Sentinel, and The Watcher. each has its own discovery card and new layer-fauna achievements.' },
+      { date: '2026-11-27', tier: 'major update', title: 'the deep blue facility', detail: 'the deepest layer is now The Deep Blue: a submarine-ish facility guarded by Deep Blue. solve 3 encounters (seal valve, enter BLUE code, bypass guard) to stop the scientists\' ocean wipeout supply. added forward/back perspectives for every non-deepest layer, including tappable arctic icebergs on the surface. facility and perspective state now persist.' },
+      { date: '2026-11-26', tier: 'feature', title: 'lux studios splash', detail: 'every load now opens with the lux studios intro: a wireframe cube rolls in, speeds up, explodes into lines, and reveals the wordmark before fading into the ocean.' },
+      { date: '2026-11-25', tier: 'feature', title: 'deep dive minigame', detail: 'added a side arrow that opens a 10-move minigame. answer with the most underground picks to sink deeper and score higher.' },
+      { date: '2026-11-25', tier: 'feature', title: 'the great fish expansion', detail: 'added clownfish, pufferfish, great white sharks, betta fish, and koi across the ocean depths. pufferfish puff up when you click them.' },
+      { date: '2026-11-25', tier: 'feature', title: 'the void speaks', detail: 'bottom is now ambient-only (music fades out). the purple void entity talks after 3 seconds, gives a quest (3 bottles, 3 clicked fish, 3 top-to-bottom trips), and unlocks a deeper layer when complete. pufferfish sting locks clicking for 1 minute. fish must be clicked to discover.' },
+      { date: '2026-11-25', tier: 'feature', title: 'ocean: part 4 - deeper still', detail: 'added 3 more layers below the abyss: trenches, hadal, and the void. new biomes, particles, click discoveries, achievements, and depth tracking all the way down.' },
+      { date: '2026-11-25', tier: 'feature', title: 'ocean: part 3 - the abyss', detail: 'you can go down again past underwater into a new abyss layer, with a darker biome, new creatures/vent, new abyss discoveries, new achievements, and depth-aware audio/visuals.' },
+      { date: '2026-11-25', tier: 'feature', title: 'achievements + equipped discoveries', detail: 'split achievements into their own button, made discoveries into proper cards with lock states, and equipping now spawns the discovery in the world.' },
+      { date: '2026-11-25', tier: 'bug fix', title: 'photo mode + crash fixes', detail: 'added photo mode exit button, fixed rain clipping at the waterline, avoided file:// bgm CORS silence, and guarded audio volume from non-finite values.' },
+      { date: '2026-11-25', tier: 'feature', title: 'crash mode chaos', detail: 'added initiate crash, wii-style crash buzz, and last-second crash audio looping behavior.' },
+      { date: '2026-11-25', tier: 'update', title: 'weather + audio feel', detail: 'added rain droplet ripples on the ocean surface and muffled music when diving underwater.' },
+      { date: '2026-11-25', tier: 'update', title: 'big ocean pass', detail: 'thunder/lightning, saved settings, photo mode, click ripples/bubbles, surface life, deeper underwater variety, ambient sfx, message in a bottle, discoveries log, reduced motion, time speed slider, and mobile tuning.' },
+      { date: '2026-11-25', tier: 'update', title: 'initial ocean release', detail: '2d animated ocean with DeepBlue.wav, day/night cycle, dive controls, settings, and feedback flow.' }
     ];
 
     function renderUpdateLog() {
-      updateList.innerHTML = UPDATE_LOG.map(u => `<div class="update-item"><em>${u.date}</em><strong>${u.title}</strong><span>${u.detail}</span></div>`).join('');
+      updateList.innerHTML = UPDATE_LOG.map(u => {
+        const tier = u.tier ? `<i class="update-tier tier-${u.tier.toLowerCase().replace(/\s+/g, '-')}">${u.tier}</i>` : '';
+        return `<div class="update-item"><em>${u.date}${tier}</em><strong>${u.title}</strong><span>${u.detail}</span></div>`;
+      }).join('');
     }
 
     function renderAchievements() {
@@ -1104,7 +1543,7 @@
 
     function adminSetStatus(msg) { if (adminStatus) adminStatus.textContent = 'status: ' + msg; }
     function renderDiscoveries() {
-      discoverHint.textContent = `discoveries: ${discoveries.length}/${DISCOVERY_DEFS.length} found`;
+      discoverHint.textContent = `discoveries: ${discoveries.length}/${DISCOVERY_DEFS.length} found • depth: ${depthLabel(cameraTarget)}${isDeepSealed() ? ' • deep blue sealed' : ''}`;
       const eq = DISCOVERY_DEFS.find(d => d.id === equippedDiscovery && discoveries.includes(d.id));
       equippedBanner.textContent = eq ? `equipped: ${eq.emoji} ${eq.name}` : 'equipped: none';
       logList.innerHTML = DISCOVERY_DEFS.map(d => {
@@ -1218,6 +1657,19 @@
       o.type='sine'; o.frequency.setValueAtTime(520, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime+0.08);
       g.gain.value=0.012; o.connect(g); g.connect(masterGain); o.start(); g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+0.1); o.stop(audioCtx.currentTime+0.11);
     }
+    function sfxDiscovery() {
+      if (corrupted || !audioCtx || !soundEnabled) return;
+      const now = audioCtx.currentTime;
+      [660, 990].forEach((freq, i) => {
+        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+        o.type = 'triangle'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, now + i * 0.07);
+        g.gain.exponentialRampToValueAtTime(0.022, now + i * 0.07 + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.07 + 0.16);
+        o.connect(g); g.connect(masterGain);
+        o.start(now + i * 0.07); o.stop(now + i * 0.07 + 0.17);
+      });
+    }
     function sfxThunder() {
       if (corrupted || !audioCtx || !soundEnabled) return;
       const len = audioCtx.sampleRate * 1.2;
@@ -1229,11 +1681,682 @@
       const g = audioCtx.createGain(); g.gain.value = 0.18;
       src.connect(f); f.connect(g); g.connect(masterGain); src.start();
     }
-    function isFacilityLayer() { return quest && quest.unlockedDeep && cameraY >= currentBottomDepth() - 0.15; }
-    const MAX_PERSPECTIVE = 2;
+    function isDeepSealed() { return !!(quest && quest.deepBlueSealed); }
+    function currentBottomDepth() { return quest && quest.unlockedDeep && !isDeepSealed() ? 6 : 5; }
+    function isFacilityLayer() { return quest && quest.unlockedDeep && !isDeepSealed() && cameraY >= currentBottomDepth() - 0.15; }
+    const MAX_PERSPECTIVE = 3; // 3 = shore supply perspective
     function canUsePerspective() { return !isFacilityLayer(); }
-    function currentBottomDepth() { return quest && quest.unlockedDeep ? 6 : 5; }
     function isAtBottom() { return cameraY >= currentBottomDepth() - 0.05; }
+    function isShore() { return perspective === 3 && cameraY <= 0.2; }
+    function activeOreLayer() {
+      if (cameraY < 0.5) return 0;
+      if (cameraY < 1.5) return 1;
+      if (cameraY < 2.5) return 2;
+      if (cameraY < 3.5) return 3;
+      if (cameraY < 4.5) return 4;
+      if (cameraY < 5.5) return 5;
+      return 6;
+    }
+    function nodeOreId(node) {
+      if (!node) return null;
+      if (node.ore) return node.ore;
+      const id = mining.nodeOre[node.id];
+      return RARE_ORES.includes(id) ? id : null;
+    }
+    function nodeHp(node) {
+      const oreId = nodeOreId(node);
+      if (!oreId) return 0;
+      const until = Number(mining.nodeRespawn[node.id] || 0);
+      if (until > Date.now()) return 0;
+      const stored = mining.nodeHp[node.id];
+      return Number.isFinite(stored) ? stored : ORE_DEFS[oreId].hp;
+    }
+    function nodeReady(node) {
+      const until = Number(mining.nodeRespawn[node.id] || 0);
+      return !!nodeOreId(node) && nodeHp(node) > 0 && until <= Date.now();
+    }
+
+    function sfxPick() {
+      if (corrupted || !audioCtx || !soundEnabled) return;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(190 + mining.pickaxe * 35, audioCtx.currentTime);
+      o.frequency.exponentialRampToValueAtTime(70, audioCtx.currentTime + 0.09);
+      g.gain.value = 0.035;
+      o.connect(g); g.connect(masterGain);
+      o.start();
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
+      o.stop(audioCtx.currentTime + 0.11);
+    }
+    function sfxClaw() {
+      if (corrupted || !audioCtx || !soundEnabled) return;
+      const t = audioCtx.currentTime;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(120, t);
+      o.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+      g.gain.setValueAtTime(0.06, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      o.connect(g); g.connect(masterGain);
+      o.start(t); o.stop(t + 0.17);
+    }
+    function nodeHash(node, salt) {
+      const s = node.id + salt;
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+      return ((h >>> 0) % 10000) / 10000;
+    }
+    function oreNodeRadius() { return Math.max(20, Math.min(38, w * 0.038)); }
+    function oreNodePos(node) {
+      const r = oreNodeRadius();
+      const jx = (nodeHash(node, 'x') - 0.5) * w * 0.036;
+      const jy = (nodeHash(node, 'y') - 0.5) * h * 0.044;
+      const t = simTime * motionMul;
+      const sway = Math.sin(t * 0.00062 + node.x * 9) * 2.5;
+      const bob = Math.sin(t * 0.0009 + node.x * 11) * 3;
+      return { x: node.x * w + jx + sway, y: h * node.y - r * 0.55 + jy + bob, r };
+    }
+    function machinePadRects() {
+      const padW = Math.min(250, Math.max(176, w * 0.25));
+      const padH = Math.min(150, Math.max(108, h * 0.17));
+      const baseY = h * 0.61;
+      const t = simTime * motionMul;
+      const sway = i => Math.sin(t * 0.0007 + i * 2.2) * 3;
+      const bob = i => Math.sin(t * 0.00105 + i * 1.8) * 5 + Math.sin(t * 0.00048 + i * 2.6) * 3;
+      return [
+        { x: w * 0.13 + sway(0), y: baseY + bob(0), w: padW, h: padH },
+        { x: w * 0.40 + sway(1), y: baseY + h * 0.022 + bob(1), w: padW * 0.95, h: padH * 0.95 }
+      ];
+    }
+    function machinePadRect(i = 0) {
+      const rects = machinePadRects();
+      return rects[Math.min(rects.length - 1, Math.max(0, i | 0))];
+    }
+    function machineRigGeom(i = 0) {
+      const p = machinePadRect(i);
+      const rockTop = p.y - p.h * 0.54;
+      const beamY = Math.max(h * 0.13, rockTop - p.h * 1.34);
+      // run the gantry past both edges so it reads as one long dock crane, not a floating stub
+      const overhang = Math.max(120, p.w * 0.75);
+      return { p, baseX: p.x, rockTop, beamY, beamStart: -overhang, beamEnd: w + overhang };
+    }
+    function rigHomePos(i = 0) {
+      const g = machineRigGeom(i);
+      return { x: g.baseX, y: g.beamY + 30 };
+    }
+    function rigNodePos(node) {
+      const p = oreNodePos(node);
+      return { x: p.x, y: h * node.layer + p.y - p.r * 0.18 };
+    }
+    function rigNodeById(id) { return ORE_NODES.find(n => n.id === id) || null; }
+    function rigClaims(id, exceptIndex) {
+      for (let i = 0; i < machineRigs.length; i++) {
+        if (i === exceptIndex) continue;
+        const r = machineRigs[i];
+        if (r.targetId === id || r.queueId === id) return true;
+      }
+      return false;
+    }
+    function pickRigTarget(nearX, excludeId, rigIndex = 0) {
+      const m = mining.machines[rigIndex];
+      const tier = m && AUTO_TIERS[m.tier];
+      if (!tier || !tier.maxLayer) return null;
+      const cands = ORE_NODES.filter(n => n.layer <= tier.maxLayer && n.id !== excludeId && !rigClaims(n.id, rigIndex) && nodeReady(n));
+      if (!cands.length) return null;
+      cands.sort((a, b) => Math.abs(rigNodePos(a).x - nearX) - Math.abs(rigNodePos(b).x - nearX));
+      const shortlist = cands.slice(0, Math.min(4, cands.length));
+      return shortlist[Math.floor(Math.random() * shortlist.length)];
+    }
+    function rigActive(i = 0) {
+      const m = mining.machines[i];
+      return !!(m && m.tier && !m.broken && m.battery > 0 && !boss.active && !isFacilityLayer() && perspective === 0);
+    }
+    function rigTravelMs(i = 0) { return Math.max(320, 820 - mining.machines[i].tier * 130); }
+    const RIG_WINDUP_MS = 260;
+    const RIG_SLAM_MS = 190;
+    const RIG_RECOVER_MS = 360;
+    function beginRigWindup(rig, node, dest) {
+      rig.x = dest.x;
+      rig.y = dest.y;
+      rig.strikeY = dest.y;
+      rig.lift = 58 + (machineRigs.indexOf(rig) % 2) * 10;
+      rig.mode = 'windup';
+      rig.modeT = 0;
+      rig.moving = false;
+      rig.pending = false;
+    }
+    function beginRigTravel(node, pendingStrike, i = 0) {
+      if (!node) return;
+      const rig = machineRigs[i];
+      if (!rig) return;
+      if (rig.x == null || rig.y == null) {
+        const home = rigHomePos(i);
+        rig.x = home.x;
+        rig.y = home.y;
+      }
+      const dest = rigNodePos(node);
+      rig.targetId = node.id;
+      rig.pending = !!pendingStrike;
+      rig.queueId = null;
+      if (Math.hypot(dest.x - rig.x, dest.y - rig.y) < 8) {
+        beginRigWindup(rig, node, dest);
+        return;
+      }
+      rig.fromX = rig.x;
+      rig.fromY = rig.y;
+      rig.mode = 'travel';
+      rig.modeT = 0;
+      rig.moving = true;
+    }
+    function completeRigStrike(node, i = 0) {
+      const m = mining.machines[i];
+      const rig = machineRigs[i];
+      const oreId = nodeOreId(node);
+      if (!m || !m.tier || !rig || !oreId || !nodeReady(node)) return false;
+      const def = ORE_DEFS[oreId];
+      const tier = AUTO_TIERS[m.tier];
+      // the claw slams once and breaks the whole vein. manual picks still chip.
+      const ok = strikeOreNode(node, { automatic: true, damage: def.hp, tier: m.tier, machine: i });
+      if (!ok) return false;
+      sfxClaw();
+      m.battery = Math.max(0, m.battery - tier.drain);
+      if (Math.random() < tier.breakdown) {
+        m.broken = true;
+        m.message = 'jammed — repair at shore';
+      } else if (m.battery <= 0) {
+        m.message = 'battery empty — recharge at shore';
+      } else {
+        m.message = `cracked ${def.name}`;
+      }
+      rig.lastStrikeId = node.id;
+      rig.targetId = node.id;
+      rig.mode = 'recover';
+      rig.modeT = 0;
+      rig.pending = false;
+      rig.moving = false;
+      const next = pickRigTarget(rig.x, node.id, i);
+      rig.queueId = next ? next.id : null;
+      syncMiningHud();
+      renderShop();
+      saveGameState();
+      return true;
+    }
+    function updateMachineRig(dt, i = 0) {
+      const m = mining.machines[i];
+      const rig = machineRigs[i];
+      if (!m || !m.tier || !rig) return;
+      if (!rigActive(i)) { rig.moving = false; return; }
+      if (rig.x == null || rig.y == null) {
+        const home = rigHomePos(i);
+        rig.x = home.x;
+        rig.y = home.y;
+      }
+      const ms = dt * 1000;
+      const node = rigNodeById(rig.targetId);
+      if (rig.mode === 'travel') {
+        if (!node || !nodeReady(node)) {
+          const wasPending = rig.pending;
+          rig.mode = 'idle';
+          rig.pending = false;
+          rig.moving = false;
+          const alt = pickRigTarget(rig.x, rig.lastStrikeId, i);
+          if (alt) beginRigTravel(alt, wasPending, i);
+          return;
+        }
+        const dest = rigNodePos(node);
+        rig.modeT += ms;
+        const p = Math.min(1, rig.modeT / rigTravelMs(i));
+        const ep = easeInOutCubic(p);
+        rig.x = lerp(rig.fromX, dest.x, ep);
+        rig.y = lerp(rig.fromY, dest.y, ep);
+        rig.moving = true;
+        if (p >= 1) {
+          rig.x = dest.x;
+          rig.y = dest.y;
+          rig.moving = false;
+          if (rig.pending && nodeReady(node)) beginRigWindup(rig, node, dest);
+          else { rig.mode = 'idle'; rig.modeT = 0; rig.pending = false; }
+        }
+        return;
+      }
+      if (rig.mode === 'windup') {
+        if (!node || !nodeReady(node)) { rig.mode = 'idle'; rig.modeT = 0; return; }
+        rig.modeT += ms;
+        const p = Math.min(1, rig.modeT / RIG_WINDUP_MS);
+        rig.y = rig.strikeY - rig.lift * (1 - Math.pow(1 - p, 3));
+        rig.moving = false;
+        if (p >= 1) { rig.y = rig.strikeY - rig.lift; rig.mode = 'slam'; rig.modeT = 0; }
+        return;
+      }
+      if (rig.mode === 'slam') {
+        if (!node || !nodeReady(node)) { rig.mode = 'idle'; rig.modeT = 0; return; }
+        rig.modeT += ms;
+        const p = Math.min(1, rig.modeT / RIG_SLAM_MS);
+        rig.y = rig.strikeY - rig.lift * (1 - p * p * p);
+        rig.moving = false;
+        if (p >= 1) { rig.y = rig.strikeY; completeRigStrike(node, i); }
+        return;
+      }
+      if (rig.mode === 'recover') {
+        rig.modeT += ms;
+        rig.moving = false;
+        if (rig.modeT >= RIG_RECOVER_MS) {
+          rig.mode = 'idle';
+          rig.modeT = 0;
+          const queued = rigNodeById(rig.queueId);
+          rig.queueId = null;
+          if (queued && nodeReady(queued)) beginRigTravel(queued, false, i);
+        }
+        return;
+      }
+      rig.moving = false;
+      const cur = rigNodeById(rig.targetId);
+      if ((!cur || !nodeReady(cur)) && !rig.queueId) {
+        const next = pickRigTarget(rig.x, rig.lastStrikeId, i);
+        if (next) beginRigTravel(next, false, i);
+      }
+    }
+    function ensureRareVeins() {
+      const now = Date.now();
+      let changed = false;
+      const empty = ORE_NODES.filter(n => !n.ore && !nodeOreId(n) && !(Number(mining.nodeRespawn[n.id]) > now));
+      if (!empty.length) return false;
+      for (const ore of RARE_ORES) {
+        const live = ORE_NODES.some(n => !n.ore && nodeOreId(n) === ore && !(Number(mining.nodeRespawn[n.id]) > now));
+        if (live) continue;
+        if (Math.random() >= RARE_SPAWN_CHANCE) continue;
+        const pick = empty.splice(Math.floor(Math.random() * empty.length), 1)[0];
+        if (!pick) break;
+        mining.nodeOre[pick.id] = ore;
+        changed = true;
+      }
+      return changed;
+    }
+    function restoreOreNodes(rollRare = false) {
+      const now = Date.now();
+      let changed = false;
+      for (const node of ORE_NODES) {
+        const until = Number(mining.nodeRespawn[node.id] || 0);
+        if (until && until <= now) {
+          delete mining.nodeRespawn[node.id];
+          delete mining.nodeHp[node.id];
+          if (!node.ore) {
+            delete mining.nodeOre[node.id];
+            changed = true;
+          }
+        }
+      }
+      if ((changed || rollRare) && ensureRareVeins()) changed = true;
+      if (changed) { syncMiningHud(); renderShop(); saveGameState(); }
+    }
+    function contractReady(c) {
+      if (!c || mining.contracts[c.id]) return false;
+      return Object.keys(c.need).every(id => (mining.ores[id] || 0) >= c.need[id]);
+    }
+    function checkContractPing() {
+      for (const c of CONTRACTS) {
+        if (contractReady(c) && !mining.pinged[c.id]) {
+          mining.pinged[c.id] = true;
+          showToast('contract ready', `${c.title} — cash it in at the shore.`, 3600);
+        }
+      }
+    }
+    function strikeOreNode(node, options = {}) {
+      const automatic = !!options.automatic;
+      const oreId = nodeOreId(node);
+      const def = oreId ? ORE_DEFS[oreId] : null;
+      if (!def || nodeHp(node) <= 0) {
+        if (!automatic) showToast('empty node', 'this vein needs time to grow back.', 1800);
+        return false;
+      }
+      if (!automatic && (boss.active || isFacilityLayer() || isShore() || perspective !== 0)) return false;
+      let dmg = options.damage || 1;
+      let cost = 0;
+      if (!automatic) {
+        const now = performance.now();
+        const gap = now - lastStrikeAt;
+        if (now < manualMineNextAt) {
+          if (lastStrikeAt && gap < MANUAL_MINE_FAST_MS) {
+            manualMinePenalty = Math.min(MANUAL_MINE_MAX_PENALTY_MS, Math.max(MANUAL_MINE_PENALTY_MS, manualMinePenalty ? Math.round(manualMinePenalty * 1.7) : MANUAL_MINE_PENALTY_MS));
+            manualMineNextAt = Math.max(manualMineNextAt, now + MANUAL_MINE_COOLDOWN_MS + manualMinePenalty);
+          }
+          syncMiningHud();
+          feedbackStatus.textContent = manualMinePenalty > 0
+            ? `swing recovery: spam lock +${(manualMinePenalty / 1000).toFixed(1)}s. slow down.`
+            : `swing recovery: ${((manualMineNextAt - now) / 1000).toFixed(1)}s`;
+          return true;
+        }
+        if (lastStrikeAt && gap < MANUAL_MINE_FAST_MS) {
+          manualMinePenalty = Math.min(MANUAL_MINE_MAX_PENALTY_MS, Math.max(MANUAL_MINE_PENALTY_MS, manualMinePenalty ? Math.round(manualMinePenalty * 1.7) : MANUAL_MINE_PENALTY_MS));
+        } else if (gap > MANUAL_MINE_COOLDOWN_MS + 700) {
+          manualMinePenalty = Math.max(0, manualMinePenalty - MANUAL_MINE_PENALTY_MS);
+        }
+        lastStrikeAt = now;
+        if (!mining.tipSeen) mining.tipSeen = true;
+        const wait = MANUAL_MINE_COOLDOWN_MS + manualMinePenalty;
+        manualMineNextAt = now + wait;
+        dmg = PICKAXES[mining.pickaxe].damage;
+        cost = 2 + node.layer * 0.85;
+        oxygen = Math.max(0, oxygen - cost);
+        const p = oreNodePos(node);
+        swingFx = { x: p.x, y: p.y, layer: node.layer, t: 0 };
+        sfxPick();
+      }
+      const hp = Math.max(0, nodeHp(node) - dmg);
+      let gained = 0;
+      if (hp <= 0) {
+        delete mining.nodeHp[node.id];
+        mining.nodeRespawn[node.id] = Date.now() + def.respawn;
+        gained = 1;
+        if (automatic) {
+          const tierIndex = options.tier != null ? options.tier : (options.machine != null ? mining.machines[options.machine].tier : mining.auto.tier);
+          const tier = AUTO_TIERS[tierIndex];
+          if (Math.random() < tier.waste) {
+            gained = 0;
+            if (options.machine != null) mining.machines[options.machine].message = `wasted a ${def.name} chip`;
+          }
+        }
+        if (gained > 0) mining.ores[oreId] = (mining.ores[oreId] || 0) + gained;
+        const p = oreNodePos(node);
+        autoFx.push({ x: p.x, y: p.y, layer: node.layer, t: 0, color: def.color, text: gained ? `+${gained} ${def.name}` : 'waste', shatter: true });
+        if (!automatic) {
+          sfxDiscovery();
+          showToast(`+${gained} ${def.name}`, 'vein cracked. give it a moment to reform.', 2200);
+        }
+        checkContractPing();
+      } else {
+        mining.nodeHp[node.id] = hp;
+        if (!automatic) feedbackStatus.textContent = `${def.name}: ${hp}/${def.hp} • -${Math.round(cost * 10) / 10} O2 per swing • next swing ${((manualMineNextAt - performance.now()) / 1000).toFixed(1)}s`;
+      }
+      syncMiningHud();
+      renderShop();
+      saveGameState();
+      return true;
+    }
+    function autoMineTick(dt) {
+      restoreOreNodes();
+      for (let i = 0; i < MACHINE_PAD_COUNT; i++) {
+        const m = mining.machines[i];
+        const rig = machineRigs[i];
+        if (!m.tier || !rig) continue;
+        const tier = AUTO_TIERS[m.tier];
+        if (!rigActive(i)) { rig.moving = false; continue; }
+        updateMachineRig(dt, i);
+        m.progress += dt * 1000;
+        if (m.progress < tier.interval) continue;
+        m.progress -= tier.interval;
+        if (rig.mode === 'travel' && rig.targetId) { rig.pending = true; continue; }
+        if (rig.mode === 'windup' || rig.mode === 'slam' || rig.mode === 'recover') continue;
+        let work = rigNodeById(rig.targetId);
+        if (!work || !nodeReady(work)) work = rigNodeById(rig.queueId);
+        if (!work || !nodeReady(work)) work = pickRigTarget(rig.x, rig.lastStrikeId, i);
+        if (!work) {
+          m.message = 'waiting for reachable veins';
+          syncMiningHud();
+          continue;
+        }
+        beginRigTravel(work, true, i);
+      }
+    }
+    function claimContract(id) {
+      const c = CONTRACTS.find(x => x.id === id);
+      if (!c || mining.contracts[id]) return;
+      if (!contractReady(c)) { showToast('not enough ore', 'the keeper taps the checklist. keep mining.', 2200); return; }
+      for (const oreId of Object.keys(c.need)) mining.ores[oreId] -= c.need[oreId];
+      mining.contracts[id] = true;
+      const rewards = [];
+      if (c.pickaxe > mining.pickaxe) {
+        mining.pickaxe = c.pickaxe;
+        rewards.push(PICKAXES[c.pickaxe].name);
+      }
+      if (c.auto > 0) {
+        const slot = mining.machines.findIndex(m => !m.tier);
+        const target = slot >= 0 ? slot : mining.activeMachine;
+        const m = mining.machines[target];
+        m.tier = c.auto;
+        m.battery = 100;
+        m.broken = false;
+        m.progress = 0;
+        m.message = 'machine online';
+        mining.activeMachine = target;
+        rewards.push(`${AUTO_TIERS[c.auto].name} · pad ${target + 1}`);
+      }
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      sfxDiscovery();
+      showToast('contract complete', rewards.length ? `unlocked: ${rewards.join(' + ')}` : 'paid in full.', 3800);
+    }
+    function activeMachineIndex() { return Math.min(MACHINE_PAD_COUNT - 1, Math.max(0, mining.activeMachine | 0)); }
+    function repairAuto() {
+      const i = activeMachineIndex();
+      const m = mining.machines[i];
+      if (!m.tier) { showToast('no machine', 'this pad is empty. build one from a contract.', 2000); return; }
+      if (!m.broken) { showToast('already running', 'nothing to fix right now.', 1800); return; }
+      if ((mining.ores.iron || 0) < 3) { showToast('needs parts', 'repair costs 3 iron.', 2200); return; }
+      mining.ores.iron -= 3;
+      m.broken = false;
+      m.message = 'repaired and ready';
+      resetRigState(i);
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      sfxClick();
+    }
+    function rechargeAuto() {
+      const i = activeMachineIndex();
+      const m = mining.machines[i];
+      if (!m.tier) { showToast('no machine', 'this pad is empty. build one from a contract.', 2000); return; }
+      if (!isShore()) { showToast('shore only', 'bring the machine back to the supply dock.', 2200); return; }
+      m.battery = 100;
+      m.progress = 0;
+      m.message = m.broken ? 'jammed — repair first' : 'battery full';
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      sfxClick();
+    }
+    function resetRigState(i) {
+      const rig = machineRigs[i];
+      if (!rig) return;
+      const home = rigHomePos(i);
+      Object.assign(rig, makeRigState(), { x: home.x, y: home.y });
+    }
+    function selectMachine(i) {
+      if (!Number.isInteger(i) || i < 0 || i >= MACHINE_PAD_COUNT) return;
+      mining.activeMachine = i;
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxClick();
+    }
+    function disassembleMachine(i) {
+      if (!Number.isInteger(i) || i < 0 || i >= MACHINE_PAD_COUNT) return;
+      const m = mining.machines[i];
+      if (!m.tier) { showToast('empty pad', 'nothing to take apart here.', 1800); return; }
+      mining.machines[i] = defaultMachineState();
+      resetRigState(i);
+      if (mining.activeMachine === i) {
+        const other = mining.machines.findIndex((mm, idx) => idx !== i && mm.tier);
+        mining.activeMachine = other >= 0 ? other : i;
+      }
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxClick();
+      showToast('machine disassembled', `pad ${i + 1} is empty. the contract is still claimed.`, 2600);
+    }
+    function canBuyTablet() {
+      return Object.keys(TABLET_COST).every(id => (mining.ores[id] || 0) >= TABLET_COST[id]);
+    }
+    function buyTablet() {
+      if (mining.tablet) return;
+      if (!canBuyTablet()) { showToast('not enough ore', 'the tablet costs 2 iron + 1 gold.', 2200); return; }
+      for (const id of Object.keys(TABLET_COST)) mining.ores[id] -= TABLET_COST[id];
+      mining.tablet = true;
+      saveGameState();
+      renderShop();
+      syncMiningHud();
+      renderTablet();
+      sfxDiscovery();
+      showToast('tablet acquired', 'machine stats are now in your shore ledger.', 3200);
+    }
+    function machineStateLabel(m = mining.auto) {
+      if (!m.tier) return 'not built';
+      if (m.broken) return 'jammed';
+      if (m.battery <= 0) return 'dead battery';
+      return 'online';
+    }
+    function renderTablet() {
+      if (!tabletStats) return;
+      const active = activeMachineIndex();
+      const tier = AUTO_TIERS[mining.auto.tier];
+      const pct = Math.max(0, Math.min(100, mining.auto.battery));
+      const next = tier.interval ? Math.max(0, (tier.interval - mining.auto.progress) / 1000).toFixed(1) : '—';
+      const ores = Object.keys(ORE_DEFS).map(id => `${mining.ores[id] || 0} ${ORE_DEFS[id].name}`).join(' • ') || 'none';
+      const contractLine = CONTRACTS.map(c => {
+        if (mining.contracts[c.id]) return `${c.title} — claimed`;
+        const need = Object.keys(c.need).map(id => `${Math.min(mining.ores[id] || 0, c.need[id])}/${c.need[id]} ${ORE_DEFS[id].name}`);
+        return `${contractReady(c) ? 'ready' : 'open'} ${c.title} — ${need.join(' + ')}`;
+      }).join(' • ');
+      const rig = machineRigs[active];
+      const tracked = rig ? rigNodeById(rig.targetId || rig.queueId) : null;
+      const trackedName = tracked ? (nodeOreId(tracked) ? ORE_DEFS[nodeOreId(tracked)].name : 'ore') : '';
+      const clawState = !mining.auto.tier ? 'none'
+        : !rigActive(active) ? (mining.auto.broken ? 'jammed · frozen' : mining.auto.battery <= 0 ? 'battery empty · frozen' : 'paused')
+        : rig.mode === 'travel' ? `traveling${tracked ? ` → ${trackedName}` : ''}`
+        : rig.mode === 'windup' ? `winding up${tracked ? ` ${trackedName}` : ''}`
+        : rig.mode === 'slam' || rig.mode === 'recover' ? `headbutting${tracked ? ` ${trackedName}` : ''}`
+        : tracked ? `holding ${trackedName}` : 'parked';
+      const pads = mining.machines.map((m, idx) => `<button class="btn" type="button" data-machine="${idx}" ${idx === active ? 'disabled' : ''}>pad ${idx + 1}: ${m.tier ? AUTO_TIERS[m.tier].name : 'empty'}</button>`).join(' ');
+      tabletStats.innerHTML = `
+        <div class="tablet-head"><strong>${tier.name} · pad ${active + 1}</strong><span class="badge ${mining.auto.broken ? 'bug' : 'suggestion'}">${machineStateLabel(mining.auto)}</span></div>
+        <div class="tablet-cell"><b>pads</b><div class="shop-foot">${pads}</div></div>
+        <div class="tablet-cell"><b>battery</b><div class="battery-row"><span>cell</span><div class="battery-bar"><div class="battery-fill" style="width:${pct}%" ${pct < 25 ? 'data-low="1"' : ''}></div></div><span>${Math.round(pct)}%</span></div></div>
+        <div class="tablet-grid">
+          <div class="tablet-cell"><b>next strike</b><span>${next}${tier.interval ? 's' : ''}</span></div>
+          <div class="tablet-cell"><b>reach</b><span>${mining.auto.tier ? `layer ${tier.maxLayer}` : 'none'}</span></div>
+          <div class="tablet-cell"><b>burn</b><span>${mining.auto.tier ? `${tier.drain}% / ${(tier.interval / 1000).toFixed(1)}s` : '—'}</span></div>
+          <div class="tablet-cell"><b>waste</b><span>${mining.auto.tier ? `${Math.round(tier.waste * 100)}%` : '—'}</span></div>
+          <div class="tablet-cell"><b>jam chance</b><span>${mining.auto.tier ? `${Math.round(tier.breakdown * 100)}%` : '—'}</span></div>
+          <div class="tablet-cell"><b>claw</b><span>${clawState}</span></div>
+          <div class="tablet-cell"><b>manual pick</b><span>${PICKAXES[mining.pickaxe].name} · ${PICKAXES[mining.pickaxe].damage} dmg</span></div>
+          <div class="tablet-cell"><b>current layer</b><span>${isShore() ? 'shore' : `layer ${activeOreLayer()}`}</span></div>
+          <div class="tablet-cell"><b>message</b><span>${mining.auto.message}</span></div>
+        </div>
+        <div class="tablet-cell"><b>ore ledger</b><span>${ores}</span></div>
+        <div class="tablet-cell contracts"><b>contracts</b><span>${contractLine}</span></div>
+        <div class="modal-note">live readout from the tablet. ${mining.auto.broken ? 'repair it at the shore supply dock.' : mining.auto.tier ? 'dead battery? hit recharge at the dock to wake the claw.' : 'bring the keeper an ore contract to park a claw rig on the surface rock.'}</div>`;
+    }
+    function openTablet() {
+      if (!mining.tablet) { showToast('no tablet', 'the shore keeper sells one for 2 iron + 1 gold.', 2400); return; }
+      renderTablet();
+      if (tabletModal) {
+        tabletModal.classList.add('open');
+        tabletModal.setAttribute('aria-hidden', 'false');
+      }
+      sfxClick();
+    }
+    function closeTablet() {
+      if (!tabletModal) return;
+      tabletModal.classList.remove('open');
+      tabletModal.setAttribute('aria-hidden', 'true');
+    }
+    function syncMiningHud() {
+      if (!miningHud) return;
+      miningHud.classList.toggle('hidden', isFacilityLayer());
+      if (miningTip) miningTip.classList.toggle('hidden', mining.tipSeen || perspective !== 0 || isFacilityLayer() || isShore());
+      if (oreCounts) {
+        oreCounts.innerHTML = Object.keys(ORE_DEFS).map(id => {
+          const def = ORE_DEFS[id];
+          return `<span class="ore-chip" style="--ore:${def.color}"><b>${def.label}</b>${mining.ores[id] || 0}</span>`;
+        }).join('');
+      }
+      if (pickaxeLabel) pickaxeLabel.textContent = PICKAXES[mining.pickaxe].name;
+      if (autoStatus) {
+        const active = activeMachineIndex();
+        const tier = AUTO_TIERS[mining.auto.tier];
+        const state = !mining.auto.tier ? 'not built' : mining.auto.broken ? 'jammed' : mining.auto.battery <= 0 ? 'dead battery' : tier.name;
+        autoStatus.textContent = `auto: ${state}${MACHINE_PAD_COUNT > 1 ? ` · pad ${active + 1}` : ''}`;
+      }
+      const recoveryMs = Math.max(0, manualMineNextAt - performance.now());
+      if (miningRecovery) {
+        miningRecovery.classList.toggle('hidden', recoveryMs <= 0);
+        if (miningRecoveryLabel) miningRecoveryLabel.textContent = manualMinePenalty > 0 ? 'spam lock recovery' : 'swing recovery';
+        if (miningRecoveryText) miningRecoveryText.textContent = `${(recoveryMs / 1000).toFixed(1)}s`;
+        if (miningRecoveryFill) miningRecoveryFill.style.width = `${Math.min(100, (recoveryMs / (MANUAL_MINE_COOLDOWN_MS + MANUAL_MINE_MAX_PENALTY_MS)) * 100)}%`;
+      }
+      if (recoveryMs <= 0 && manualMinePenalty > 0 && performance.now() - lastStrikeAt > MANUAL_MINE_COOLDOWN_MS + 900) {
+        manualMinePenalty = Math.max(0, manualMinePenalty - MANUAL_MINE_PENALTY_MS);
+      }
+      if (tabletBtn) tabletBtn.classList.toggle('hidden', !mining.tablet);
+      if (tabletModal && tabletModal.classList.contains('open')) renderTablet();
+    }
+    function renderShop() {
+      if (!shopModal) return;
+      if (shopLine) shopLine.textContent = mining.auto.tier ? 'you built the machine. now keep it fed.' : 'ore goes in. better tools come out. no haggling.';
+      if (shopContracts) {
+        shopContracts.innerHTML = CONTRACTS.map(c => {
+          const done = !!mining.contracts[c.id];
+          const ready = contractReady(c);
+          const need = Object.keys(c.need).map(id => {
+            const have = mining.ores[id] || 0;
+            const want = c.need[id];
+            return `<span class="ore-need ${have >= want ? 'ok' : ''}">${ORE_DEFS[id].name} ${Math.min(have, want)}/${want}</span>`;
+          }).join('');
+          const rewards = [c.pickaxe ? PICKAXES[c.pickaxe].name : null, c.auto ? AUTO_TIERS[c.auto].name : null].filter(Boolean).join(' + ');
+          return `<div class="shop-item ${done ? 'done' : ''}">
+            <div class="shop-item-top"><strong>${c.title}</strong><span class="badge ${done ? '' : ready ? 'suggestion' : 'other'}">${done ? 'paid' : ready ? 'ready' : 'open'}</span></div>
+            <div class="shop-needs">${need}</div>
+            <div class="shop-note">${c.line}</div>
+            <div class="shop-foot"><span>reward: ${rewards}</span><button class="btn" type="button" data-contract="${c.id}" ${done || !ready ? 'disabled' : ''}>${done ? 'claimed' : 'turn in'}</button></div>
+          </div>`;
+        }).join('');
+      }
+      if (shopTools) {
+        const tabletNeed = Object.keys(TABLET_COST).map(id => {
+          const have = mining.ores[id] || 0;
+          const want = TABLET_COST[id];
+          return `<span class="ore-need ${have >= want ? 'ok' : ''}">${ORE_DEFS[id].name} ${Math.min(have, want)}/${want}</span>`;
+        }).join('');
+        shopTools.innerHTML = `<div class="shop-item"><div class="shop-item-top"><strong>${PICKAXES[mining.pickaxe].name}</strong><span class="badge">equipped</span></div><div class="shop-note">${PICKAXES[mining.pickaxe].note} • ${PICKAXES[mining.pickaxe].damage} damage per swing</div><div class="shop-foot"><span>manual swings have a ${(MANUAL_MINE_COOLDOWN_MS / 1000).toFixed(1)}s recovery. spam clicks add a growing spam lock. deeper veins hit harder.</span></div></div>
+        <div class="shop-item ${mining.tablet ? 'done' : ''}"><div class="shop-item-top"><strong>machine tablet</strong><span class="badge ${mining.tablet ? '' : canBuyTablet() ? 'suggestion' : 'other'}">${mining.tablet ? 'owned' : canBuyTablet() ? 'ready' : 'locked'}</span></div><div class="shop-needs">${tabletNeed}</div><div class="shop-note">a pocket readout for the machine parked on the surface rock. works anywhere, so you don't have to waddle back here.</div><div class="shop-foot"><span>${mining.tablet ? 'tap machine tablet in your shore ledger' : '2 iron + 1 gold. no haggling.'}</span><button class="btn" type="button" data-shop="tablet" ${mining.tablet || !canBuyTablet() ? 'disabled' : ''}>${mining.tablet ? 'owned' : 'buy tablet'}</button></div></div>
+        <div class="shop-item"><div class="shop-item-top"><strong>mining rules</strong></div><div class="shop-note">iron in the upper layer, abyssite in hadal, and rare gold/diamond/voidglass scattered in empty veins. only the default perspective has ore. no veins in the facility or boss fight, and nothing in abyss or void.</div></div>`;
+      }
+      if (shopAuto) {
+        const active = activeMachineIndex();
+        const tier = AUTO_TIERS[mining.auto.tier];
+        const pct = Math.max(0, Math.min(100, mining.auto.battery));
+        const padButtons = mining.machines.map((m, idx) => `<button class="btn" type="button" data-machine="${idx}" ${idx === active ? 'disabled' : ''}>pad ${idx + 1}: ${m.tier ? AUTO_TIERS[m.tier].name : 'empty'}</button>`).join(' ');
+        shopAuto.innerHTML = `<div class="shop-item"><div class="shop-item-top"><strong>${tier.name} · pad ${active + 1}</strong><span class="badge ${mining.auto.broken ? 'bug' : 'suggestion'}">${mining.auto.broken ? 'jammed' : tier.name === 'not built' ? 'locked' : 'online'}</span></div>
+          <div class="shop-note">${tier.note}</div>
+          <div class="shop-foot">${padButtons}</div>
+          ${mining.auto.tier ? `<div class="battery-row"><span>battery</span><div class="battery-bar"><div class="battery-fill" style="width:${pct}%" ${pct < 25 ? 'data-low="1"' : ''}></div></div><span>${Math.round(pct)}%</span></div>` : ''}
+          ${mining.auto.tier ? `<div class="shop-meta">burn: ${tier.drain}% / ${(tier.interval / 1000).toFixed(1)}s • waste: ${Math.round(tier.waste * 100)}% • jams: ${Math.round(tier.breakdown * 100)}% • reaches: layer ${tier.maxLayer}</div>` : ''}
+          <div class="shop-meta">status: ${mining.auto.message}</div>
+          <div class="shop-foot"><button class="btn" type="button" data-auto="recharge" ${!mining.auto.tier || mining.auto.broken ? 'disabled' : ''}>recharge at dock</button><button class="btn" type="button" data-auto="repair" ${!mining.auto.tier || !mining.auto.broken ? 'disabled' : ''}>repair · 3 iron</button><button class="btn" type="button" data-machine-disassemble="${active}" ${!mining.auto.tier ? 'disabled' : ''}>disassemble pad ${active + 1}</button></div>
+          </div>`;
+      }
+    }
+    function openShop() {
+      if (!isShore()) { showToast('shore only', 'go all the way forwards to reach the supply dock.', 2400); return; }
+      if (boss.active) return;
+      renderShop();
+      if (shopModal) {
+        shopModal.classList.add('open');
+        shopModal.setAttribute('aria-hidden', 'false');
+      }
+      sfxClick();
+    }
+    function closeShop() {
+      if (!shopModal) return;
+      shopModal.classList.remove('open');
+      shopModal.setAttribute('aria-hidden', 'true');
+    }
 
     function updateAudioMix() {
       if (corrupted) { try { pauseBgmAll(false); } catch(_) {} return; }
@@ -1346,6 +2469,8 @@
             else showVoidDialogue(`quest: bottles ${Math.min(3,p.bottles)}/3, fish ${Math.min(3,p.fish)}/3, trips ${Math.min(3,p.trips)}/3`, 4500);
           } else if (isFacilityLayer()) {
             if (!facility.complete) showVoidDialogue('stop the wipeout supply.', 4000);
+          } else if (isDeepSealed()) {
+            showVoidDialogue('The Deep Blue is sealed. the abyss is as far as anyone goes.', 4500);
           } else {
             showVoidDialogue('The Deep Blue is below. stop the scientists. the ocean depends on it.', 4500);
           }
@@ -1473,6 +2598,385 @@
       // buoys
       for(const bx of [w*0.25,w*0.42,w*0.58]){ const by=h*0.64+Math.sin(animTime*0.001+bx)*3; ctx.fillStyle='rgba(220,90,70,0.85)'; ctx.beginPath(); ctx.moveTo(bx,by-16); ctx.lineTo(bx+8,by); ctx.lineTo(bx-8,by); ctx.closePath(); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.moveTo(bx,by-16); ctx.lineTo(bx,by-24); ctx.stroke(); }
       ctx.restore();
+    }
+
+    function shoreKeeperRect() {
+      const s = Math.min(w < 620 ? 150 : 184, w * (w < 620 ? 0.38 : 0.24));
+      return { x: w * 0.68 - s * 0.5, y: h * 0.62 - s * 0.5, s };
+    }
+    function drawMachineRock(i = 0) {
+      if (perspective !== 0 || cameraY > 0.2) return;
+      const g = machineRigGeom(i);
+      const p = g.p;
+      const m = mining.machines[i];
+      const cx = g.baseX;
+      const padY = p.y - p.h * 0.42;
+      const tier = m && AUTO_TIERS[m.tier];
+      const active = activeMachineIndex() === i;
+      const statusColor = !m || !m.tier ? 'rgba(150,165,185,0.75)' : m.broken ? '#ff6f8a' : m.battery <= 0 ? '#ffb36b' : '#8dffc4';
+      ctx.save();
+      for (const [ox, oy, rr] of [[-0.72, 0.22, 0.28], [0.72, 0.18, 0.24], [0.28, 0.34, 0.2]]) {
+        ctx.fillStyle = 'rgba(33,42,55,0.96)';
+        ctx.beginPath();
+        ctx.ellipse(cx + p.w * ox, p.y + p.h * oy, p.w * rr, p.h * rr * 0.7, ox * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(72,88,106,0.38)';
+        ctx.beginPath();
+        ctx.ellipse(cx + p.w * ox - p.w * rr * 0.2, p.y + p.h * oy - p.h * rr * 0.2, p.w * rr * 0.45, p.h * rr * 0.24, ox * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(1,6,14,0.34)';
+      ctx.beginPath(); ctx.ellipse(cx, p.y + p.h * 0.36, p.w * 0.62, p.h * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(39,48,61,0.97)';
+      ctx.beginPath();
+      ctx.moveTo(cx - p.w * 0.59, p.y + p.h * 0.32);
+      ctx.lineTo(cx - p.w * 0.5, p.y - p.h * 0.27);
+      ctx.lineTo(cx - p.w * 0.23, p.y - p.h * 0.49);
+      ctx.lineTo(cx + p.w * 0.19, p.y - p.h * 0.5);
+      ctx.lineTo(cx + p.w * 0.51, p.y - p.h * 0.23);
+      ctx.lineTo(cx + p.w * 0.6, p.y + p.h * 0.31);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(70,84,100,0.55)';
+      ctx.beginPath();
+      ctx.moveTo(cx - p.w * 0.5, p.y - p.h * 0.27);
+      ctx.lineTo(cx - p.w * 0.23, p.y - p.h * 0.49);
+      ctx.lineTo(cx + p.w * 0.19, p.y - p.h * 0.5);
+      ctx.lineTo(cx + p.w * 0.03, p.y - p.h * 0.28);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(17,26,38,0.98)';
+      ctx.fillRect(cx - p.w * 0.36, padY, p.w * 0.72, p.h * 0.17);
+      ctx.strokeStyle = active ? 'rgba(183,124,255,0.9)' : 'rgba(150,180,205,0.42)'; ctx.lineWidth = active ? 3 : 2;
+      ctx.strokeRect(cx - p.w * 0.36, padY, p.w * 0.72, p.h * 0.17);
+      for (const bx of [cx - p.w * 0.31, cx + p.w * 0.31]) {
+        ctx.fillStyle = 'rgba(190,215,235,0.6)';
+        ctx.beginPath(); ctx.arc(bx, padY + p.h * 0.085, 2.6, 0, Math.PI * 2); ctx.fill();
+      }
+      if (!m || !m.tier) {
+        ctx.strokeStyle = 'rgba(125,145,165,0.5)'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(cx - p.w * 0.13, padY); ctx.lineTo(cx - p.w * 0.13, padY - p.h * 0.18); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + p.w * 0.13, padY); ctx.lineTo(cx + p.w * 0.13, padY - p.h * 0.18); ctx.stroke();
+      } else {
+        const mastW = Math.max(12, p.w * 0.085);
+        const mastBottom = p.y - p.h * 0.12;
+        ctx.fillStyle = 'rgba(27,41,57,0.98)';
+        ctx.fillRect(cx - mastW * 0.5, g.beamY, mastW, mastBottom - g.beamY);
+        ctx.strokeStyle = 'rgba(130,170,200,0.34)'; ctx.lineWidth = 2;
+        ctx.strokeRect(cx - mastW * 0.5, g.beamY, mastW, mastBottom - g.beamY);
+        ctx.strokeStyle = 'rgba(110,150,180,0.3)'; ctx.lineWidth = 3;
+        for (let by = g.beamY + 18; by < mastBottom - 10; by += 24) {
+          ctx.beginPath(); ctx.moveTo(cx - mastW * 0.5, by); ctx.lineTo(cx + mastW * 0.5, by + 12); ctx.stroke();
+        }
+        const boomH = Math.max(10, p.h * 0.1);
+        ctx.fillStyle = 'rgba(42,60,80,0.98)';
+        ctx.fillRect(g.beamStart, g.beamY - boomH * 0.5, g.beamEnd - g.beamStart, boomH);
+        ctx.strokeStyle = 'rgba(145,185,215,0.4)'; ctx.lineWidth = 2;
+        ctx.strokeRect(g.beamStart, g.beamY - boomH * 0.5, g.beamEnd - g.beamStart, boomH);
+        ctx.save();
+        ctx.beginPath(); ctx.rect(g.beamStart, g.beamY - boomH * 0.5, g.beamEnd - g.beamStart, boomH); ctx.clip();
+        ctx.globalAlpha = 0.28; ctx.fillStyle = '#e4c05a';
+        for (let sx = g.beamStart - 40; sx < g.beamEnd; sx += 34) {
+          ctx.beginPath();
+          ctx.moveTo(sx, g.beamY - boomH * 0.5);
+          ctx.lineTo(sx + 14, g.beamY - boomH * 0.5);
+          ctx.lineTo(sx + 26, g.beamY + boomH * 0.5);
+          ctx.lineTo(sx + 12, g.beamY + boomH * 0.5);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(165,205,230,0.42)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx, g.beamY - boomH * 0.5); ctx.lineTo(g.beamEnd, g.beamY - boomH * 0.1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, g.beamY - boomH * 0.5); ctx.lineTo(cx + (g.beamEnd - cx) * 0.55, g.beamY + boomH * 0.5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, g.beamY - boomH * 0.5); ctx.lineTo(g.beamStart, g.beamY - boomH * 0.1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, g.beamY - boomH * 0.5); ctx.lineTo(cx + (g.beamStart - cx) * 0.55, g.beamY + boomH * 0.5); ctx.stroke();
+      }
+      ctx.fillStyle = statusColor;
+      ctx.shadowColor = statusColor; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(cx + p.w * 0.31, padY - p.h * 0.03, 3.2, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.textAlign = 'center';
+      ctx.font = `${Math.max(10, Math.min(13, w * 0.014))}px Consolas, monospace`;
+      ctx.fillStyle = 'rgba(226,238,250,0.78)';
+      ctx.fillText(m && m.tier ? `PAD ${i + 1} · ${tier.name.toUpperCase()}` : `PAD ${i + 1} · EMPTY`, cx, p.y + p.h * 0.52);
+      if (m && m.tier && mining.tablet) {
+        ctx.font = `${Math.max(9, Math.min(11, w * 0.012))}px Consolas, monospace`;
+        ctx.fillStyle = 'rgba(183,124,255,0.85)';
+        ctx.fillText(`${Math.round(m.battery)}%`, cx, p.y + p.h * 0.67);
+      }
+      ctx.restore();
+    }
+    function drawMachineRocks() {
+      for (let i = 0; i < MACHINE_PAD_COUNT; i++) drawMachineRock(i);
+    }
+    function drawDeepClaw(i = 0) {
+      if (perspective !== 0 || isFacilityLayer()) return;
+      const m = mining.machines[i];
+      if (!m || !m.tier) return;
+      const g = machineRigGeom(i);
+      const rig = machineRigs[i];
+      const pos = {
+        x: rig.x == null ? g.baseX : rig.x,
+        y: rig.y == null ? g.beamY + 30 : rig.y
+      };
+      const frozen = boss.active || m.broken || m.battery <= 0;
+      const statusColor = m.broken ? '#ff6f8a' : m.battery <= 0 ? '#ffb36b' : frozen ? 'rgba(150,165,185,0.8)' : '#8dffc4';
+      const phase = rig.mode === 'windup' ? Math.min(1, rig.modeT / RIG_WINDUP_MS)
+        : rig.mode === 'slam' ? Math.min(1, rig.modeT / RIG_SLAM_MS)
+        : rig.mode === 'recover' ? Math.min(1, rig.modeT / RIG_RECOVER_MS) : 0;
+      const smash = rig.mode === 'slam' ? phase : 0;
+      const s = Math.max(34, Math.min(58, w * 0.052));
+      const boomH = Math.max(10, g.p.h * 0.1);
+      ctx.save();
+      ctx.beginPath(); ctx.moveTo(pos.x, g.beamY); ctx.lineTo(pos.x, pos.y);
+      ctx.strokeStyle = 'rgba(5,10,18,0.82)'; ctx.lineWidth = 5; ctx.stroke();
+      ctx.strokeStyle = 'rgba(166,206,232,0.72)'; ctx.lineWidth = 2; ctx.stroke();
+      roundRectPath(ctx, pos.x - 17, g.beamY - boomH * 0.75, 34, boomH * 1.5, 5);
+      ctx.fillStyle = 'rgba(29,43,60,0.98)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(150,190,220,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = 'rgba(170,210,235,0.55)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(pos.x, g.beamY, boomH * 0.35, 0, Math.PI * 2); ctx.stroke();
+      if (rig.moving && !frozen) {
+        ctx.globalAlpha = 0.32;
+        for (let k = 0; k < 3; k++) {
+          const by = pos.y + 22 + k * 12 + Math.sin(animTime * 0.006 + k) * 3;
+          ctx.fillStyle = 'rgba(190,230,255,0.5)';
+          ctx.beginPath(); ctx.arc(pos.x + Math.sin(animTime * 0.004 + k) * 8, by, 2.2 + k * 0.7, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      ctx.translate(pos.x, pos.y);
+      const spread = 0.58 - smash * 0.24;
+      ctx.strokeStyle = '#9bb6c9'; ctx.lineWidth = 5.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(0, -s * 0.12, s * 0.17, Math.PI * 0.08, Math.PI * 0.92, true); ctx.stroke();
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(side * s * 0.16, -s * 0.08);
+        ctx.quadraticCurveTo(side * s * 0.52, s * 0.02, side * s * spread, s * 0.43);
+        ctx.lineTo(side * s * (spread - 0.13), s * 0.57);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#40566d';
+      roundRectPath(ctx, -s * 0.24, -s * 0.32, s * 0.48, s * 0.32, 6); ctx.fill();
+      ctx.strokeStyle = 'rgba(170,205,230,0.45)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#c9dbe9';
+      ctx.beginPath(); ctx.moveTo(-s * 0.12, s * 0.16); ctx.lineTo(0, s * 0.42); ctx.lineTo(s * 0.12, s * 0.16); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = statusColor;
+      ctx.shadowColor = statusColor; ctx.shadowBlur = 9;
+      ctx.beginPath(); ctx.arc(0, -s * 0.24, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      if (smash > 0.25) {
+        ctx.strokeStyle = `rgba(255,228,160,${smash})`;
+        ctx.lineWidth = 2;
+        for (let k = 0; k < 4; k++) {
+          const a = -0.9 + k * 0.55;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * s * 0.35, s * 0.44 + Math.sin(a) * s * 0.2);
+          ctx.lineTo(Math.cos(a) * s * 0.68, s * 0.62 + Math.sin(a) * s * 0.42);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    function drawDeepClaws() {
+      for (let i = 0; i < MACHINE_PAD_COUNT; i++) drawDeepClaw(i);
+    }
+    function shoreSandTop() { return h * 0.68; }
+    function drawShoreScene() {
+      ctx.save();
+      const sandTop = shoreSandTop();
+      const sandEdge = (x) => sandTop + Math.sin(x * 0.012 + animTime * 0.0012) * 7;
+      const sand = ctx.createLinearGradient(0, sandTop, 0, h);
+      sand.addColorStop(0, 'rgb(210,188,151)');
+      sand.addColorStop(0.5, 'rgb(158,137,108)');
+      sand.addColorStop(1, 'rgb(84,72,58)');
+      ctx.fillStyle = sand;
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 24) {
+        if (x === 0) ctx.moveTo(x, sandEdge(x)); else ctx.lineTo(x, sandEdge(x));
+      }
+      ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = `rgba(235,248,255,${0.42 + 0.1 * Math.sin(animTime * 0.002)})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 18) {
+        const fy = sandEdge(x) + 1;
+        if (x === 0) ctx.moveTo(x, fy); else ctx.lineTo(x, fy);
+      }
+      ctx.stroke();
+      // supply dock + stall
+      const dockY = h * 0.78;
+      ctx.fillStyle = 'rgba(70,48,31,0.9)';
+      ctx.fillRect(w * 0.42, dockY, w * 0.56, h * 0.055);
+      ctx.strokeStyle = 'rgba(120,88,56,0.5)';
+      ctx.lineWidth = 2;
+      for (let x = w * 0.43; x < w * 0.98; x += 34) { ctx.beginPath(); ctx.moveTo(x, dockY); ctx.lineTo(x + 8, dockY + h * 0.055); ctx.stroke(); }
+      const kr = shoreKeeperRect();
+      const stallTop = Math.max(h * 0.32, kr.y - 34);
+      ctx.fillStyle = 'rgba(34,22,38,0.82)';
+      ctx.fillRect(kr.x - 58, stallTop, kr.s + 116, 14);
+      for (let i = 0; i < 8; i++) {
+        ctx.fillStyle = i % 2 ? 'rgba(183,124,255,0.55)' : 'rgba(238,188,110,0.55)';
+        ctx.beginPath();
+        ctx.moveTo(kr.x - 58 + i * (kr.s + 116) / 8, stallTop);
+        ctx.lineTo(kr.x - 58 + (i + 1) * (kr.s + 116) / 8, stallTop);
+        ctx.lineTo(kr.x - 50 + (i + 1) * (kr.s + 116) / 8, stallTop + 24);
+        ctx.lineTo(kr.x - 66 + i * (kr.s + 116) / 8, stallTop + 24);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(47,31,22,0.95)';
+      ctx.fillRect(kr.x - 52, stallTop + 14, 8, dockY - stallTop - 14);
+      ctx.fillRect(kr.x + kr.s + 44, stallTop + 14, 8, dockY - stallTop - 14);
+      // keeper is a big dancing emoji, feet on the shop floor
+      const keeperSize = Math.max(96, Math.min(210, w * 0.13, (dockY - stallTop) * 0.82));
+      ctx.font = `${keeperSize}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fillText('🕺', kr.x + kr.s * 0.5, dockY - 2);
+      // ore cart on the sand
+      const cartX = w * 0.2, cartY = h * 0.79, cw = Math.min(150, w * 0.24);
+      ctx.fillStyle = 'rgba(52,36,28,0.95)';
+      ctx.beginPath();
+      ctx.moveTo(cartX - cw * 0.5, cartY - 26);
+      ctx.lineTo(cartX + cw * 0.5, cartY - 26);
+      ctx.lineTo(cartX + cw * 0.38, cartY + 22);
+      ctx.lineTo(cartX - cw * 0.38, cartY + 22);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(130,95,64,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#1b2532';
+      for (const wx of [-cw * 0.28, cw * 0.28]) {
+        ctx.beginPath(); ctx.arc(cartX + wx, cartY + 24, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(180,210,235,0.28)'; ctx.stroke();
+      }
+      // empty cart, no ore chunks
+      ctx.strokeStyle = 'rgba(176,136,94,0.72)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cartX - cw * 0.5, cartY - 26); ctx.lineTo(cartX + cw * 0.5, cartY - 26); ctx.stroke();
+      ctx.font = `${Math.max(10, Math.min(13, w * 0.014))}px Consolas, monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(240,232,210,0.82)';
+      ctx.fillText('SHORE SUPPLY', kr.x + kr.s * 0.5, stallTop - 8);
+      ctx.restore();
+    }
+    function nodeNoise(node, i) {
+      const seed = (node.id.charCodeAt(0) * 17 + node.id.charCodeAt(1) * 31 + i * 47);
+      return ((Math.sin(seed) + 1) % 1 + 1) % 1;
+    }
+    function drawOreLayer(layer) {
+      if (perspective !== 0 || isFacilityLayer()) return;
+      for (const node of ORE_NODES) {
+        if (node.layer !== layer) continue;
+        const { x, y, r } = oreNodePos(node);
+        ctx.save();
+        const oreId = nodeOreId(node);
+        if (!oreId) {
+          ctx.fillStyle = 'rgba(10,16,26,0.45)';
+          ctx.beginPath(); ctx.ellipse(x, y + r * 0.35, r * 0.8, r * 0.28, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = 'rgba(150,180,210,0.18)'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 4]);
+          ctx.beginPath(); ctx.ellipse(x, y, r * 0.72, r * 0.58, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+        const def = ORE_DEFS[oreId];
+        const hp = nodeHp(node);
+        const ready = nodeReady(node);
+        if (!ready || hp <= 0) {
+          ctx.fillStyle = 'rgba(12,18,28,0.65)';
+          ctx.beginPath(); ctx.ellipse(x, y + r * 0.35, r * 0.8, r * 0.28, 0, 0, Math.PI * 2); ctx.fill();
+          const wait = Math.max(0, (mining.nodeRespawn[node.id] || 0) - Date.now());
+          const p = 1 - Math.min(1, wait / def.respawn);
+          ctx.strokeStyle = 'rgba(180,210,235,0.25)'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(x, y, r * 0.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+        const glow = ctx.createRadialGradient(x, y, 1, x, y, r * 2.2);
+        glow.addColorStop(0, def.color + '55');
+        glow.addColorStop(1, def.color + '00');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(x, y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.ellipse(x, y + r * 0.45, r * 0.9, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        for (let i = 0; i <= 10; i++) {
+          const a = (i / 10) * Math.PI * 2;
+          const rr = r * (0.76 + nodeNoise(node, i) * 0.3);
+          const px = x + Math.cos(a) * rr;
+          const py = y + Math.sin(a) * rr * 0.82;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        const rock = ctx.createLinearGradient(x, y - r, x, y + r);
+        rock.addColorStop(0, 'rgba(44,56,70,0.98)');
+        rock.addColorStop(1, 'rgba(14,20,30,0.98)');
+        ctx.fillStyle = rock; ctx.fill();
+        ctx.strokeStyle = def.vein; ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = def.color; ctx.lineWidth = 2.4; ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.5, y + r * 0.25); ctx.lineTo(x - r * 0.08, y - r * 0.2); ctx.lineTo(x + r * 0.42, y + r * 0.12);
+        ctx.moveTo(x - r * 0.2, y - r * 0.5); ctx.lineTo(x + r * 0.12, y - r * 0.05);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        const missing = Math.round((1 - hp / def.hp) * 5);
+        ctx.strokeStyle = 'rgba(5,8,14,0.75)'; ctx.lineWidth = 1.4;
+        for (let i = 0; i < missing; i++) {
+          const a = nodeNoise(node, i + 20) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(x + Math.cos(a) * r * 0.15, y + Math.sin(a) * r * 0.12);
+          ctx.lineTo(x + Math.cos(a + 0.5) * r * 0.68, y + Math.sin(a + 0.5) * r * 0.55);
+          ctx.stroke();
+        }
+        ctx.font = `bold ${Math.max(9, r * 0.38)}px Consolas, monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(236,247,255,0.75)';
+        ctx.fillText(def.label, x, y + r + 13);
+        ctx.restore();
+      }
+    }
+    function drawMiningFx(dtMs) {
+      if (swingFx) {
+        swingFx.t += dtMs;
+        const p = swingFx.t / 280;
+        if (p >= 1) swingFx = null;
+        else {
+          ctx.save();
+          ctx.translate(0, h * swingFx.layer);
+          ctx.globalAlpha = 1 - p;
+          ctx.strokeStyle = 'rgba(255,238,190,0.9)';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(swingFx.x + 16, swingFx.y - 8, 34, -1.5 + p * 2.6, -0.35 + p * 2.6);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(swingFx.x + 18, swingFx.y - 12);
+          ctx.lineTo(swingFx.x - 14 + p * 12, swingFx.y + 10 - p * 18);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+      for (let i = autoFx.length - 1; i >= 0; i--) {
+        const fx = autoFx[i];
+        fx.t += dtMs;
+        const p = fx.t / 1100;
+        if (p >= 1) { autoFx.splice(i, 1); continue; }
+        ctx.save();
+        ctx.translate(0, h * fx.layer);
+        ctx.globalAlpha = 1 - p;
+        if (fx.shatter) {
+          ctx.strokeStyle = fx.color;
+          ctx.lineWidth = 2;
+          for (let k = 0; k < 7; k++) {
+            const a = (k / 7) * Math.PI * 2;
+            const d = 14 + p * 44;
+            ctx.beginPath();
+            ctx.moveTo(fx.x + Math.cos(a) * 7, fx.y + Math.sin(a) * 7);
+            ctx.lineTo(fx.x + Math.cos(a) * d, fx.y + Math.sin(a) * d + p * 22);
+            ctx.stroke();
+          }
+        }
+        ctx.fillStyle = fx.color;
+        ctx.font = '11px Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(fx.text, fx.x, fx.y - 24 - p * 34);
+        ctx.restore();
+      }
     }
     function drawSky() {
       dayFactor = getDayFactor();
@@ -2232,8 +3736,6 @@
         drawCoral(cx, fy + 1, 0.45 + (i % 3) * 0.08, sway);
       }
 
-      if (window.OceanFish) window.OceanFish.drawInWorld(ctx, { w, h, animTime, dt: 1/60, reducedMotion });
-
       if (jelly.active) {
         const jx = ((jelly.x + animTime * jelly.sp * 20) % 1.2 - 0.1) * w;
         const jy = h * jelly.y + Math.sin(animTime*0.0006 + jelly.ph) * 20;
@@ -2612,6 +4114,13 @@
       t = ts;
       dt = Math.min(0.05, (ts - (lastT || ts)) / 1000);
       lastT = ts;
+      if (blackoutActive) {
+        const stillOut = updateBlackout();
+        if (stillOut) {
+          rafId = requestAnimationFrame(render);
+          return;
+        }
+      }
       simTime += dt * 1000;
       motionMul = reducedMotion ? 0.25 : 1;
       animTime += dt * 1000 * motionMul;
@@ -2654,6 +4163,9 @@
       }
       updateVoidQuest();
       updateOxygen(dt);
+      autoMineTick(dt);
+      miningHudClock += dt * 1000;
+      if (miningHudClock >= 500) { miningHudClock = 0; syncMiningHud(); }
       updateBoss(dt * 1000);
       if (canStartOctopus()) startVoidOctopus();
 
@@ -2690,19 +4202,39 @@
         { base: horizon + 118,amp: 30, freq: 0.0064, phase: -waveT * 0.00056 + 3.4,colorTop: wc(lerp(3,12,d),  lerp(20,60,d),  lerp(52,122,d), 0.98),  colorBottom: wc(lerp(1,4,d),  lerp(7,30,d),  lerp(22,68,d), 1),     alpha: 1, stroke: `rgba(185,238,255,${lerp(0.10,0.16,d)})` }
       ];
 
+      ctx.save();
+      if (isShore()) {
+        ctx.beginPath(); ctx.rect(0, 0, w, shoreSandTop()); ctx.clip();
+      }
       drawMist();
       for (const layer of layers) drawWave(layer);
-      drawSurfaceLife();
-      drawEquippedSurface();
-      if (perspective === 1) drawIcebergs();
-      if (perspective === 2) drawSurfacePerspective2();
+      ctx.restore();
+      if (isShore()) {
+        drawShoreScene();
+      } else {
+        drawSurfaceLife();
+        drawEquippedSurface();
+        drawMachineRocks();
+        if (perspective === 1) drawIcebergs();
+        if (perspective === 2) drawSurfacePerspective2();
+      }
+      ctx.save();
+      if (isShore()) {
+        ctx.beginPath(); ctx.rect(0, 0, w, shoreSandTop()); ctx.clip();
+      }
       drawRipplesAndBubbles();
+      ctx.restore();
       drawWeather();
 
+      ctx.save();
+      if (isShore()) {
+        ctx.beginPath(); ctx.rect(0, 0, w, shoreSandTop()); ctx.clip();
+      }
       ctx.save();
       ctx.translate(0, h);
       drawUnderwater();
       if (cameraY < 1.5) drawEquippedUnderwater();
+      if (!isFacilityLayer()) drawOreLayer(1);
       if (perspective === 1) {
         ctx.save();
         ctx.fillStyle='rgba(80,180,140,0.07)'; ctx.fillRect(0,0,w,h);
@@ -2722,6 +4254,7 @@
       ctx.translate(0, h * 2);
       drawAbyss();
       if (cameraY >= 1.5 && cameraY < 2.5) drawEquippedUnderwater();
+      if (!isFacilityLayer()) drawOreLayer(2);
       if (perspective === 1) {
         ctx.save();
         ctx.fillStyle='rgba(255,80,30,0.04)'; ctx.fillRect(0,0,w,h);
@@ -2739,6 +4272,7 @@
       ctx.translate(0, h * 3);
       drawTrenches();
       if (cameraY >= 2.5 && cameraY < 3.5) drawEquippedUnderwater();
+      if (!isFacilityLayer()) drawOreLayer(3);
       if (perspective === 1) {
         ctx.save();
         ctx.fillStyle='rgba(60,40,110,0.15)'; ctx.fillRect(0,0,w,h);
@@ -2761,6 +4295,7 @@
       ctx.translate(0, h * 4);
       drawHadal();
       if (cameraY >= 3.5 && cameraY < 4.5) drawEquippedUnderwater();
+      if (!isFacilityLayer()) drawOreLayer(4);
       if (perspective === 1) {
         ctx.save();
         ctx.fillStyle='rgba(255,40,100,0.05)'; ctx.fillRect(0,0,w,h);
@@ -2852,6 +4387,7 @@
       ctx.translate(0, h * 5);
       drawVoid();
       if (cameraY >= 4.5 && cameraY < 5.5) drawEquippedUnderwater();
+      if (!isFacilityLayer()) drawOreLayer(5);
       if (perspective === 1) {
         ctx.save();
         ctx.fillStyle='rgba(100,140,255,0.05)'; ctx.fillRect(0,0,w,h);
@@ -2866,7 +4402,7 @@
       }
       ctx.restore();
 
-      if (quest.unlockedDeep) {
+      if (quest.unlockedDeep && !isDeepSealed()) {
         ctx.save();
         ctx.translate(0, h * 6);
         drawFacility();
@@ -2874,7 +4410,10 @@
       }
 
       if (window.OceanFish) window.OceanFish.drawInWorld(ctx, { w, h, animTime, dt, reducedMotion, maxDepth: currentBottomDepth() + 1 });
+      drawDeepClaws();
+      drawMiningFx(dt * 1000);
 
+      ctx.restore();
       ctx.restore();
 
       drawBossFight();
@@ -2911,20 +4450,22 @@
       setMotion.checked = reducedMotion;
       setPhoto.checked = photoMode;
       const bottomDepth = currentBottomDepth();
-      goDownBtn.textContent = cameraTarget >= bottomDepth - 0.01 ? 'bottom' : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
+      const atFloor = cameraTarget >= bottomDepth - 0.01;
+      const navLocked = navOnCooldown();
+      goDownBtn.textContent = isShore() ? 'shore' : atFloor ? (isDeepSealed() ? 'sealed' : 'bottom') : (cameraTarget >= 0.99 ? 'go deeper' : 'go down');
       goUpBtn.textContent = cameraTarget <= 0.01 ? 'surface' : 'go up';
-      goDownBtn.disabled = cameraTarget >= bottomDepth - 0.01;
-      goUpBtn.disabled = cameraTarget <= 0.01;
+      goDownBtn.disabled = isShore() || atFloor || navLocked;
+      goUpBtn.disabled = cameraTarget <= 0.01 || navLocked;
       goDownBtn.style.opacity = goDownBtn.disabled ? '0.45' : '1';
       goUpBtn.style.opacity = goUpBtn.disabled ? '0.45' : '1';
       const facilityNow = isFacilityLayer();
-      goForwardBtn.disabled = facilityNow || perspective >= MAX_PERSPECTIVE;
-      goBackBtn.disabled = facilityNow || perspective <= 0;
+      goForwardBtn.disabled = facilityNow || perspective >= MAX_PERSPECTIVE || navLocked;
+      goBackBtn.disabled = facilityNow || perspective <= 0 || navLocked;
       goForwardBtn.style.opacity = goForwardBtn.disabled ? '0.45' : '1';
       goBackBtn.style.opacity = goBackBtn.disabled ? '0.45' : '1';
-      goForwardBtn.textContent = 'go forwards';
+      goForwardBtn.textContent = perspective === 2 ? 'go to shore' : 'go forwards';
+      goBackBtn.textContent = perspective === 3 ? 'leave shore' : 'go back';
       document.body.classList.toggle('photo-mode', photoMode);
-      discoverHint.textContent = `discoveries: ${discoveries.length}/${DISCOVERY_DEFS.length} found • depth: ${depthLabel(cameraTarget)}`;
       renderDiscoveries();
     }
 
@@ -3090,10 +4631,44 @@
     }
     setPhoto.addEventListener('change', () => { setPhotoMode(setPhoto.checked); sfxClick(); });
     photoExitBtn.addEventListener('click', (e) => { e.stopPropagation(); setPhotoMode(false); sfxClick(); });
-    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); if (boss.active) { showToast('boss fight', 'you can\'t leave during the void octopus fight.', 1600); return; } setCamera(Math.min(currentBottomDepth(), cameraTarget + 1)); sfxDive(true); });
-    goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); if (boss.active) { showToast('boss fight', 'brace, fight, or recharge. no running up.', 1600); return; } setCamera(Math.max(0, cameraTarget - 1)); sfxDive(false); });
-    goForwardBtn.addEventListener('click', (e) => { e.stopPropagation(); if (boss.active) { showToast('boss fight', 'the void octopus blocks your path.', 1600); return; } if (!canUsePerspective() || perspective >= MAX_PERSPECTIVE) return; perspective = Math.min(MAX_PERSPECTIVE, perspective + 1); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
-    goBackBtn.addEventListener('click', (e) => { e.stopPropagation(); if (boss.active) { showToast('boss fight', 'focus on the fight first.', 1600); return; } if (perspective <= 0) return; perspective = Math.max(0, perspective - 1); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
+    goDownBtn.addEventListener('click', (e) => { e.stopPropagation(); if (navOnCooldown()) return; if (boss.active) { showToast('boss fight', 'you can\'t leave during the void octopus fight.', 1600); return; } if (isShore()) return; armNavCooldown(); setCamera(Math.min(currentBottomDepth(), cameraTarget + 1)); sfxDive(true); });
+    goUpBtn.addEventListener('click', (e) => { e.stopPropagation(); if (navOnCooldown()) return; if (boss.active) { showToast('boss fight', 'brace, fight, or recharge. no running up.', 1600); return; } armNavCooldown(); setCamera(Math.max(0, cameraTarget - 1)); sfxDive(false); });
+    goForwardBtn.addEventListener('click', (e) => { e.stopPropagation(); if (navOnCooldown()) return; if (boss.active) { showToast('boss fight', 'the void octopus blocks your path.', 1600); return; } if (!canUsePerspective() || perspective >= MAX_PERSPECTIVE) return; armNavCooldown(); perspective = Math.min(MAX_PERSPECTIVE, perspective + 1); if (perspective === 3) setCamera(0); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
+    goBackBtn.addEventListener('click', (e) => { e.stopPropagation(); if (navOnCooldown()) return; if (boss.active) { showToast('boss fight', 'focus on the fight first.', 1600); return; } if (perspective <= 0) return; armNavCooldown(); perspective = Math.max(0, perspective - 1); viewPush = 1; saveGameState(); syncSettingsUI(); sfxClick(); });
+    shopBtn.addEventListener('click', (e) => { e.stopPropagation(); openShop(); });
+    shopClose.addEventListener('click', (e) => { e.stopPropagation(); closeShop(); });
+    shopModal.addEventListener('click', (e) => { if (e.target === shopModal) closeShop(); });
+    tabletBtn.addEventListener('click', (e) => { e.stopPropagation(); openTablet(); });
+    tabletClose.addEventListener('click', (e) => { e.stopPropagation(); closeTablet(); });
+    tabletModal.addEventListener('click', (e) => { if (e.target === tabletModal) closeTablet(); });
+    [['shopTabContracts', 'shopContracts'], ['shopTabTools', 'shopTools'], ['shopTabAuto', 'shopAuto']].forEach(([tabId, paneId]) => {
+      const tab = document.getElementById(tabId);
+      if (!tab) return;
+      tab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        for (const id of ['shopTabContracts', 'shopTabTools', 'shopTabAuto']) document.getElementById(id)?.classList.toggle('active', id === tabId);
+        for (const id of ['shopContracts', 'shopTools', 'shopAuto']) document.getElementById(id)?.classList.toggle('active', id === paneId);
+        sfxClick();
+      });
+    });
+    shopModal.addEventListener('click', (e) => {
+      if (!e.target.closest) return;
+      const contractBtn = e.target.closest('[data-contract]');
+      if (contractBtn) { e.stopPropagation(); claimContract(contractBtn.getAttribute('data-contract')); return; }
+      const buyBtn = e.target.closest('[data-shop]');
+      if (buyBtn) { e.stopPropagation(); if (buyBtn.getAttribute('data-shop') === 'tablet') buyTablet(); return; }
+      const autoBtn = e.target.closest('[data-auto]');
+      if (autoBtn) { e.stopPropagation(); if (autoBtn.getAttribute('data-auto') === 'repair') repairAuto(); else rechargeAuto(); return; }
+      const disBtn = e.target.closest('[data-machine-disassemble]');
+      if (disBtn) { e.stopPropagation(); disassembleMachine(Number(disBtn.getAttribute('data-machine-disassemble'))); return; }
+      const padBtn = e.target.closest('[data-machine]');
+      if (padBtn) { e.stopPropagation(); selectMachine(Number(padBtn.getAttribute('data-machine'))); }
+    });
+    tabletModal.addEventListener('click', (e) => {
+      if (!e.target.closest) return;
+      const padBtn = e.target.closest('[data-machine]');
+      if (padBtn) { e.stopPropagation(); selectMachine(Number(padBtn.getAttribute('data-machine'))); }
+    });
     photoBtn.addEventListener('click', (e) => { e.stopPropagation(); savePhoto(); });
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
     logClose.addEventListener('click', () => { logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); });
@@ -3114,6 +4689,32 @@
       const file = e.target.files && e.target.files[0];
       if (file) importSaveFile(file);
     });
+    let resetArmed = false;
+    let resetTimer = 0;
+    function disarmReset() {
+      resetArmed = false;
+      resetSaveBtn.textContent = 'reset save';
+      resetSaveBtn.classList.remove('armed');
+    }
+    resetSaveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!resetArmed) {
+        resetArmed = true;
+        clearTimeout(resetTimer);
+        resetSaveBtn.textContent = 'click again to wipe';
+        resetSaveBtn.classList.add('armed');
+        feedbackStatus.textContent = 'save: click again within 4s to wipe everything';
+        resetTimer = setTimeout(disarmReset, 4000);
+        sfxClick();
+        return;
+      }
+      clearTimeout(resetTimer);
+      disarmReset();
+      for (const k of SAVE_KEYS) localStorage.removeItem(k);
+      feedbackStatus.textContent = 'save: wiped, reloading...';
+      sfxClick();
+      setTimeout(() => location.reload(), 350);
+    });
     feedbackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFeedback(); });
     feedbackCancel.addEventListener('click', closeFeedback);
     feedbackSend.addEventListener('click', submitFeedback);
@@ -3121,15 +4722,38 @@
     feedbackModal.addEventListener('click', (e) => { if (e.target === feedbackModal) closeFeedback(); });
 
     canvas.addEventListener('click', (e) => {
-      if (corrupted) return;
+      if (corrupted || blackoutActive) return;
       if (e.target.closest('.settings-wrap') || e.target.closest('.modal')) return;
       startAudio();
       if (boss.active) { sfxClick(); return; }
+      if (Date.now() < clickLockUntil) {
+        updateHurtState();
+        feedbackStatus.textContent = `pufferfish sting: clicking locked (${hurtTimerText ? hurtTimerText.textContent : '1:00'})`;
+        return;
+      }
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       const worldY = y + cameraY * h;
       const horizon = h * 0.58;
+
+      if (perspective === 0 && cameraY <= 0.2) {
+        const pads = machinePadRects();
+        for (let i = 0; i < pads.length; i++) {
+          const pad = pads[i];
+          if (x > pad.x - pad.w * 0.58 && x < pad.x + pad.w * 0.58 && y > pad.y - pad.h * 0.82 && y < pad.y + pad.h * 0.82) {
+            sfxClick();
+            mining.activeMachine = i;
+            resetRigState(i);
+            saveGameState();
+            syncMiningHud();
+            renderShop();
+            if (mining.tablet) openTablet();
+            else showToast(`machine pad ${i + 1}`, mining.machines[i].tier ? `${AUTO_TIERS[mining.machines[i].tier].name} claw rig is parked here. buy the keeper tablet for live stats.` : 'empty machine pad. the keeper parks up to 2 claw rigs here.', 3000);
+            return;
+          }
+        }
+      }
 
       if (isAtBottom() || isFacilityLayer()) {
         const bottomLayer = Math.floor(currentBottomDepth());
@@ -3160,8 +4784,10 @@
           }
           if (facility.puzzleA && facility.puzzleB && facility.encounterDone && !facility.complete) {
             facility.complete = true;
+            quest.deepBlueSealed = true;
             unlockAchievement('deep_blue');
-            showVoidDialogue('supply stopped.', 3000);
+            showVoidDialogue('supply stopped. deep blue sealed. the abyss is the floor now.', 5200);
+            setCamera(5);
           }
           saveGameState();
           return;
@@ -3187,14 +4813,34 @@
         }
       }
 
-      if (Date.now() < clickLockUntil) {
-        updateHurtState();
-        feedbackStatus.textContent = `pufferfish sting: clicking locked (${hurtTimerText ? hurtTimerText.textContent : '1:00'})`;
+      if (isShore()) {
+        const kr = shoreKeeperRect();
+        if (x > kr.x - 26 && x < kr.x + kr.s + 26 && y > kr.y - 30 && y < kr.y + kr.s + 30) {
+          openShop();
+          return;
+        }
+        sfxClick();
+        feedbackStatus.textContent = 'the keeper waves you toward the supply stall.';
         return;
       }
+
       clicks += 1;
       checkAchievements();
       saveGameState();
+
+      if (perspective === 0 && !isFacilityLayer() && !boss.active) {
+        const layer = activeOreLayer();
+        for (const node of ORE_NODES) {
+          if (node.layer !== layer || !nodeOreId(node)) continue;
+          const p = oreNodePos(node);
+          const nx = p.x, ny = p.y;
+          const r = p.r + 14;
+          if (Math.abs(x - nx) < r && Math.abs(y - ny) < r) {
+            strikeOreNode(node);
+            return;
+          }
+        }
+      }
 
       if (perspective === 1 && cameraY < 0.5) {
         const bergs = getIcebergs();
@@ -3208,12 +4854,15 @@
             showToast('sunken ship', 'you already looted this wreck.', 2200);
           } else if (confirm('Loot the sunken ship?')) {
             shipLooted = true;
-            discoveries = Array.from(new Set([...(discoveries||[]), 'shipwreck']));
             bottlesFound += 1;
+            const wreckNote = nextBottleNote();
+            syncBottleDef();
             recordDiscovery('shipwreck');
+            recordDiscovery('bottle');
+            renderDiscoveries();
             saveGameState();
             sfxDiscovery();
-            showToast('shipwreck looted', 'you found an old bottle inside the wreck.', 4200);
+            showToast('shipwreck looted', `old bottle note: ${wreckNote}`, 5200);
           }
           return;
         }
@@ -3229,7 +4878,11 @@
           bottle.screenX = -999; bottle.screenY = -999;
           bottle.next = 90000 + Math.random() * 120000;
           bottlesFound += 1;
+          const foundNote = nextBottleNote();
+          syncBottleDef();
           recordDiscovery('bottle');
+          renderDiscoveries();
+          showToast('message in a bottle', foundNote, 5600);
           saveGameState();
           sfxClick();
         }
@@ -3290,7 +4943,7 @@
       }
     });
 
-    window.addEventListener('pointerdown', (e) => { if (e.target.closest('.settings-wrap') || e.target.closest('.modal') || e.target === canvas) return; startAudio(); }, { passive: true });
+    window.addEventListener('pointerdown', (e) => { if (blackoutActive || e.target.closest('.settings-wrap') || e.target.closest('.modal') || e.target === canvas) return; startAudio(); }, { passive: true });
     const adminCode = ['arrowup','arrowup','arrowdown','arrowdown','arrowleft','arrowright','arrowleft','arrowright','arrowright','arrowleft','.','b','a','b','a'];
     let adminIdx = 0;
     function openAdmin() {
@@ -3341,8 +4994,10 @@
       quest.accepted = true;
       quest.completed = true;
       quest.unlockedDeep = true;
+      quest.deepBlueSealed = true;
       facility.puzzleA = true; facility.puzzleB = true; facility.encounterDone = true; facility.complete = true;
       if (!achievements.includes('deep_blue')) achievements.push('deep_blue');
+      setCamera(5);
       saveGameState();
       renderDiscoveries();
       renderAchievements();
@@ -3353,11 +5008,205 @@
       sfxClick();
     });
 
+    adminMiningKit.addEventListener('click', () => {
+      for (const id of Object.keys(ORE_DEFS)) mining.ores[id] += 25;
+      mining.pickaxe = PICKAXES.length - 1;
+      mining.tablet = true;
+      mining.tipSeen = true;
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxClick();
+      adminSetStatus('max pick, tablet, and +25 of every ore');
+    });
+
+    adminBuildRigs.addEventListener('click', () => {
+      for (let i = 0; i < MACHINE_PAD_COUNT; i++) {
+        const m = mining.machines[i];
+        m.tier = AUTO_TIERS.length - 1;
+        m.battery = 100;
+        m.broken = false;
+        m.progress = 0;
+        m.message = 'admin rig online';
+        resetRigState(i);
+      }
+      mining.activeMachine = 0;
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxClick();
+      adminSetStatus('both pads loaded with abyss crawlers');
+    });
+
+    adminChargeRigs.addEventListener('click', () => {
+      let n = 0;
+      for (let i = 0; i < MACHINE_PAD_COUNT; i++) {
+        const m = mining.machines[i];
+        if (!m.tier) continue;
+        m.battery = 100;
+        m.broken = false;
+        m.progress = 0;
+        m.message = 'battery full';
+        resetRigState(i);
+        n++;
+      }
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxClick();
+      adminSetStatus(n ? `${n} rig(s) charged and repaired` : 'no rigs built yet');
+    });
+
+    adminRerollVeins.addEventListener('click', () => {
+      for (const node of ORE_NODES) {
+        delete mining.nodeHp[node.id];
+        delete mining.nodeRespawn[node.id];
+        if (!node.ore) delete mining.nodeOre[node.id];
+      }
+      ensureRareVeins();
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      sfxClick();
+      adminSetStatus('veins reset; rare ores re-rolled');
+    });
+
+    adminRefillOxygen.addEventListener('click', () => {
+      if (blackoutActive) { adminSetStatus('blackout active — skip it first'); return; }
+      oxygen = oxygenMax;
+      oxygenWarned = false;
+      updateOxygen(0);
+      sfxClick();
+      adminSetStatus('oxygen refilled');
+    });
+
+    adminTriggerBlackout.addEventListener('click', () => {
+      adminSetStatus('blackout started — five minutes');
+      startBlackout();
+    });
+
+    adminSkipBlackout.addEventListener('click', () => {
+      if (!blackoutActive) { adminSetStatus('no blackout to skip'); return; }
+      finishBlackout(true);
+      sfxClick();
+      adminSetStatus('blackout skipped — back at the surface');
+    });
+
+    adminGoShore.addEventListener('click', () => {
+      if (blackoutActive) { adminSetStatus('wake up from the blackout first'); return; }
+      if (boss.active) { adminSetStatus('finish the octopus fight first'); return; }
+      perspective = MAX_PERSPECTIVE;
+      cameraY = 0;
+      cameraTarget = 0;
+      camAnim = null;
+      viewPush = 1;
+      saveGameState();
+      syncSettingsUI();
+      sfxClick();
+      adminSetStatus('moved to the shore supply dock');
+    });
+
+    adminLootShip.addEventListener('click', () => {
+      shipLooted = true;
+      bottlesFound += 1;
+      const note = nextBottleNote();
+      syncBottleDef();
+      recordDiscovery('shipwreck');
+      recordDiscovery('bottle');
+      renderDiscoveries();
+      saveGameState();
+      sfxDiscovery();
+      showToast('shipwreck looted', `old bottle note: ${note}`, 5200);
+      adminSetStatus('shipwreck looted with a fresh note');
+    });
+
+    adminSealDeep.addEventListener('click', () => {
+      quest.unlockedDeep = true;
+      quest.deepBlueSealed = true;
+      facility.puzzleA = true;
+      facility.puzzleB = true;
+      facility.encounterDone = true;
+      facility.complete = true;
+      setCamera(5);
+      saveGameState();
+      syncSettingsUI();
+      sfxClick();
+      adminSetStatus('deep blue sealed — the abyss is the floor');
+    });
+
+    adminUnsealDeep.addEventListener('click', () => {
+      quest.unlockedDeep = true;
+      quest.deepBlueSealed = false;
+      facility.puzzleA = false;
+      facility.puzzleB = false;
+      facility.encounterDone = false;
+      facility.complete = false;
+      saveGameState();
+      syncSettingsUI();
+      sfxClick();
+      adminSetStatus('deep blue unsealed — facility back online');
+    });
+
+    adminSpawnOctopus.addEventListener('click', () => {
+      if (blackoutActive) { adminSetStatus('wake up from the blackout first'); return; }
+      if (voidOctopusDefeated) { adminSetStatus('octopus already defeated'); return; }
+      if (boss.active) { adminSetStatus('octopus fight already active'); return; }
+      perspective = 2;
+      cameraY = 4;
+      cameraTarget = 4;
+      camAnim = null;
+      startVoidOctopus();
+      saveGameState();
+      syncSettingsUI();
+      closeAdmin();
+      sfxClick();
+    });
+
+    adminDefeatOctopus.addEventListener('click', () => {
+      if (!voidOctopusDefeated) {
+        voidOctopusDefeated = true;
+        localStorage.setItem('ocean_void_octopus_defeated', '1');
+        recordDiscovery('void_octopus');
+        unlockAchievement('octopus_slayer');
+      }
+      if (boss.active) {
+        boss.active = false;
+        boss.phase = 'win';
+        boss.timer = 0;
+        syncBossUi();
+      }
+      saveGameState();
+      renderDiscoveries();
+      renderAchievements();
+      sfxClick();
+      adminSetStatus('void octopus marked defeated');
+    });
+
     window.addEventListener('keydown', (e) => {
-      if (corrupted) return;
+      if (corrupted) { e.preventDefault(); return; }
       const k = e.key.toLowerCase();
-      if (e.key === 'Escape') { closeAdmin(); closeFeedback(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
-      if (e.target.closest('textarea,input,select')) { adminIdx = 0; return; }
+      const isTyping = !!(e.target && e.target.closest && e.target.closest('textarea,input,select'));
+      if (blackoutActive) {
+        if (adminModal.classList.contains('open')) {
+          if (e.key === 'Escape') closeAdmin();
+          return;
+        }
+        e.preventDefault();
+        if (isTyping) { adminIdx = 0; return; }
+        const expected = adminCode[adminIdx];
+        if (k === expected) {
+          adminIdx += 1;
+          if (adminIdx >= adminCode.length) { adminIdx = 0; openAdmin(); }
+        } else {
+          adminIdx = k === adminCode[0] ? 1 : 0;
+        }
+        return;
+      }
+      if (e.key === 'Escape') { closeAdmin(); closeFeedback(); closeShop(); closeTablet(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
+      if (isTyping) { adminIdx = 0; return; }
       const expected = adminCode[adminIdx];
       if (k === expected) {
         adminIdx += 1;
@@ -3365,13 +5214,19 @@
       } else {
         adminIdx = k === adminCode[0] ? 1 : 0;
       }
-      if (k === 'p') { setPhotoMode(!photoMode); return; }
+      if (k === 'p') { if (anyUiModalOpen()) return; setPhotoMode(!photoMode); return; }
       startAudio();
     });
     checkAchievements();
     renderAchievements();
+    syncBottleDef();
     renderDiscoveries();
     syncSettingsUI();
     syncBossUi();
+    for (let i = 0; i < MACHINE_PAD_COUNT; i++) resetRigState(i);
+    restoreOreNodes(true);
+    syncMiningHud();
+    renderShop();
+    restoreBlackout();
     updateOxygen(0);
   
