@@ -474,8 +474,13 @@
       abyssite:  { name:'abyssite',    layer:4, color:'#ff74a8', vein:'#a63b68', hp:15, respawn:88000,  label:'AB', rare:false },
       voidglass: { name:'voidglass',   layer:0, color:'#c8a8ff', vein:'#6b48a8', hp:20, respawn:105000, label:'VG', rare:true }
     };
+    // Gold is the friendly rare; diamond and voidglass stay scarce.
     const RARE_ORES = ['gold', 'diamond', 'voidglass'];
-    const RARE_SPAWN_CHANCE = 0.35;
+    const RARE_SPAWN = {
+      gold:      { chance: 0.8,  max: 2 },
+      diamond:   { chance: 0.45, max: 1 },
+      voidglass: { chance: 0.2,  max: 1 }
+    };
     const MACHINE_PAD_COUNT = 4;
     const STARTING_PADS = 2;
     const ORE_NODES = [
@@ -560,10 +565,10 @@
     };
     // Manual mining has a deliberate rhythm. Clicking faster than a human-scale
     // swing keeps adding recovery time, so autoclickers just stall themselves.
-    const MANUAL_MINE_COOLDOWN_MS = 600;
-    const MANUAL_MINE_FAST_MS = 450;
-    const MANUAL_MINE_PENALTY_MS = 550;
-    const MANUAL_MINE_MAX_PENALTY_MS = 5000;
+    const MANUAL_MINE_COOLDOWN_MS = 320;
+    const MANUAL_MINE_FAST_MS = 230;
+    const MANUAL_MINE_PENALTY_MS = 240;
+    const MANUAL_MINE_MAX_PENALTY_MS = 1500;
     let lightning = 0;
     let nextLightning = 4000 + Math.random() * 8000;
     const ripples = [];
@@ -660,6 +665,7 @@
         nodeHp: {},
         nodeRespawn: {},
         nodeOre: {},
+        nodePos: {},
         tablet: false,
         unjammer: false,
         batteries: 0,
@@ -711,6 +717,16 @@
           for (const n of ORE_NODES) {
             const v = Number(sm.nodeRespawn[n.id]);
             if (Number.isFinite(v)) mining.nodeRespawn[n.id] = Math.max(0, v);
+          }
+        }
+        if (sm.nodePos && typeof sm.nodePos === 'object') {
+          for (const n of ORE_NODES) {
+            const p = sm.nodePos[n.id];
+            if (!p) continue;
+            const dx = Number(p.dx), dy = Number(p.dy);
+            if (Number.isFinite(dx) && Number.isFinite(dy)) {
+              mining.nodePos[n.id] = { dx: Math.max(-0.055, Math.min(0.055, dx)), dy: Math.max(-0.05, Math.min(0.05, dy)) };
+            }
           }
         }
         if (Array.isArray(sm.machines)) {
@@ -1696,6 +1712,7 @@
       syncSettingsUI();
     }
     const UPDATE_LOG = [
+      { date: '2026-11-28', tier: 'balance', title: 'vein shuffle', detail: 'ore spots now land in new places across each depth band, and shift again whenever a vein grows back. gold shows up more often than diamond, mining swing recovery is much shorter, and the spam lock tops out at 1.5s instead of 5s.' },
       { date: '2026-11-28', tier: 'major update', title: 'shore automation', detail: 'the supply dock now runs a real 10-minute day/night cycle, with 5 minutes of sun followed by 5 minutes of moon. up to four mining pads can hold battery-powered claws; ore from automatic mining lands in a surface chest, while manual swings still go straight to your ledger. added spare battery cells and an unjammer: buy it at the tools tab, then solve its color puzzle from the tablet or dock to free a jammed claw. ore names now show in full, and the old keeper was replaced with a hanging shop sign.' },
       { date: '2026-11-27', tier: 'major update', title: 'Gameplay Update', detail: 'a final forward perspective reaches the shore supply dock: a keeper, ore contracts, pickaxe tiers, and up to two claw rigs with their own batteries. veins sit across the depth bands, take hard strikes that cost extra oxygen, and respawn. manual swings have a short recovery with a growing spam lock, while auto mining keeps its own rhythm. the ledger now teaches first-timers and tracks contract progress, empty veins show as dashed sockets beside solid respawn rings, and blackout wake-up gets an extra line. sealing The Deep Blue makes the abyss the floor.' },
       { date: '2026-11-27', tier: 'feature', title: 'music playlist', detail: 'DeepBlue now rotates into Slime Sea Sunlit Waves and Slime Sea Moonlit Calm, then loops back. tracks use a 4-second crossfade so the seam stays smooth, with depth muffling and mute settings preserved.' },
@@ -1940,12 +1957,15 @@
     function oreNodeRadius() { return Math.max(20, Math.min(38, w * 0.038)); }
     function oreNodePos(node) {
       const r = oreNodeRadius();
-      const jx = (nodeHash(node, 'x') - 0.5) * w * 0.036;
-      const jy = (nodeHash(node, 'y') - 0.5) * h * 0.044;
+      const p = mining.nodePos[node.id] || { dx: 0, dy: 0 };
+      const nx = Math.max(0.05, Math.min(0.95, node.x + p.dx));
+      const ny = Math.max(0.62, Math.min(0.95, node.y + p.dy));
+      const jx = (nodeHash(node, 'x') - 0.5) * w * 0.012;
+      const jy = (nodeHash(node, 'y') - 0.5) * h * 0.014;
       const t = simTime * motionMul;
       const sway = Math.sin(t * 0.00062 + node.x * 9) * 2.5;
       const bob = Math.sin(t * 0.0009 + node.x * 11) * 3;
-      return { x: node.x * w + jx + sway, y: h * node.y - r * 0.55 + jy + bob, r };
+      return { x: nx * w + jx + sway, y: h * ny - r * 0.55 + jy + bob, r };
     }
     function machinePadRects() {
       const gap = Math.max(20, w * 0.012);
@@ -2170,15 +2190,23 @@
         }
       }
     }
+    function rollNodePos(node) {
+      mining.nodePos[node.id] = {
+        dx: (Math.random() - 0.5) * 0.11,
+        dy: (Math.random() - 0.5) * 0.10
+      };
+    }
+    function rollNodePositions() { for (const node of ORE_NODES) rollNodePos(node); }
     function ensureRareVeins() {
       const now = Date.now();
       let changed = false;
       const empty = ORE_NODES.filter(n => !n.ore && !nodeOreId(n) && !(Number(mining.nodeRespawn[n.id]) > now));
       if (!empty.length) return false;
       for (const ore of RARE_ORES) {
-        const live = ORE_NODES.some(n => !n.ore && nodeOreId(n) === ore && !(Number(mining.nodeRespawn[n.id]) > now));
-        if (live) continue;
-        if (Math.random() >= RARE_SPAWN_CHANCE) continue;
+        const rule = RARE_SPAWN[ore];
+        const live = ORE_NODES.filter(n => !n.ore && nodeOreId(n) === ore && !(Number(mining.nodeRespawn[n.id]) > now)).length;
+        if (live >= rule.max) continue;
+        if (Math.random() >= rule.chance) continue;
         const pick = empty.splice(Math.floor(Math.random() * empty.length), 1)[0];
         if (!pick) break;
         mining.nodeOre[pick.id] = ore;
@@ -2194,6 +2222,8 @@
         if (until && until <= now) {
           delete mining.nodeRespawn[node.id];
           delete mining.nodeHp[node.id];
+          rollNodePos(node);
+          changed = true;
           if (!node.ore) {
             delete mining.nodeOre[node.id];
             changed = true;
@@ -5851,12 +5881,13 @@
         delete mining.nodeRespawn[node.id];
         if (!node.ore) delete mining.nodeOre[node.id];
       }
+      rollNodePositions();
       ensureRareVeins();
       saveGameState();
       syncMiningHud();
       renderShop();
       sfxClick();
-      adminSetStatus('veins reset; rare ores re-rolled');
+      adminSetStatus('veins reset; spots and rare ores re-rolled');
     });
 
     adminRefillOxygen.addEventListener('click', () => {
@@ -6009,6 +6040,7 @@
     syncSettingsUI();
     syncBossUi();
     for (let i = 0; i < MACHINE_PAD_COUNT; i++) resetRigState(i);
+    if (ORE_NODES.some(n => !mining.nodePos[n.id])) rollNodePositions();
     restoreOreNodes(true);
     syncMiningHud();
     renderShop();
