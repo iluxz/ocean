@@ -210,6 +210,17 @@
     .battery-bar { height:8px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; border:1px solid rgba(126,200,255,0.12); }
     .battery-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#7ec8ff,#cdb8ff); transition:width .2s ease; }
     .battery-fill[data-low] { background:linear-gradient(90deg,#ff6f8a,#ffb36b); }
+    .chest-list { display:grid; gap:8px; max-height:min(56vh,440px); overflow-y:auto; padding-right:4px; scrollbar-width:thin; }
+    .chest-list::-webkit-scrollbar { width:8px; }
+    .chest-list::-webkit-scrollbar-thumb { background:rgba(126,200,255,0.25); border-radius:999px; }
+    .chest-row { display:grid; grid-template-columns:1fr auto 72px auto; gap:8px; align-items:center; padding:10px 12px; border-radius:12px; border:1px solid color-mix(in srgb, var(--ore) 30%, transparent); background:rgba(255,255,255,0.025); }
+    .chest-name { font-size:12px; color:var(--ore); font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .chest-have { font-size:10px; color:var(--muted); white-space:nowrap; }
+    .chest-qty { width:72px; padding:6px 7px; border-radius:8px; background:rgba(255,255,255,0.04); border:1px solid rgba(126,200,255,0.18); color:var(--text); font:inherit; font-size:12px; }
+    #flowModal .modal-card { width:min(500px, calc(100vw - 32px)); max-height:calc(100dvh - 24px); overflow-y:auto; }
+    .flow-board { display:grid; justify-items:center; gap:8px; width:100%; }
+    #flowCanvas { position:relative; inset:auto; width:min(420px, calc(100vw - 48px), calc(100dvh - 190px)); height:min(420px, calc(100vw - 48px), calc(100dvh - 190px)); aspect-ratio:1; border-radius:12px; border:1px solid rgba(126,200,255,0.22); box-shadow:0 12px 32px rgba(0,0,0,0.4); touch-action:none; cursor:crosshair; }
+    .flow-status { min-height:16px; font-size:11px; color:var(--muted); text-align:center; line-height:1.4; }
     .shop-item.stock-out { opacity:0.5; }
     .stock-tag { font-size:10px; color:#ffcf8a; letter-spacing:.04em; }
     .hurt-vignette { position:fixed; inset:0; z-index:13; pointer-events:none; opacity:0; transition:opacity .25s ease; box-shadow: inset 0 0 130px 28px rgba(255,60,80,0.5), inset 0 0 24px rgba(255,60,80,0.3); background:radial-gradient(ellipse at center, transparent 55%, rgba(120,10,30,0.32)), rgba(255,45,75,0.05); }
@@ -253,7 +264,9 @@
     .mining-tip.hidden { display:none; }
     .ore-chips { display:flex; flex-wrap:wrap; gap:5px; }
     .ore-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 7px; border-radius:999px; font-size:10px; color:rgba(236,247,255,0.78); background:rgba(255,255,255,0.04); border:1px solid color-mix(in srgb, var(--ore) 45%, transparent); }
-    .ore-chip b { font-size:9px; color:var(--ore); letter-spacing:.08em; }
+    .ore-chip b { font-size:10px; color:var(--ore); letter-spacing:0; font-weight:700; }
+    .mining-chest { margin-top:7px; font-size:10px; letter-spacing:.04em; color:rgba(255,220,160,0.72); }
+    .mining-chest.ready { color:#ffe0a0; }
     .mining-auto { margin-top:6px; font-size:10px; letter-spacing:.06em; color:rgba(236,247,255,0.58); }
     .mining-recovery { margin-top:8px; padding-top:8px; border-top:1px solid rgba(183,124,255,0.16); }
     .mining-recovery.hidden { display:none; }
@@ -299,6 +312,7 @@
     <div class="mining-head"><span>shore ledger</span><span id="pickaxeLabel">starter pick</span></div>
     <div class="mining-tip" id="miningTip">tap glowing veins to mine. swings need a short recovery, so do not mash.</div>
     <div class="ore-chips" id="oreCounts"></div>
+    <div class="mining-chest" id="chestStatus">chest: empty · click the surface chest to open</div>
     <div class="mining-auto" id="autoStatus">auto: not built</div>
     <div class="mining-recovery hidden" id="miningRecovery" aria-live="polite">
       <div class="mining-recovery-head"><span id="miningRecoveryLabel">swing recovery</span><span id="miningRecoveryText">0.0s</span></div>
@@ -409,7 +423,7 @@
     <div class="modal-card shop-card" role="dialog" aria-modal="true" aria-label="Shore supply">
       <h2>shore supply</h2>
       <div class="shop-keeper">
-        <strong>the shore keeper</strong><p id="shopLine">ore goes in. better tools come out. no haggling.</p>
+        <strong>the supply shelf</strong><p id="shopLine">ore goes in. better tools come out. no haggling.</p>
       </div>
       <div class="tabs">
         <button class="tab active" id="shopTabContracts" type="button">contracts</button>
@@ -428,6 +442,33 @@
       <h2>machine tablet</h2>
       <div class="tablet-stats" id="tabletStats"></div>
       <div class="modal-actions"><button class="btn" id="tabletClose" type="button">close</button></div>
+    </div>
+  </div>
+
+  <div class="modal" id="chestModal" aria-hidden="true">
+    <div class="modal-card shop-card" role="dialog" aria-modal="true" aria-label="Ore chest">
+      <h2>surface ore chest</h2>
+      <div class="shop-keeper"><strong>machine haul</strong><p id="chestLine">pull out only what you need. the rest stays in the chest.</p></div>
+      <div class="chest-list" id="chestList"></div>
+      <div class="modal-actions">
+        <button class="btn" id="chestTakeAll" type="button">take all</button>
+        <button class="btn" id="chestClose" type="button">close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="flowModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Unjammer">
+      <h2>unjammer</h2>
+      <div class="shop-keeper"><strong>clear the jam</strong><p>drag from each dot to its matching color. lines can't cross or share squares. connect all four pairs to free the claw.</p></div>
+      <div class="flow-board">
+        <canvas id="flowCanvas" width="300" height="300" aria-label="Flow puzzle board"></canvas>
+        <div class="flow-status" id="flowStatus">drag from a dot to its match</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="flowReset" type="button">reset</button>
+        <button class="btn" id="flowClose" type="button">close</button>
+      </div>
     </div>
   </div>
 
@@ -456,8 +497,12 @@
       <div class="admin-label">mining + shore</div>
       <div class="admin-grid">
         <button class="btn" id="adminMiningKit" type="button">max mining kit</button>
-        <button class="btn" id="adminBuildRigs" type="button">build both rigs</button>
-        <button class="btn" id="adminChargeRigs" type="button">charge + repair</button>
+        <button class="btn" id="adminBuildRigs" type="button">build all rigs</button>
+        <button class="btn" id="adminRefillMachines" type="button">refill all machines</button>
+        <button class="btn" id="adminUnjamMachines" type="button">unjam all machines</button>
+        <button class="btn" id="adminBuyAll" type="button">buy all</button>
+        <button class="btn" id="adminFillChest" type="button">fill chest</button>
+        <button class="btn" id="adminChargeRigs" type="button">charge + unjam all</button>
         <button class="btn" id="adminRerollVeins" type="button">reroll veins</button>
       </div>
       <div class="admin-label">diving + blackout</div>

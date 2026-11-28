@@ -298,6 +298,7 @@
     const blackoutTimer = document.getElementById('blackoutTimer');
     const miningHud = document.getElementById('miningHud');
     const oreCounts = document.getElementById('oreCounts');
+    const chestStatus = document.getElementById('chestStatus');
     const pickaxeLabel = document.getElementById('pickaxeLabel');
     const autoStatus = document.getElementById('autoStatus');
     const miningRecovery = document.getElementById('miningRecovery');
@@ -314,6 +315,16 @@
     const shopAuto = document.getElementById('shopAuto');
     const tabletBtn = document.getElementById('tabletBtn');
     const tabletModal = document.getElementById('tabletModal');
+    const chestModal = document.getElementById('chestModal');
+    const chestList = document.getElementById('chestList');
+    const chestLine = document.getElementById('chestLine');
+    const chestClose = document.getElementById('chestClose');
+    const chestTakeAll = document.getElementById('chestTakeAll');
+    const flowModal = document.getElementById('flowModal');
+    const flowCanvas = document.getElementById('flowCanvas');
+    const flowStatus = document.getElementById('flowStatus');
+    const flowReset = document.getElementById('flowReset');
+    const flowClose = document.getElementById('flowClose');
     const tabletClose = document.getElementById('tabletClose');
     const tabletStats = document.getElementById('tabletStats');
     const bossUi = document.getElementById('bossUi');
@@ -353,6 +364,10 @@
     const adminMiningKit = document.getElementById('adminMiningKit');
     const adminBuildRigs = document.getElementById('adminBuildRigs');
     const adminChargeRigs = document.getElementById('adminChargeRigs');
+    const adminRefillMachines = document.getElementById('adminRefillMachines');
+    const adminUnjamMachines = document.getElementById('adminUnjamMachines');
+    const adminBuyAll = document.getElementById('adminBuyAll');
+    const adminFillChest = document.getElementById('adminFillChest');
     const adminRerollVeins = document.getElementById('adminRerollVeins');
     const adminRefillOxygen = document.getElementById('adminRefillOxygen');
     const adminTriggerBlackout = document.getElementById('adminTriggerBlackout');
@@ -364,7 +379,7 @@
     const adminSpawnOctopus = document.getElementById('adminSpawnOctopus');
     const adminDefeatOctopus = document.getElementById('adminDefeatOctopus');
     function anyUiModalOpen() {
-      return [adminModal, shopModal, tabletModal, logModal, achModal, updateModal, feedbackModal]
+      return [adminModal, shopModal, tabletModal, chestModal, flowModal, logModal, achModal, updateModal, feedbackModal]
         .some(m => m && m.classList.contains('open'));
     }
 
@@ -380,7 +395,7 @@
     let started = false;
     let soundEnabled = true;
     let masterVolume = 0.65;
-    const DAY_CYCLE_MS = 8 * 60 * 1000; // one full day = 4 min day + 4 min night
+    const DAY_CYCLE_MS = 10 * 60 * 1000; // one full day = 5 min day + 5 min night
     let reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let photoMode = false;
     let lastStockWindow = null;
@@ -432,6 +447,7 @@
     }
 
     let dayFactor = 0;
+    let dayState = true;
     let cameraY = 0;
     let cameraTarget = 0;
     let camAnim = null;
@@ -460,7 +476,8 @@
     };
     const RARE_ORES = ['gold', 'diamond', 'voidglass'];
     const RARE_SPAWN_CHANCE = 0.35;
-    const MACHINE_PAD_COUNT = 2;
+    const MACHINE_PAD_COUNT = 4;
+    const STARTING_PADS = 2;
     const ORE_NODES = [
       { id:'u0',  layer:1, ore:'iron',     x:0.11, y:0.83 },
       { id:'u1',  layer:1, ore:'iron',     x:0.41, y:0.91 },
@@ -491,10 +508,10 @@
       { name:'abyss pick',   damage:6, note:'voidglass head. barely legal.' }
     ];
     const AUTO_TIERS = [
-      { name:'not built',     maxLayer:0, interval:0,    damage:0,  drain:0,  waste:0,    breakdown:0,    note:'the shore keeper has a machine for this.' },
-      { name:'tide pump',     maxLayer:1, interval:12000, damage:1,  drain:32, waste:0.35, breakdown:0.24, note:'upper veins only. slow, leaky, and wasteful.' },
-      { name:'reef rig',      maxLayer:3, interval:8500,  damage:3,  drain:34, waste:0.16, breakdown:0.12, note:'reaches the trenches. steadier, still thirsty.' },
-      { name:'abyss crawler', maxLayer:4, interval:4500,  damage:10, drain:40, waste:0.05, breakdown:0.05, note:'hadal specialist. fast, reliable, burns battery fastest.' }
+      { name:'not built',     maxLayer:0, interval:0,    damage:0,  drain:0,  waste:0,    breakdown:0,    note:'the supply dock has a machine for this.' },
+      { name:'tide pump',     maxLayer:1, interval:12000, damage:1,  drain:7, waste:0.35, breakdown:0.24, note:'upper veins only. slow, leaky, and wasteful.' },
+      { name:'reef rig',      maxLayer:3, interval:8500,  damage:3,  drain:5, waste:0.16, breakdown:0.12, note:'reaches the trenches. steadier, still thirsty.' },
+      { name:'abyss crawler', maxLayer:4, interval:4500,  damage:10, drain:3, waste:0.05, breakdown:0.05, note:'hadal specialist. fast, reliable, burns battery fastest.' }
     ];
     const CONTRACTS = [
       { id:'iron',     title:'first sample',  need:{ iron:6 },                    pickaxe:1, auto:1, line:'bring me 6 iron. that pick won\'t build itself.' },
@@ -509,7 +526,26 @@
       { contract:'gold',    cost:{ gold:4 } },
       { contract:'diamond', cost:{ diamond:3 } }
     ];
+    const PAD_COSTS = [null, null, { iron:5, gold:2 }, { gold:4, diamond:3 }];
     const TABLET_COST = { iron:2, gold:1 };
+    const UNJAMMER_COST = { iron:5, gold:3, diamond:1 };
+    const FLOW_SIZE = 300;
+    const FLOW_COLORS = ['#ff6f8a', '#7ec8ff', '#8dffc4', '#ffd36a', '#cdb8ff'];
+    // Two hand-made solvable layouts, then rotated/flipped per attempt so it stays fresh.
+    const FLOW_BASES = [
+      [
+        [[0,0],[0,1],[0,2],[1,2],[2,2]],
+        [[0,4],[1,4],[2,4],[2,3]],
+        [[4,0],[3,0],[3,1],[3,2],[4,2]],
+        [[4,4],[4,3],[3,3],[3,4]]
+      ],
+      [
+        [[0,0],[1,0],[2,0],[2,1],[2,2]],
+        [[0,2],[0,3],[0,4],[1,4],[2,4]],
+        [[4,0],[4,1],[3,1],[3,2],[3,3],[4,3]],
+        [[4,4],[3,4],[2,3],[1,3],[1,2]]
+      ]
+    ];
     // The keeper's shelf rotates with the sun. 'day'/'night' windows lock until the cycle flips.
     const BATTERY_PACK_COST = { iron:3, gold:1 };
     const BATTERIES_PER_PACK = 4;
@@ -518,7 +554,9 @@
       contract: { iron:'always', gold:'day', diamond:'night', abyss:'always' },
       rig: { 1:'always', 2:'day', 3:'night' },
       tablet: 'night',
-      pack: 'always'
+      unjammer: 'always',
+      pack: 'always',
+      pad: { 2:'always', 3:'always' }
     };
     // Manual mining has a deliberate rhythm. Clicking faster than a human-scale
     // swing keeps adding recovery time, so autoclickers just stall themselves.
@@ -611,9 +649,11 @@
     }
     function defaultMiningState() {
       const ores = {};
-      for (const id of Object.keys(ORE_DEFS)) ores[id] = 0;
+      const chest = {};
+      for (const id of Object.keys(ORE_DEFS)) { ores[id] = 0; chest[id] = 0; }
       return {
         ores,
+        chest,
         pickaxe: 0,
         contracts: {},
         pinged: {},
@@ -621,7 +661,9 @@
         nodeRespawn: {},
         nodeOre: {},
         tablet: false,
+        unjammer: false,
         batteries: 0,
+        unlockedPads: STARTING_PADS,
         tipSeen: false,
         machines: Array.from({ length: MACHINE_PAD_COUNT }, defaultMachineState),
         activeMachine: 0
@@ -634,6 +676,8 @@
         for (const id of Object.keys(ORE_DEFS)) {
           const v = Number(sm.ores && sm.ores[id]);
           mining.ores[id] = Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+          const cv = Number(sm.chest && sm.chest[id]);
+          mining.chest[id] = Number.isFinite(cv) ? Math.max(0, Math.floor(cv)) : 0;
         }
         const pv = Number(sm.pickaxe);
         mining.pickaxe = Number.isFinite(pv) ? Math.max(0, Math.min(PICKAXES.length - 1, Math.floor(pv))) : 0;
@@ -644,8 +688,11 @@
           for (const c of CONTRACTS) mining.pinged[c.id] = !!sm.pinged[c.id];
         }
         mining.tablet = !!sm.tablet;
+        mining.unjammer = !!sm.unjammer;
         const bv = Number(sm.batteries);
         mining.batteries = Number.isFinite(bv) ? Math.max(0, Math.floor(bv)) : 0;
+        const uv = Number(sm.unlockedPads);
+        mining.unlockedPads = Number.isFinite(uv) ? Math.max(STARTING_PADS, Math.min(MACHINE_PAD_COUNT, Math.floor(uv))) : STARTING_PADS;
         mining.tipSeen = !!sm.tipSeen;
         if (sm.nodeOre && typeof sm.nodeOre === 'object') {
           for (const n of ORE_NODES) {
@@ -667,16 +714,99 @@
           }
         }
         if (Array.isArray(sm.machines)) {
-          for (let i = 0; i < MACHINE_PAD_COUNT; i++) mining.machines[i] = sanitizeMachine(sm.machines[i]);
+          for (let i = 0; i < MACHINE_PAD_COUNT; i++) {
+            mining.machines[i] = i < mining.unlockedPads ? sanitizeMachine(sm.machines[i]) : defaultMachineState();
+          }
         } else if (sm.auto && typeof sm.auto === 'object') {
           mining.machines[0] = sanitizeMachine(sm.auto);
         }
         const av = Number(sm.activeMachine);
-        mining.activeMachine = Number.isFinite(av) ? Math.max(0, Math.min(MACHINE_PAD_COUNT - 1, Math.floor(av))) : 0;
+        mining.activeMachine = Number.isFinite(av) ? Math.max(0, Math.min(mining.unlockedPads - 1, Math.floor(av))) : 0;
       }
     } catch (_) {}
-    function activeMachine() { return mining.machines[Math.min(MACHINE_PAD_COUNT - 1, Math.max(0, mining.activeMachine | 0))] || mining.machines[0]; }
+    function unlockedPadCount() { return Math.max(STARTING_PADS, Math.min(MACHINE_PAD_COUNT, mining.unlockedPads | 0)); }
+    function isPadUnlocked(i) { return Number.isInteger(i) && i >= 0 && i < unlockedPadCount(); }
+    function activeMachineIndex() {
+      let i = Math.min(MACHINE_PAD_COUNT - 1, Math.max(0, mining.activeMachine | 0));
+      if (!isPadUnlocked(i)) { i = unlockedPadCount() - 1; mining.activeMachine = i; }
+      return i;
+    }
+    function activeMachine() { return mining.machines[activeMachineIndex()] || mining.machines[0]; }
     Object.defineProperty(mining, 'auto', { enumerable: false, configurable: true, get: activeMachine });
+    function chestOreCount() { return Object.keys(ORE_DEFS).reduce((n, id) => n + (mining.chest[id] || 0), 0); }
+    function chestRect() {
+      const cw = Math.max(58, Math.min(104, w * 0.082));
+      const ch = cw * 0.62;
+      const x = w * 0.53;
+      const waterY = getWaveY(x, h * 0.58);
+      // sit the box in the waterline, not above it: bottom quarter is submerged
+      const y = waterY - ch * 0.72 + Math.sin(animTime * 0.0013) * 2.5;
+      return { x, y, w: cw, h: ch, waterY };
+    }
+    function renderChest() {
+      if (!chestList) return;
+      const held = Object.keys(ORE_DEFS).filter(id => (mining.chest[id] || 0) > 0);
+      if (chestLine) chestLine.textContent = held.length
+        ? 'pull out only what you need. the rest stays in the chest.'
+        : 'empty. the machines have not hauled anything up yet.';
+      chestList.innerHTML = held.length ? held.map(id => {
+        const def = ORE_DEFS[id];
+        const n = mining.chest[id];
+        return `<div class="chest-row" style="--ore:${def.color}">
+          <span class="chest-name">${def.name}</span>
+          <span class="chest-have">chest ${n} · bag ${mining.ores[id] || 0}</span>
+          <input class="chest-qty" type="number" min="1" max="${n}" value="1" inputmode="numeric" data-chest-qty="${id}" aria-label="amount of ${def.name}">
+          <button class="btn" type="button" data-chest-take="${id}">take</button>
+        </div>`;
+      }).join('') : '<div class="shop-note">nothing in the chest yet. keep the claw fed.</div>';
+      if (chestTakeAll) chestTakeAll.disabled = !held.length;
+    }
+    function openChest() {
+      if (!chestModal) return false;
+      renderChest();
+      chestModal.classList.add('open');
+      chestModal.setAttribute('aria-hidden', 'false');
+      sfxClick();
+      return true;
+    }
+    function closeChest() {
+      if (!chestModal) return;
+      chestModal.classList.remove('open');
+      chestModal.setAttribute('aria-hidden', 'true');
+    }
+    function afterChestChange() {
+      syncMiningHud();
+      renderShop();
+      renderChest();
+      if (tabletModal && tabletModal.classList.contains('open')) renderTablet();
+      saveGameState();
+    }
+    function takeFromChest(id, amount) {
+      const have = mining.chest[id] || 0;
+      const n = Math.min(have, Math.max(1, Math.floor(Number(amount) || 0)));
+      if (!ORE_DEFS[id] || have <= 0 || !n) return false;
+      mining.chest[id] = have - n;
+      mining.ores[id] = (mining.ores[id] || 0) + n;
+      sfxDiscovery();
+      showToast('ore collected', `${n} ${ORE_DEFS[id].name} moved into your inventory.`, 2400);
+      afterChestChange();
+      return true;
+    }
+    function takeAllFromChest() {
+      const held = Object.keys(ORE_DEFS).filter(id => (mining.chest[id] || 0) > 0);
+      if (!held.length) return false;
+      const parts = [];
+      for (const id of held) {
+        const n = mining.chest[id];
+        mining.ores[id] = (mining.ores[id] || 0) + n;
+        mining.chest[id] = 0;
+        parts.push(`${n} ${ORE_DEFS[id].name}`);
+      }
+      sfxDiscovery();
+      showToast('ore collected', `${parts.join(' · ')} moved into your inventory.`, 3200);
+      afterChestChange();
+      return true;
+    }
     let swingFx = null;
     const autoFx = [];
     function makeRigState() {
@@ -1566,6 +1696,7 @@
       syncSettingsUI();
     }
     const UPDATE_LOG = [
+      { date: '2026-11-28', tier: 'major update', title: 'shore automation', detail: 'the supply dock now runs a real 10-minute day/night cycle, with 5 minutes of sun followed by 5 minutes of moon. up to four mining pads can hold battery-powered claws; ore from automatic mining lands in a surface chest, while manual swings still go straight to your ledger. added spare battery cells and an unjammer: buy it at the tools tab, then solve its color puzzle from the tablet or dock to free a jammed claw. ore names now show in full, and the old keeper was replaced with a hanging shop sign.' },
       { date: '2026-11-27', tier: 'major update', title: 'Gameplay Update', detail: 'a final forward perspective reaches the shore supply dock: a keeper, ore contracts, pickaxe tiers, and up to two claw rigs with their own batteries. veins sit across the depth bands, take hard strikes that cost extra oxygen, and respawn. manual swings have a short recovery with a growing spam lock, while auto mining keeps its own rhythm. the ledger now teaches first-timers and tracks contract progress, empty veins show as dashed sockets beside solid respawn rings, and blackout wake-up gets an extra line. sealing The Deep Blue makes the abyss the floor.' },
       { date: '2026-11-27', tier: 'feature', title: 'music playlist', detail: 'DeepBlue now rotates into Slime Sea Sunlit Waves and Slime Sea Moonlit Calm, then loops back. tracks use a 4-second crossfade so the seam stays smooth, with depth muffling and mute settings preserved.' },
       { date: '2026-11-27', tier: 'feature', title: 'deep layer fish', detail: 'added 8 new deep-sea fish across trenches, hadal, and the void: Shearfin, Ribbon Pike, Stoneback, Scarlet Veil, Basin Lantern, Ember Whip, Pale Sentinel, and The Watcher. each has its own discovery card and new layer-fauna achievements.' },
@@ -1817,18 +1948,32 @@
       return { x: node.x * w + jx + sway, y: h * node.y - r * 0.55 + jy + bob, r };
     }
     function machinePadRects() {
-      const padW = Math.min(250, Math.max(176, w * 0.25));
+      const gap = Math.max(20, w * 0.012);
+      const margin = Math.max(16, w * 0.035);
+      const scales = [1, 0.95, 0.84, 0.78];
+      const scaleSum = scales.reduce((a, b) => a + b, 0);
+      const padW = Math.min(250, Math.max(70, (w - margin * 2 - gap * (scales.length - 1)) / (1.4 * scaleSum)));
       const padH = Math.min(150, Math.max(108, h * 0.17));
       const t = simTime * motionMul;
       const sway = i => Math.sin(animTime * 0.00045 + i * 1.7) * 12 + Math.sin(animTime * 0.00018 + i * 2.9) * 5;
       const bob = i => Math.sin(t * 0.00105 + i * 1.8) * 5 + Math.sin(t * 0.00048 + i * 2.6) * 3;
-      const place = (i, xFactor, extraY) => {
-        const x = w * xFactor + sway(i);
-        const ph = i ? padH * 0.95 : padH;
+      const extraYs = [0, h * 0.022, -h * 0.008, h * 0.03];
+      const halves = scales.map(s => padW * s * 0.7);
+      const totalWidth = halves.reduce((a, b) => a + b * 2, 0);
+      const spread = Math.max(gap, (w - margin * 2 - totalWidth) / (scales.length - 1));
+      let cursor = margin;
+      const xs = halves.map((half, i) => {
+        const x = Math.max(margin + half, cursor + half + sway(i));
+        cursor = x + half + spread;
+        return x;
+      });
+      const overflow = xs[xs.length - 1] + halves[halves.length - 1] - (w - margin);
+      if (overflow > 0) for (let i = 0; i < xs.length; i++) xs[i] -= overflow;
+      return xs.map((x, i) => {
+        const ph = padH * scales[i];
         const waterY = getWaveY(x, h * 0.58);
-        return { x, y: waterY + ph * 0.45 + bob(i) * 0.35 + extraY, w: i ? padW * 0.95 : padW, h: ph };
-      };
-      return [place(0, 0.13, 0), place(1, 0.40, h * 0.022)];
+        return { x, y: waterY + ph * 0.45 + bob(i) * 0.35 + (extraYs[i] || 0), w: padW * scales[i], h: ph };
+      });
     }
     function machinePadRect(i = 0) {
       const rects = machinePadRects();
@@ -1837,7 +1982,8 @@
     function machineRigGeom(i = 0) {
       const p = machinePadRect(i);
       const rockTop = p.y - p.h * 0.54;
-      const beamY = Math.max(h * 0.13, rockTop - p.h * 1.34);
+      const beamLift = [1.34, 1.28, 1.22, 1.16][Math.min(3, i | 0)];
+      const beamY = Math.max(h * 0.13, rockTop - p.h * beamLift);
       // run the gantry past both edges so it reads as one long dock crane, not a floating stub
       const overhang = Math.max(120, p.w * 0.75);
       return { p, baseX: p.x, rockTop, beamY, beamStart: -overhang, beamEnd: w + overhang };
@@ -1853,7 +1999,7 @@
     function rigNodeById(id) { return ORE_NODES.find(n => n.id === id) || null; }
     function rigClaims(id, exceptIndex) {
       for (let i = 0; i < machineRigs.length; i++) {
-        if (i === exceptIndex) continue;
+        if (i === exceptIndex || !isPadUnlocked(i)) continue;
         const r = machineRigs[i];
         if (r.targetId === id || r.queueId === id) return true;
       }
@@ -1871,7 +2017,7 @@
     }
     function rigActive(i = 0) {
       const m = mining.machines[i];
-      return !!(m && m.tier && !m.broken && m.battery > 0 && !boss.active && !isFacilityLayer() && perspective === 0);
+      return !!(isPadUnlocked(i) && m && m.tier && !m.broken && m.battery > 0 && !boss.active && !isFacilityLayer() && perspective === 0);
     }
     function rigTravelMs(i = 0) { return Math.max(320, 820 - mining.machines[i].tier * 130); }
     const RIG_WINDUP_MS = 260;
@@ -1924,7 +2070,7 @@
       m.battery = Math.max(0, m.battery - tier.drain);
       if (Math.random() < tier.breakdown) {
         m.broken = true;
-        m.message = 'jammed — repair at shore';
+        m.message = 'jammed — use unjammer';
       } else if (m.battery <= 0) {
         m.message = 'battery empty — recharge at shore';
       } else {
@@ -2016,6 +2162,12 @@
       if ((!cur || !nodeReady(cur)) && !rig.queueId) {
         const next = pickRigTarget(rig.x, rig.lastStrikeId, i);
         if (next) beginRigTravel(next, false, i);
+        else {
+          rig.targetId = null;
+          const home = rigHomePos(i);
+          rig.x = home.x;
+          rig.y = home.y;
+        }
       }
     }
     function ensureRareVeins() {
@@ -2118,9 +2270,14 @@
             if (options.machine != null) mining.machines[options.machine].message = `wasted a ${def.name} chip`;
           }
         }
-        if (gained > 0) mining.ores[oreId] = (mining.ores[oreId] || 0) + gained;
+        if (gained > 0) {
+          const store = automatic ? mining.chest : mining.ores;
+          const wasEmpty = automatic && chestOreCount() === 0;
+          store[oreId] = (store[oreId] || 0) + gained;
+          if (wasEmpty) showToast('ore chest', 'machine haul is waiting in the surface chest. click it to open.', 2600);
+        }
         const p = oreNodePos(node);
-        autoFx.push({ x: p.x, y: p.y, layer: node.layer, t: 0, color: def.color, text: gained ? `+${gained} ${def.name}` : 'waste', shatter: true });
+        autoFx.push({ x: p.x, y: p.y, layer: node.layer, t: 0, color: def.color, text: gained ? `${automatic ? 'to chest: ' : '+'}${gained} ${def.name}` : 'waste', shatter: true });
         if (!automatic) {
           sfxDiscovery();
           showToast(`+${gained} ${def.name}`, 'vein cracked. give it a moment to reform.', 2200);
@@ -2140,7 +2297,7 @@
       for (let i = 0; i < MACHINE_PAD_COUNT; i++) {
         const m = mining.machines[i];
         const rig = machineRigs[i];
-        if (!m.tier || !rig) continue;
+        if (!isPadUnlocked(i) || !m.tier || !rig) continue;
         const tier = AUTO_TIERS[m.tier];
         if (!rigActive(i)) { rig.moving = false; continue; }
         updateMachineRig(dt, i);
@@ -2160,7 +2317,6 @@
         beginRigTravel(work, true, i);
       }
     }
-    function activeMachineIndex() { return Math.min(MACHINE_PAD_COUNT - 1, Math.max(0, mining.activeMachine | 0)); }
     function canAffordOre(cost) {
       return Object.keys(cost).every(id => (mining.ores[id] || 0) >= cost[id]);
     }
@@ -2174,8 +2330,8 @@
     function claimContract(id) {
       const c = CONTRACTS.find(x => x.id === id);
       if (!c || mining.contracts[id]) return;
-      if (!stockOpen(STOCK.contract[c.id])) { showToast('out of stock', `the keeper only takes that one in the ${STOCK.contract[c.id]}.`, 2200); return; }
-      if (!contractReady(c)) { showToast('not enough ore', 'the keeper taps the checklist. keep mining.', 2200); return; }
+      if (!stockOpen(STOCK.contract[c.id])) { showToast('out of stock', `the dock only takes that one in the ${STOCK.contract[c.id]}.`, 2200); return; }
+      if (!contractReady(c)) { showToast('not enough ore', 'the dock taps the checklist. keep mining.', 2200); return; }
       for (const oreId of Object.keys(c.need)) mining.ores[oreId] -= c.need[oreId];
       mining.contracts[id] = true;
       const reward = c.pickaxe > mining.pickaxe ? PICKAXES[c.pickaxe].name : 'paid in full';
@@ -2192,6 +2348,7 @@
       if (!stockOpen(STOCK.rig[tier])) { showToast('out of stock', `that rig is ${STOCK.rig[tier]}-shift stock only.`, 2200); return; }
       if (!machineBlueprintReady(tier)) { showToast('blueprint locked', 'claim the matching pick contract first.', 2200); return; }
       const i = activeMachineIndex();
+      if (!isPadUnlocked(i)) { showToast('pad locked', 'buy that rock from the dock first.', 2200); return; }
       const m = mining.machines[i];
       if (m.tier >= tier) {
         showToast('already installed', m.tier === tier ? `pad ${i + 1} already has ${AUTO_TIERS[tier].name}.` : `pad ${i + 1} already has a better rig.`, 2200);
@@ -2212,21 +2369,202 @@
       sfxDiscovery();
       showToast('machine built', `${AUTO_TIERS[tier].name} parked on pad ${i + 1}.`, 3200);
     }
-    function repairAuto() {
-      const i = activeMachineIndex();
+    let flowState = null;
+    function flowSame(a, b) { return !!a && !!b && a.r === b.r && a.c === b.c; }
+    function flowAdjacent(a, b) { return Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1; }
+    function flowTransform(cell, rot, flip) {
+      let r = cell[0], c = cell[1];
+      if (flip) c = 4 - c;
+      for (let k = 0; k < rot; k++) { const nr = c, nc = 4 - r; r = nr; c = nc; }
+      return { r, c };
+    }
+    function makeFlowPuzzle() {
+      const base = FLOW_BASES[Math.floor(Math.random() * FLOW_BASES.length)];
+      const rot = Math.floor(Math.random() * 4);
+      const flip = Math.random() < 0.5;
+      const colors = FLOW_COLORS.slice(0, base.length);
+      for (let i = colors.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = colors[i]; colors[i] = colors[j]; colors[j] = tmp;
+      }
+      return {
+        size: 5,
+        pairs: base.map((path, idx) => {
+          const cells = path.map(p => flowTransform(p, rot, flip));
+          return { color: colors[idx], a: cells[0], b: cells[cells.length - 1] };
+        })
+      };
+    }
+    function flowEndpoint(cell) {
+      if (!flowState) return null;
+      return flowState.pairs.find(p => flowSame(cell, p.a) || flowSame(cell, p.b)) || null;
+    }
+    function flowPathDone(pair) {
+      const path = flowState && flowState.paths[pair.color];
+      if (!path || path.length < 2) return false;
+      const a = path[0], b = path[path.length - 1];
+      return (flowSame(a, pair.a) && flowSame(b, pair.b)) || (flowSame(a, pair.b) && flowSame(b, pair.a));
+    }
+    function flowDoneCount() {
+      return flowState ? flowState.pairs.filter(flowPathDone).length : 0;
+    }
+    function drawFlow() {
+      if (!flowCanvas || !flowState) return;
+      const ctx = flowCanvas.getContext('2d');
+      const n = flowState.size;
+      const step = FLOW_SIZE / n;
+      ctx.clearRect(0, 0, FLOW_SIZE, FLOW_SIZE);
+      ctx.fillStyle = 'rgba(3,14,30,0.92)';
+      ctx.fillRect(0, 0, FLOW_SIZE, FLOW_SIZE);
+      ctx.strokeStyle = 'rgba(126,200,255,0.12)';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < n; i++) {
+        ctx.beginPath(); ctx.moveTo(i * step, 0); ctx.lineTo(i * step, FLOW_SIZE); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * step); ctx.lineTo(FLOW_SIZE, i * step); ctx.stroke();
+      }
+      const center = cell => ({ x: (cell.c + 0.5) * step, y: (cell.r + 0.5) * step });
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = step * 0.26;
+      for (const pair of flowState.pairs) {
+        const path = flowState.paths[pair.color] || [];
+        if (path.length < 2) continue;
+        ctx.strokeStyle = pair.color;
+        ctx.shadowColor = pair.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        path.forEach((cell, i) => {
+          const p = center(cell);
+          if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+      for (const pair of flowState.pairs) {
+        for (const cell of [pair.a, pair.b]) {
+          const p = center(cell);
+          ctx.fillStyle = '#0a1c31';
+          ctx.beginPath(); ctx.arc(p.x, p.y, step * 0.29, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = pair.color;
+          ctx.beginPath(); ctx.arc(p.x, p.y, step * 0.2, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = flowPathDone(pair) ? '#ffffff' : 'rgba(255,255,255,0.45)';
+          ctx.lineWidth = flowPathDone(pair) ? 2 : 1;
+          ctx.stroke();
+        }
+      }
+      const done = flowDoneCount();
+      if (flowStatus) flowStatus.textContent = done === flowState.pairs.length
+        ? 'all lines connected — releasing the jam'
+        : `${done}/${flowState.pairs.length} lines connected · drag from a dot to its match`;
+    }
+    function openUnjam(i = activeMachineIndex()) {
       const m = mining.machines[i];
-      if (!m.tier) { showToast('no machine', 'this pad is empty. build one in the machines tab.', 2000); return; }
+      if (!m || !m.tier) { showToast('no machine', 'this pad is empty. build one in the machines tab.', 2000); return; }
       if (!m.broken) { showToast('already running', 'nothing to fix right now.', 1800); return; }
-      if ((mining.ores.iron || 0) < 3) { showToast('needs parts', 'repair costs 3 iron.', 2200); return; }
-      mining.ores.iron -= 3;
-      m.broken = false;
-      m.message = 'repaired and ready';
-      resetRigState(i);
+      if (!mining.unjammer) { showToast('need unjammer', 'buy the unjammer tool on the tools tab.', 2400); return; }
+      closeShop();
+      closeTablet();
+      const puzzle = makeFlowPuzzle();
+      flowState = { machine: i, size: puzzle.size, pairs: puzzle.pairs, paths: {}, dragging: false, activeColor: null };
+      if (flowCanvas) { flowCanvas.width = FLOW_SIZE; flowCanvas.height = FLOW_SIZE; }
+      drawFlow();
+      if (flowModal) {
+        flowModal.classList.add('open');
+        flowModal.setAttribute('aria-hidden', 'false');
+      }
+      sfxClick();
+    }
+    function closeUnjam() {
+      flowState = null;
+      if (!flowModal) return;
+      flowModal.classList.remove('open');
+      flowModal.setAttribute('aria-hidden', 'true');
+    }
+    function completeUnjam() {
+      if (!flowState) return;
+      const i = flowState.machine;
+      const m = mining.machines[i];
+      if (m && m.broken) {
+        m.broken = false;
+        m.message = 'unjammed by unjammer';
+        resetRigState(i);
+      }
       saveGameState();
       syncMiningHud();
       renderShop();
-      sfxClick();
+      renderTablet();
+      sfxDiscovery();
+      showToast('unjammed', `pad ${i + 1} is back online. the claw remembers.`, 3200);
+      closeUnjam();
     }
+    function flowCellFromEvent(e) {
+      if (!flowCanvas || !flowState) return null;
+      const rect = flowCanvas.getBoundingClientRect();
+      const step = rect.width / flowState.size;
+      const c = Math.floor((e.clientX - rect.left) / step);
+      const r = Math.floor((e.clientY - rect.top) / step);
+      if (r < 0 || c < 0 || r >= flowState.size || c >= flowState.size) return null;
+      return { r, c };
+    }
+    function flowPointerDown(e) {
+      if (!flowState) return;
+      const cell = flowCellFromEvent(e);
+      const pair = cell && flowEndpoint(cell);
+      if (!pair) return;
+      e.preventDefault();
+      if (flowCanvas && flowCanvas.setPointerCapture) {
+        try { flowCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+      flowState.dragging = true;
+      flowState.activeColor = pair.color;
+      flowState.paths[pair.color] = [cell];
+      drawFlow();
+    }
+    function flowExtendPath(cell) {
+      const color = flowState.activeColor;
+      const path = flowState.paths[color] || [];
+      const last = path[path.length - 1];
+      if (!last || flowSame(last, cell) || !flowAdjacent(last, cell)) return false;
+      const other = flowEndpoint(cell);
+      if (other && other.color !== color) return false;
+      const used = Object.keys(flowState.paths).some(c => c !== color && flowState.paths[c].some(p => flowSame(p, cell)));
+      if (used) return false;
+      const at = path.findIndex(p => flowSame(p, cell));
+      flowState.paths[color] = at >= 0 ? path.slice(0, at + 1) : path.concat(cell);
+      drawFlow();
+      return true;
+    }
+    function flowPointerMove(e) {
+      if (!flowState || !flowState.dragging) return;
+      const target = flowCellFromEvent(e);
+      if (!target) return;
+      // fast drags can skip cells, so walk orthogonal steps toward the pointer
+      for (let guard = 0; guard < flowState.size * 3; guard++) {
+        const path = flowState.paths[flowState.activeColor] || [];
+        const last = path[path.length - 1];
+        if (!last || flowSame(last, target)) break;
+        if (flowAdjacent(last, target)) { flowExtendPath(target); break; }
+        const dr = target.r - last.r, dc = target.c - last.c;
+        const next = Math.abs(dr) >= Math.abs(dc)
+          ? { r: last.r + Math.sign(dr), c: last.c }
+          : { r: last.r, c: last.c + Math.sign(dc) };
+        const before = flowState.paths[flowState.activeColor]?.length || 0;
+        flowExtendPath(next);
+        if ((flowState.paths[flowState.activeColor]?.length || 0) === before) break;
+      }
+    }
+    function flowPointerUp(e) {
+      if (!flowState || !flowState.dragging) return;
+      e.preventDefault();
+      if (flowCanvas && flowCanvas.releasePointerCapture) {
+        try { flowCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+      flowState.dragging = false;
+      flowState.activeColor = null;
+      if (flowDoneCount() === flowState.pairs.length) completeUnjam();
+      else drawFlow();
+    }
+    function repairAuto() { openUnjam(); }
     function rechargeAuto() {
       const i = activeMachineIndex();
       const m = mining.machines[i];
@@ -2234,7 +2572,7 @@
       if (!isShore()) { showToast('shore only', 'bring the machine back to the supply dock.', 2200); return; }
       m.battery = 100;
       m.progress = 0;
-      m.message = m.broken ? 'jammed — repair first' : 'battery full';
+      m.message = m.broken ? 'jammed — use unjammer' : 'battery full';
       saveGameState();
       syncMiningHud();
       renderShop();
@@ -2248,6 +2586,7 @@
     }
     function selectMachine(i) {
       if (!Number.isInteger(i) || i < 0 || i >= MACHINE_PAD_COUNT) return;
+      if (!isPadUnlocked(i)) { showToast('pad locked', 'the dock sells that rock at the supply stall.', 2200); return; }
       mining.activeMachine = i;
       saveGameState();
       syncMiningHud();
@@ -2262,7 +2601,7 @@
       mining.machines[i] = defaultMachineState();
       resetRigState(i);
       if (mining.activeMachine === i) {
-        const other = mining.machines.findIndex((mm, idx) => idx !== i && mm.tier);
+        const other = mining.machines.findIndex((mm, idx) => idx !== i && isPadUnlocked(idx) && mm.tier);
         mining.activeMachine = other >= 0 ? other : i;
       }
       saveGameState();
@@ -2272,12 +2611,34 @@
       sfxClick();
       showToast('machine disassembled', `pad ${i + 1} is empty. the contract is still claimed.`, 2600);
     }
+    function canBuyPad(i) {
+      if (!Number.isInteger(i) || i < STARTING_PADS || i >= MACHINE_PAD_COUNT) return false;
+      if (isPadUnlocked(i) || unlockedPadCount() !== i || !stockOpen(STOCK.pad[i])) return false;
+      return canAffordOre(PAD_COSTS[i]);
+    }
+    function buyPad(i) {
+      if (!Number.isInteger(i) || i < STARTING_PADS || i >= MACHINE_PAD_COUNT) return;
+      if (isPadUnlocked(i)) { showToast('pad owned', 'that rock is already yours.', 1800); return; }
+      if (unlockedPadCount() !== i) { showToast('pad locked', `buy pad ${i} first.`, 2000); return; }
+      if (!stockOpen(STOCK.pad[i])) { showToast('out of stock', `pad ${i + 1} is ${STOCK.pad[i]}-shift stock only.`, 2200); return; }
+      if (!canAffordOre(PAD_COSTS[i])) { showToast('not enough ore', `a pad costs ${oreCostLabel(PAD_COSTS[i])}.`, 2200); return; }
+      for (const oreId of Object.keys(PAD_COSTS[i])) mining.ores[oreId] -= PAD_COSTS[i][oreId];
+      mining.unlockedPads = i + 1;
+      mining.machines[i] = defaultMachineState();
+      resetRigState(i);
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxDiscovery();
+      showToast('machine pad bought', `pad ${i + 1} unlocked. build a rig for it in the machines tab.`, 3600);
+    }
     function canBuyTablet() {
       return Object.keys(TABLET_COST).every(id => (mining.ores[id] || 0) >= TABLET_COST[id]);
     }
     function buyTablet() {
       if (mining.tablet) return;
-      if (!stockOpen(STOCK.tablet)) { showToast('out of stock', 'the keeper only sells tablets at night.', 2200); return; }
+      if (!stockOpen(STOCK.tablet)) { showToast('out of stock', 'the dock only sells tablets at night.', 2200); return; }
       if (!canBuyTablet()) { showToast('not enough ore', 'the tablet costs 2 iron + 1 gold.', 2200); return; }
       for (const id of Object.keys(TABLET_COST)) mining.ores[id] -= TABLET_COST[id];
       mining.tablet = true;
@@ -2292,7 +2653,7 @@
       return Object.keys(BATTERY_PACK_COST).every(id => (mining.ores[id] || 0) >= BATTERY_PACK_COST[id]);
     }
     function buyBatteryPack() {
-      if (!stockOpen(STOCK.pack)) { showToast('out of stock', 'the keeper is fresh out. try again later.', 2200); return; }
+      if (!stockOpen(STOCK.pack)) { showToast('out of stock', 'the dock is fresh out. try again later.', 2200); return; }
       if (!canBuyBatteryPack()) { showToast('not enough ore', `a pack costs ${oreCostLabel(BATTERY_PACK_COST)}.`, 2200); return; }
       for (const id of Object.keys(BATTERY_PACK_COST)) mining.ores[id] -= BATTERY_PACK_COST[id];
       mining.batteries += BATTERIES_PER_PACK;
@@ -2303,11 +2664,27 @@
       sfxDiscovery();
       showToast('battery pack', `+${BATTERIES_PER_PACK} cells. swap them from the tablet anywhere.`, 3200);
     }
+    function canBuyUnjammer() {
+      return Object.keys(UNJAMMER_COST).every(id => (mining.ores[id] || 0) >= UNJAMMER_COST[id]);
+    }
+    function buyUnjammer() {
+      if (mining.unjammer) return;
+      if (!stockOpen(STOCK.unjammer)) { showToast('out of stock', 'the dock is fresh out. try again later.', 2200); return; }
+      if (!canBuyUnjammer()) { showToast('not enough ore', `the unjammer costs ${oreCostLabel(UNJAMMER_COST)}.`, 2200); return; }
+      for (const id of Object.keys(UNJAMMER_COST)) mining.ores[id] -= UNJAMMER_COST[id];
+      mining.unjammer = true;
+      saveGameState();
+      renderShop();
+      syncMiningHud();
+      renderTablet();
+      sfxDiscovery();
+      showToast('unjammer acquired', 'jammed rigs can now be fixed with the unjammer.', 3400);
+    }
     function useBattery() {
       const i = activeMachineIndex();
       const m = mining.machines[i];
       if (!m.tier) { showToast('no machine', 'this pad is empty. build one in the machines tab.', 2000); return; }
-      if (mining.batteries <= 0) { showToast('no spare cells', 'buy a battery pack from the shore keeper.', 2200); return; }
+      if (mining.batteries <= 0) { showToast('no spare cells', 'buy a battery pack from the supply dock.', 2200); return; }
       if (m.battery >= 100) { showToast('already full', 'save the cell for when the claw runs dry.', 2000); return; }
       mining.batteries -= 1;
       m.battery = Math.min(100, m.battery + BATTERY_CHARGE);
@@ -2346,11 +2723,15 @@
         : rig.mode === 'windup' ? `winding up${tracked ? ` ${trackedName}` : ''}`
         : rig.mode === 'slam' || rig.mode === 'recover' ? `headbutting${tracked ? ` ${trackedName}` : ''}`
         : tracked ? `holding ${trackedName}` : 'parked';
-      const pads = mining.machines.map((m, idx) => `<button class="btn" type="button" data-machine="${idx}" ${idx === active ? 'disabled' : ''}>pad ${idx + 1}: ${m.tier ? AUTO_TIERS[m.tier].name : 'empty'}</button>`).join(' ');
+      const pads = mining.machines.map((m, idx) => {
+        const unlocked = isPadUnlocked(idx);
+        return `<button class="btn" type="button" data-machine="${idx}" ${!unlocked || idx === active ? 'disabled' : ''}>pad ${idx + 1}: ${!unlocked ? 'locked · buy at shore' : m.tier ? AUTO_TIERS[m.tier].name : 'empty'}</button>`;
+      }).join(' ');
       tabletStats.innerHTML = `
         <div class="tablet-head"><strong>${tier.name} · pad ${active + 1}</strong><span class="badge ${mining.auto.broken ? 'bug' : 'suggestion'}">${machineStateLabel(mining.auto)}</span></div>
         <div class="tablet-cell"><b>pads</b><div class="shop-foot">${pads}</div></div>
         <div class="tablet-cell"><b>battery</b><div class="battery-row"><span>cell</span><div class="battery-bar"><div class="battery-fill" style="width:${pct}%" ${pct < 25 ? 'data-low="1"' : ''}></div></div><span>${Math.round(pct)}%</span></div><div class="shop-foot"><span>${mining.batteries} spare cells · each = +50%</span><button class="btn" type="button" data-battery="use" ${!mining.auto.tier || mining.batteries <= 0 || mining.auto.battery >= 100 ? 'disabled' : ''}>swap cell</button></div></div>
+        <div class="tablet-cell"><b>unjam</b><div class="shop-foot"><span>${mining.unjammer ? 'unjammer ready' : 'tool sold at shore'}</span><button class="btn" type="button" data-unjam="start" ${!mining.unjammer || !mining.auto.broken ? 'disabled' : ''}>run unjam</button></div></div>
         <div class="tablet-grid">
           <div class="tablet-cell"><b>next strike</b><span>${next}${tier.interval ? 's' : ''}</span></div>
           <div class="tablet-cell"><b>reach</b><span>${mining.auto.tier ? `layer ${tier.maxLayer}` : 'none'}</span></div>
@@ -2364,10 +2745,10 @@
         </div>
         <div class="tablet-cell"><b>ore ledger</b><span>${ores}</span></div>
         <div class="tablet-cell contracts"><b>contracts</b><span>${contractLine}</span></div>
-        <div class="modal-note">live readout from the tablet. ${mining.auto.broken ? 'repair it at the shore supply dock.' : mining.auto.tier ? 'dead battery? swap a cell here, or hit recharge at the dock for a full charge.' : 'build a claw rig in the shore machines tab to park it on the surface rock.'}</div>`;
+        <div class="modal-note">live readout from the tablet · ${unlockedPadCount()}/${MACHINE_PAD_COUNT} pads. ${mining.auto.broken ? (mining.unjammer ? 'jammed? run the unjammer right here.' : 'jammed? buy the unjammer tool at shore.') : mining.auto.tier ? 'dead battery? swap a cell here, or hit recharge at the dock for a full charge.' : 'build a claw rig in the shore machines tab to park it on the surface rock.'} locked rocks are sold at the shore.</div>`;
     }
     function openTablet() {
-      if (!mining.tablet) { showToast('no tablet', 'the shore keeper sells one for 2 iron + 1 gold.', 2400); return; }
+      if (!mining.tablet) { showToast('no tablet', 'the supply dock sells one for 2 iron + 1 gold.', 2400); return; }
       renderTablet();
       if (tabletModal) {
         tabletModal.classList.add('open');
@@ -2387,15 +2768,22 @@
       if (oreCounts) {
         oreCounts.innerHTML = Object.keys(ORE_DEFS).map(id => {
           const def = ORE_DEFS[id];
-          return `<span class="ore-chip" style="--ore:${def.color}"><b>${def.label}</b>${mining.ores[id] || 0}</span>`;
+          return `<span class="ore-chip" style="--ore:${def.color}"><b>${def.name}</b>${mining.ores[id] || 0}</span>`;
         }).join('');
+      }
+      if (chestStatus) {
+        const held = chestOreCount();
+        chestStatus.classList.toggle('ready', held > 0);
+        chestStatus.textContent = held > 0
+          ? `chest: ${held} ore waiting · click the surface chest to open`
+          : 'chest: empty · click the surface chest to open';
       }
       if (pickaxeLabel) pickaxeLabel.textContent = PICKAXES[mining.pickaxe].name;
       if (autoStatus) {
         const active = activeMachineIndex();
         const tier = AUTO_TIERS[mining.auto.tier];
         const state = !mining.auto.tier ? 'not built' : mining.auto.broken ? 'jammed' : mining.auto.battery <= 0 ? 'dead battery' : tier.name;
-        autoStatus.textContent = `auto: ${state}${MACHINE_PAD_COUNT > 1 ? ` · pad ${active + 1}` : ''} · ${mining.batteries} cells`;
+        autoStatus.textContent = `auto: ${state} · pad ${active + 1} · ${unlockedPadCount()}/${MACHINE_PAD_COUNT} pads · ${mining.batteries} cells`;
       }
       const recoveryMs = Math.max(0, manualMineNextAt - performance.now());
       if (miningRecovery) {
@@ -2412,7 +2800,7 @@
     }
     function renderShop() {
       if (!shopModal) return;
-      if (shopLine) shopLine.textContent = `shelf rotates with the sun · ${isDaytime() ? 'day' : 'night'} shift. ${mining.auto.tier ? 'keep the claw fed. rigs are built on the machines tab.' : 'contracts pay in picks. rigs are built on the machines tab.'}`;
+      if (shopLine) shopLine.textContent = `shelf rotates with the sun · ${isDaytime() ? 'day' : 'night'} shift · ${unlockedPadCount()}/${MACHINE_PAD_COUNT} pads. ${mining.auto.tier ? 'keep the claw fed. rigs are built on the machines tab.' : 'contracts pay in picks. rigs are built on the machines tab.'}`;
       if (shopContracts) {
         shopContracts.innerHTML = CONTRACTS.map(c => {
           const done = !!mining.contracts[c.id];
@@ -2445,10 +2833,17 @@
           const want = BATTERY_PACK_COST[id];
           return `<span class="ore-need ${have >= want ? 'ok' : ''}">${ORE_DEFS[id].name} ${Math.min(have, want)}/${want}</span>`;
         }).join('');
+        const unjammerNeed = Object.keys(UNJAMMER_COST).map(id => {
+          const have = mining.ores[id] || 0;
+          const want = UNJAMMER_COST[id];
+          return `<span class="ore-need ${have >= want ? 'ok' : ''}">${ORE_DEFS[id].name} ${Math.min(have, want)}/${want}</span>`;
+        }).join('');
         const tabletStocked = stockOpen(STOCK.tablet);
+        const unjammerStocked = stockOpen(STOCK.unjammer);
         const packStocked = stockOpen(STOCK.pack);
         shopTools.innerHTML = `<div class="shop-item"><div class="shop-item-top"><strong>${PICKAXES[mining.pickaxe].name}</strong><span class="badge">equipped</span></div><div class="shop-note">${PICKAXES[mining.pickaxe].note} • ${PICKAXES[mining.pickaxe].damage} damage per swing</div><div class="shop-foot"><span>${mining.pickaxe >= PICKAXES.length - 1 ? 'top pick. nothing left to unlock.' : `next: ${PICKAXES[nextPick].name} · ${stockBadge(STOCK.contract[nextPickSrc.id])}`}</span></div></div>
         <div class="shop-item ${mining.tablet ? 'done' : ''} ${!tabletStocked ? 'stock-out' : ''}"><div class="shop-item-top"><strong>machine tablet</strong><span class="badge ${mining.tablet ? '' : !tabletStocked ? 'other' : canBuyTablet() ? 'suggestion' : 'other'}">${mining.tablet ? 'owned' : !tabletStocked ? 'out of stock' : canBuyTablet() ? 'ready' : 'locked'}</span></div><div class="shop-needs">${tabletNeed}</div><div class="shop-note">a pocket readout for the machine parked on the surface rock. works anywhere, so you don't have to waddle back here.</div><div class="shop-foot"><span>${mining.tablet ? 'tap machine tablet in your shore ledger' : `2 iron + 1 gold · ${stockBadge(STOCK.tablet)}`}</span><button class="btn" type="button" data-shop="tablet" ${mining.tablet || !canBuyTablet() || !tabletStocked ? 'disabled' : ''}>${mining.tablet ? 'owned' : 'buy tablet'}</button></div></div>
+        <div class="shop-item ${mining.unjammer ? 'done' : ''} ${!unjammerStocked ? 'stock-out' : ''}"><div class="shop-item-top"><strong>unjammer</strong><span class="badge ${mining.unjammer ? '' : !unjammerStocked ? 'other' : canBuyUnjammer() ? 'suggestion' : 'other'}">${mining.unjammer ? 'owned' : !unjammerStocked ? 'out of stock' : canBuyUnjammer() ? 'ready' : 'need ore'}</span></div><div class="shop-needs">${unjammerNeed}</div><div class="shop-note">a pocket color puzzle. when a claw jams, connect every color pair without crossing a line to free it. works anywhere from the tablet.</div><div class="shop-foot"><span>${mining.unjammer ? 'tap unjam in the machine tablet' : `${oreCostLabel(UNJAMMER_COST)} · ${stockBadge(STOCK.unjammer)}`}</span><button class="btn" type="button" data-shop="unjammer" ${mining.unjammer || !canBuyUnjammer() || !unjammerStocked ? 'disabled' : ''}>${mining.unjammer ? 'owned' : 'buy unjammer'}</button></div></div>
         <div class="shop-item ${!packStocked ? 'stock-out' : ''}"><div class="shop-item-top"><strong>battery pack</strong><span class="badge ${!packStocked ? 'other' : canBuyBatteryPack() ? 'suggestion' : 'other'}">${!packStocked ? 'out of stock' : canBuyBatteryPack() ? 'ready' : 'need ore'}</span></div><div class="shop-needs">${packNeed}</div><div class="shop-note">4 spare cells. each one refills half a machine battery, and you can swap them from the tablet without coming back to shore.</div><div class="shop-foot"><span>${oreCostLabel(BATTERY_PACK_COST)} · ${mining.batteries} spare cells · ${stockBadge(STOCK.pack)}</span><button class="btn" type="button" data-shop="battery-pack" ${!canBuyBatteryPack() || !packStocked ? 'disabled' : ''}>buy pack</button></div></div>
         <div class="shop-item"><div class="shop-item-top"><strong>mining rules</strong></div><div class="shop-note">iron in the upper layer, abyssite in hadal, and rare gold/diamond/voidglass scattered in empty veins. only the default perspective has ore. no veins in the facility or boss fight, and nothing in abyss or void. stock rotates between day and night shifts.</div></div>`;
       }
@@ -2457,7 +2852,23 @@
         const activePad = mining.machines[active];
         const tier = AUTO_TIERS[activePad.tier];
         const pct = Math.max(0, Math.min(100, activePad.battery));
-        const padButtons = mining.machines.map((m, idx) => `<button class="btn" type="button" data-machine="${idx}" ${idx === active ? 'disabled' : ''}>pad ${idx + 1}: ${m.tier ? AUTO_TIERS[m.tier].name : 'empty'}</button>`).join(' ');
+        const padButtons = mining.machines.map((m, idx) => {
+          const unlocked = isPadUnlocked(idx);
+          return `<button class="btn" type="button" data-machine="${idx}" ${!unlocked || idx === active ? 'disabled' : ''}>pad ${idx + 1}: ${!unlocked ? 'locked' : m.tier ? AUTO_TIERS[m.tier].name : 'empty'}</button>`;
+        }).join(' ');
+        const padCards = [STARTING_PADS, MACHINE_PAD_COUNT - 1].map(padIdx => {
+          const owned = isPadUnlocked(padIdx);
+          const nextUp = unlockedPadCount() === padIdx;
+          const stocked = stockOpen(STOCK.pad[padIdx]);
+          const affordable = canAffordOre(PAD_COSTS[padIdx]);
+          const need = Object.keys(PAD_COSTS[padIdx]).map(id => {
+            const have = mining.ores[id] || 0;
+            const want = PAD_COSTS[padIdx][id];
+            return `<span class="ore-need ${have >= want ? 'ok' : ''}">${ORE_DEFS[id].name} ${Math.min(have, want)}/${want}</span>`;
+          }).join('');
+          const state = owned ? 'owned' : !nextUp ? `buy pad ${padIdx} first` : !stocked ? 'out of stock' : affordable ? 'ready' : 'need ore';
+          return `<div class="shop-item ${owned ? 'done' : ''} ${!stocked && !owned ? 'stock-out' : ''}"><div class="shop-item-top"><strong>machine pad ${padIdx + 1}</strong><span class="badge ${owned ? '' : nextUp && stocked && affordable ? 'suggestion' : 'other'}">${state}</span></div><div class="shop-needs">${need}</div><div class="shop-note">another surface rock with its own crane. buy the pad, then build a rig for it separately.</div><div class="shop-foot"><span>${oreCostLabel(PAD_COSTS[padIdx])} · ${stockBadge(STOCK.pad[padIdx])}</span><button class="btn" type="button" data-pad-buy="${padIdx}" ${owned || !nextUp || !stocked || !affordable ? 'disabled' : ''}>${owned ? 'owned' : 'buy pad'}</button></div></div>`;
+        }).join('');
         const buildCards = [1, 2, 3].map(rigTier => {
           const plan = MACHINE_COSTS[rigTier];
           const blueprintReady = machineBlueprintReady(rigTier);
@@ -2473,13 +2884,13 @@
           const state = !stocked ? 'out of stock' : installed ? (activePad.tier === rigTier ? 'installed' : 'outclassed') : !blueprintReady ? 'blueprint locked' : affordable ? 'ready' : 'need ore';
           return `<div class="shop-item ${installed ? 'done' : ''} ${!stocked ? 'stock-out' : ''}"><div class="shop-item-top"><strong>${AUTO_TIERS[rigTier].name}</strong><span class="badge ${installed ? '' : stocked && blueprintReady && affordable ? 'suggestion' : 'other'}">${state}</span></div><div class="shop-needs">${need}</div><div class="shop-note">unlock with the ${source.title} pick contract, then build it here on pad ${active + 1}.</div><div class="shop-foot"><span>${oreCostLabel(plan.cost)} · ${stockBadge(STOCK.rig[rigTier])}</span><button class="btn" type="button" data-machine-build="${rigTier}" ${!stocked || installed || !blueprintReady || !affordable ? 'disabled' : ''}>${activePad.tier > rigTier ? 'built already' : activePad.tier === rigTier ? 'installed' : 'build rig'}</button></div></div>`;
         }).join('');
-        shopAuto.innerHTML = `${buildCards}<div class="shop-item"><div class="shop-item-top"><strong>${tier.name} · pad ${active + 1}</strong><span class="badge ${activePad.broken ? 'bug' : 'suggestion'}">${activePad.broken ? 'jammed' : tier.name === 'not built' ? 'locked' : 'online'}</span></div>
-          <div class="shop-note">${tier.note}</div>
+        shopAuto.innerHTML = `${padCards}${buildCards}<div class="shop-item"><div class="shop-item-top"><strong>${tier.name} · pad ${active + 1}</strong><span class="badge ${activePad.broken ? 'bug' : 'suggestion'}">${activePad.broken ? 'jammed' : tier.name === 'not built' ? 'locked' : 'online'}</span></div>
+          <div class="shop-note">${tier.note} jams are cleared with the unjammer.</div>
           <div class="shop-foot">${padButtons}</div>
           ${activePad.tier ? `<div class="battery-row"><span>battery</span><div class="battery-bar"><div class="battery-fill" style="width:${pct}%" ${pct < 25 ? 'data-low="1"' : ''}></div></div><span>${Math.round(pct)}%</span></div>` : ''}
           ${activePad.tier ? `<div class="shop-meta">burn: ${tier.drain}% / ${(tier.interval / 1000).toFixed(1)}s • waste: ${Math.round(tier.waste * 100)}% • jams: ${Math.round(tier.breakdown * 100)}% • reaches: layer ${tier.maxLayer}</div>` : ''}
-          <div class="shop-meta">status: ${activePad.message}</div>
-          <div class="shop-foot"><button class="btn" type="button" data-auto="recharge" ${!activePad.tier || activePad.broken ? 'disabled' : ''}>recharge at dock</button><button class="btn" type="button" data-battery="use" ${!activePad.tier || mining.batteries <= 0 || activePad.battery >= 100 ? 'disabled' : ''}>swap cell · ${mining.batteries} left</button><button class="btn" type="button" data-auto="repair" ${!activePad.tier || !activePad.broken ? 'disabled' : ''}>repair · 3 iron</button><button class="btn" type="button" data-machine-disassemble="${active}" ${!activePad.tier ? 'disabled' : ''}>disassemble pad ${active + 1}</button></div>
+          <div class="shop-meta">pads: ${unlockedPadCount()}/${MACHINE_PAD_COUNT} · status: ${activePad.message}</div>
+          <div class="shop-foot"><button class="btn" type="button" data-auto="recharge" ${!activePad.tier || activePad.broken ? 'disabled' : ''}>recharge at dock</button><button class="btn" type="button" data-battery="use" ${!activePad.tier || mining.batteries <= 0 || activePad.battery >= 100 ? 'disabled' : ''}>swap cell · ${mining.batteries} left</button><button class="btn" type="button" data-auto="repair" ${!activePad.tier || !activePad.broken ? 'disabled' : ''}>${mining.unjammer ? 'unjam' : 'need unjammer'}</button><button class="btn" type="button" data-machine-disassemble="${active}" ${!activePad.tier ? 'disabled' : ''}>disassemble pad ${active + 1}</button></div>
           </div>`;
       }
     }
@@ -2678,21 +3089,29 @@
       // 0 sunrise, 0.25 noon, 0.5 sunset, 0.75 midnight. no switches, no pause.
       return ((simTime % DAY_CYCLE_MS) + DAY_CYCLE_MS) % DAY_CYCLE_MS / DAY_CYCLE_MS;
     }
-    function getDayFactor() {
+    function skyGeometry() {
       const phase = getCyclePhase();
-      return Math.sin(phase * Math.PI * 2) * 0.5 + 0.5;
+      const isDay = phase < 0.5;
+      const t = (isDay ? phase : phase - 0.5) * 2;
+      const alt = Math.max(0, Math.sin(t * Math.PI));
+      const body = { x: w * 0.78, y: h * (0.58 - alt * 0.44), alt };
+      const hidden = { x: body.x, y: h * 0.72, alt: 0 };
+      return { phase, isDay, alt, sun: isDay ? body : hidden, moon: isDay ? hidden : body };
     }
-    function isDaytime() { return Math.sin(getCyclePhase() * Math.PI * 2) >= 0; }
+    function getDayFactor() {
+      const sky = skyGeometry();
+      return sky.isDay ? sky.alt : 0;
+    }
+    function isDaytime() {
+      const sky = skyGeometry();
+      if (sky.sun.alt >= 0.5) dayState = true;
+      else if (sky.moon.alt >= 0.5) dayState = false;
+      return dayState;
+    }
     function stockOpen(window) { return window === 'always' || window === (isDaytime() ? 'day' : 'night'); }
     function stockBadge(window) {
       if (window === 'always') return 'in stock';
       return `${window} only · ${stockOpen(window) ? 'in stock' : 'out of stock'}`;
-    }
-
-    function bodyPos(phase) {
-      // Put sun/moon in the same upper sky position (not ocean), alternating by phase
-      const a = phase * Math.PI * 2 - Math.PI / 2;
-      return { x: w * 0.78, y: h * (0.2 - Math.sin(a) * 0.08) };
     }
 
     const rainDrops = Array.from({ length: 220 }, () => ({ x: Math.random(), y: Math.random(), l: 8 + Math.random()*16, s: 0.6 + Math.random()*1.2 }));
@@ -2743,22 +3162,30 @@
       ctx.restore();
     }
 
-    function shoreKeeperRect() {
+    function shoreShopRect() {
       const s = Math.min(w < 620 ? 150 : 184, w * (w < 620 ? 0.38 : 0.24));
       return { x: w * 0.68 - s * 0.5, y: h * 0.62 - s * 0.5, s };
     }
+    function shoreShopSignRect() {
+      const kr = shoreShopRect();
+      const sw = Math.min(150, Math.max(96, kr.s * 0.82));
+      const sh = Math.max(38, Math.min(58, h * 0.07));
+      return { x: kr.x + kr.s * 0.5 - sw * 0.5, y: h * 0.78 - sh - 14, w: sw, h: sh };
+    }
     function drawMachineRock(i = 0) {
-      if (perspective !== 0 || cameraY > 0.2) return;
+      if (perspective !== 0) return;
       const g = machineRigGeom(i);
       const p = g.p;
       const m = mining.machines[i];
+      const unlocked = isPadUnlocked(i);
       const cx = g.baseX;
-      const padY = p.y - p.h * 0.42;
+      // seat the pad bottom flush into the rock crown, not floating above or buried inside
+      const padY = p.y - p.h * 0.66;
       const tier = m && AUTO_TIERS[m.tier];
-      const active = activeMachineIndex() === i;
-      const statusColor = !m || !m.tier ? '#96a5b9' : m.broken ? '#ff6f8a' : m.battery <= 0 ? '#ffb36b' : '#8dffc4';
+      const active = unlocked && activeMachineIndex() === i;
+      const statusColor = !unlocked ? '#6f7d90' : !m || !m.tier ? '#96a5b9' : m.broken ? '#ff6f8a' : m.battery <= 0 ? '#ffb36b' : '#8dffc4';
       ctx.save();
-      for (const [ox, oy, rr] of [[-0.72, 0.22, 0.28], [0.72, 0.18, 0.24]]) {
+      for (const [ox, oy, rr] of [[-0.55, 0.22, 0.15], [0.55, 0.18, 0.14]]) {
         ctx.fillStyle = '#212a37';
         ctx.beginPath();
         ctx.ellipse(cx + p.w * ox, p.y + p.h * oy, p.w * rr, p.h * rr * 0.7, ox * 0.4, 0, Math.PI * 2);
@@ -2792,13 +3219,18 @@
         ctx.fillStyle = '#bed7eb';
         ctx.beginPath(); ctx.arc(bx, padY + p.h * 0.085, 2.6, 0, Math.PI * 2); ctx.fill();
       }
-      if (!m || !m.tier) {
-        ctx.strokeStyle = '#7d91a5'; ctx.lineWidth = 4;
+      if (!m || !m.tier || !unlocked) {
+        ctx.strokeStyle = unlocked ? '#7d91a5' : '#718195'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.moveTo(cx - p.w * 0.13, padY); ctx.lineTo(cx - p.w * 0.13, padY - p.h * 0.18); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(cx + p.w * 0.13, padY); ctx.lineTo(cx + p.w * 0.13, padY - p.h * 0.18); ctx.stroke();
+        if (!unlocked) {
+          ctx.strokeStyle = '#8c9bad'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(cx - p.w * 0.26, padY - p.h * 0.26); ctx.lineTo(cx + p.w * 0.26, padY + p.h * 0.12); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx + p.w * 0.26, padY - p.h * 0.26); ctx.lineTo(cx - p.w * 0.26, padY + p.h * 0.12); ctx.stroke();
+        }
       } else {
         const mastW = Math.max(12, p.w * 0.085);
-        const mastBottom = p.y - p.h * 0.12;
+        const mastBottom = padY;
         ctx.fillStyle = '#1b2939';
         ctx.fillRect(cx - mastW * 0.5, g.beamY, mastW, mastBottom - g.beamY);
         ctx.strokeStyle = '#82aac8'; ctx.lineWidth = 2;
@@ -2832,13 +3264,13 @@
       }
       ctx.fillStyle = statusColor;
       ctx.shadowColor = statusColor; ctx.shadowBlur = 8;
-      ctx.beginPath(); ctx.arc(cx + p.w * 0.31, padY - p.h * 0.03, 3.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + p.w * 0.17, padY + p.h * 0.085, 3.2, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
       ctx.textAlign = 'center';
       ctx.font = `${Math.max(10, Math.min(13, w * 0.014))}px Consolas, monospace`;
       ctx.fillStyle = '#e2eefa';
-      ctx.fillText(m && m.tier ? `PAD ${i + 1} · ${tier.name.toUpperCase()}` : `PAD ${i + 1} · EMPTY`, cx, p.y + p.h * 0.52);
-      if (m && m.tier && mining.tablet) {
+      ctx.fillText(!unlocked ? `PAD ${i + 1} · LOCKED` : m && m.tier ? `PAD ${i + 1} · ${tier.name.toUpperCase()}` : `PAD ${i + 1} · EMPTY`, cx, p.y + p.h * 0.52);
+      if (unlocked && m && m.tier && mining.tablet) {
         ctx.font = `${Math.max(9, Math.min(11, w * 0.012))}px Consolas, monospace`;
         ctx.fillStyle = '#b77cff';
         ctx.fillText(`${Math.round(m.battery)}%`, cx, p.y + p.h * 0.67);
@@ -2848,10 +3280,111 @@
     function drawMachineRocks() {
       for (let i = 0; i < MACHINE_PAD_COUNT; i++) drawMachineRock(i);
     }
+    function drawOreChest() {
+      if (perspective !== 0 || cameraY > 0.2 || isFacilityLayer()) return;
+      const r = chestRect();
+      const x = r.x, y = r.y, cw = r.w, ch = r.h, waterY = r.waterY;
+      const held = chestOreCount();
+      const left = x - cw * 0.5;
+      const bodyTop = y + ch * 0.22;
+      const bottom = waterY + ch * 0.12;
+      const bodyH = bottom - bodyTop;
+      ctx.save();
+
+      // waterline wake first, so the chest reads as sitting in the sea
+      ctx.strokeStyle = `rgba(170,225,255,${0.22 + Math.min(0.2, held * 0.01)})`;
+      ctx.lineWidth = 1.4;
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.ellipse(x, waterY + i * 3, cw * (0.72 + i * 0.12), ch * (0.16 + i * 0.05), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      if (held > 0) {
+        ctx.shadowColor = '#ffd36a';
+        ctx.shadowBlur = 14 + Math.sin(animTime * 0.003) * 5;
+      }
+
+      // wooden body with plank seams
+      const wood = ctx.createLinearGradient(0, bodyTop, 0, bottom);
+      wood.addColorStop(0, '#7a5234');
+      wood.addColorStop(0.55, '#523422');
+      wood.addColorStop(1, '#362215');
+      ctx.fillStyle = wood;
+      roundRectPath(ctx, left, bodyTop, cw, bodyH, 5); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = held > 0 ? '#ffd36a' : '#b18a55';
+      ctx.lineWidth = 1.8;
+      roundRectPath(ctx, left, bodyTop, cw, bodyH, 5); ctx.stroke();
+      ctx.strokeStyle = 'rgba(28,16,10,0.45)';
+      ctx.lineWidth = 1;
+      for (const f of [0.34, 0.67]) {
+        ctx.beginPath();
+        ctx.moveTo(left + 3, bodyTop + bodyH * f);
+        ctx.lineTo(left + cw - 3, bodyTop + bodyH * f);
+        ctx.stroke();
+      }
+
+      // arched lid
+      const lid = ctx.createLinearGradient(0, y, 0, bodyTop);
+      lid.addColorStop(0, '#8b603b');
+      lid.addColorStop(1, '#5c3d27');
+      ctx.fillStyle = lid;
+      ctx.beginPath();
+      ctx.moveTo(left + 1, bodyTop);
+      ctx.quadraticCurveTo(x, y - ch * 0.1, left + cw - 1, bodyTop);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = held > 0 ? '#ffd36a' : '#b18a55';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,226,163,0.28)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(left + cw * 0.18, bodyTop - ch * 0.05);
+      ctx.quadraticCurveTo(x, y - ch * 0.04, left + cw * 0.82, bodyTop - ch * 0.05);
+      ctx.stroke();
+
+      // brass straps, handles and latch
+      ctx.fillStyle = '#c9a25b';
+      ctx.fillRect(left + cw * 0.18, bodyTop - ch * 0.04, cw * 0.07, bodyH + ch * 0.04);
+      ctx.fillRect(left + cw * 0.75, bodyTop - ch * 0.04, cw * 0.07, bodyH + ch * 0.04);
+      ctx.fillStyle = '#e8c66c';
+      ctx.fillRect(x - cw * 0.09, bodyTop - ch * 0.09, cw * 0.18, ch * 0.24);
+      ctx.strokeStyle = '#6d4a22'; ctx.lineWidth = 1.4;
+      ctx.strokeRect(x - cw * 0.09, bodyTop - ch * 0.09, cw * 0.18, ch * 0.24);
+      ctx.fillStyle = '#3a2614';
+      ctx.beginPath();
+      ctx.arc(x, bodyTop + ch * 0.015, Math.max(1.6, cw * 0.025), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(x - 1, bodyTop + ch * 0.015, 2, ch * 0.08);
+      ctx.strokeStyle = 'rgba(232,198,108,0.75)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(left - 1, bodyTop + bodyH * 0.45, ch * 0.09, Math.PI * 0.5, Math.PI * 1.5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(left + cw + 1, bodyTop + bodyH * 0.45, ch * 0.09, -Math.PI * 0.5, Math.PI * 0.5);
+      ctx.stroke();
+
+      // submerge the bottom edge under a translucent water wash
+      ctx.fillStyle = 'rgba(24,86,132,0.28)';
+      roundRectPath(ctx, left + 2, waterY - ch * 0.04, cw - 4, ch * 0.16, 4); ctx.fill();
+
+      ctx.textAlign = 'center';
+      ctx.font = `${Math.max(9, Math.min(12, w * 0.011))}px Consolas, monospace`;
+      ctx.fillStyle = held > 0 ? '#ffe6a3' : '#c5d6e5';
+      ctx.fillText(`ORE CHEST · ${held}`, x, y - ch * 0.18);
+      if (held > 0) {
+        ctx.font = `${Math.max(8, Math.min(10, w * 0.01))}px Consolas, monospace`;
+        ctx.fillStyle = '#9fb7c9';
+        ctx.fillText('click to open', x, waterY + ch * 0.42);
+      }
+      ctx.restore();
+    }
     function drawDeepClaw(i = 0) {
       if (perspective !== 0 || isFacilityLayer()) return;
       const m = mining.machines[i];
-      if (!m || !m.tier) return;
+      if (!isPadUnlocked(i) || !m || !m.tier) return;
       const g = machineRigGeom(i);
       const rig = machineRigs[i];
       const pos = {
@@ -2950,7 +3483,7 @@
       ctx.strokeStyle = 'rgba(120,88,56,0.5)';
       ctx.lineWidth = 2;
       for (let x = w * 0.43; x < w * 0.98; x += 34) { ctx.beginPath(); ctx.moveTo(x, dockY); ctx.lineTo(x + 8, dockY + h * 0.055); ctx.stroke(); }
-      const kr = shoreKeeperRect();
+      const kr = shoreShopRect();
       const stallTop = Math.max(h * 0.32, kr.y - 34);
       ctx.fillStyle = 'rgba(34,22,38,0.82)';
       ctx.fillRect(kr.x - 58, stallTop, kr.s + 116, 14);
@@ -2966,12 +3499,23 @@
       ctx.fillStyle = 'rgba(47,31,22,0.95)';
       ctx.fillRect(kr.x - 52, stallTop + 14, 8, dockY - stallTop - 14);
       ctx.fillRect(kr.x + kr.s + 44, stallTop + 14, 8, dockY - stallTop - 14);
-      // keeper is a big dancing emoji, feet on the shop floor
-      const keeperSize = Math.max(96, Math.min(210, w * 0.13, (dockY - stallTop) * 0.82));
-      ctx.font = `${keeperSize}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      // hanging shop sign — click it to open the supply panel
+      const sign = shoreShopSignRect();
+      ctx.strokeStyle = 'rgba(212,184,150,0.5)'; ctx.lineWidth = 2;
+      for (const sx of [sign.x + sign.w * 0.2, sign.x + sign.w * 0.8]) {
+        ctx.beginPath(); ctx.moveTo(sx, stallTop + 24); ctx.lineTo(sx, sign.y); ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(32,20,34,0.96)';
+      roundRectPath(ctx, sign.x, sign.y, sign.w, sign.h, 8); ctx.fill();
+      ctx.strokeStyle = 'rgba(183,124,255,0.6)'; ctx.lineWidth = 2;
+      roundRectPath(ctx, sign.x, sign.y, sign.w, sign.h, 8); ctx.stroke();
       ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      ctx.fillText('🕺', kr.x + kr.s * 0.5, dockY - 2);
+      ctx.font = `bold ${Math.max(14, Math.min(20, w * 0.018))}px Consolas, monospace`;
+      ctx.fillStyle = '#f0d7ff';
+      ctx.fillText('SHOP', sign.x + sign.w * 0.5, sign.y + sign.h * 0.6);
+      ctx.font = `${Math.max(9, Math.min(11, w * 0.01))}px Consolas, monospace`;
+      ctx.fillStyle = 'rgba(236,247,255,0.65)';
+      ctx.fillText('click to open', sign.x + sign.w * 0.5, sign.y + sign.h + 13);
       // ore cart on the sand
       const cartX = w * 0.2, cartY = h * 0.79, cw = Math.min(150, w * 0.24);
       ctx.fillStyle = 'rgba(52,36,28,0.95)';
@@ -3122,7 +3666,6 @@
     function drawSky() {
       dayFactor = getDayFactor();
       const d = dayFactor;
-      const phase = getCyclePhase();
       const nightTop=[2,6,20], nightMid=[5,22,45], nightLow=[8,34,62], nightBot=[5,18,37];
       const dayTop=[80,170,235], dayMid=[120,200,255], dayLow=[160,220,255], dayBot=[210,238,255];
       const stormDark = Math.min(0.55, weatherIntensity * 0.22);
@@ -3132,11 +3675,12 @@
       if (perspective === 1) { ctx.fillStyle='rgba(180,230,255,0.08)'; ctx.fillRect(0,0,w,h); }
       drawLightning();
 
-      const sun = bodyPos(phase);
-      const moon = bodyPos((phase + 0.5) % 1);
-      const isDay = Math.sin(phase * Math.PI * 2) >= 0;
-      const sunA = isDay ? Math.max(0, Math.min(1, (d - 0.15) / 0.35)) : 0;
-      const moonA = !isDay ? Math.max(0, Math.min(1, (0.45 - d) / 0.35)) : 0;
+      const sky = skyGeometry();
+      const sun = sky.sun;
+      const moon = sky.moon;
+      const isDay = sky.isDay;
+      const sunA = isDay ? Math.min(1, sky.alt * 2) : 0;
+      const moonA = !isDay ? Math.min(1, sky.alt * 2) : 0;
 
       if (sunA > 0.01) {
         const sg = ctx.createRadialGradient(sun.x, sun.y, 0, sun.x, sun.y, 170);
@@ -3453,8 +3997,7 @@
     }
 
     function drawSurfaceLife() {
-      const phase = getCyclePhase();
-      const isDay = Math.sin(phase * Math.PI * 2) >= 0;
+      const isDay = skyGeometry().isDay;
       const horizon = h * 0.58;
       if (isDay && weatherIntensity < 1.2) {
         ctx.save();
@@ -3654,13 +4197,11 @@
     }));
 
     function drawMoonShimmer() {
-      const phase = getCyclePhase();
-      const sun = bodyPos(phase);
-      const moon = bodyPos((phase + 0.5) % 1);
-      const isDay = Math.sin(phase * Math.PI * 2) >= 0;
+      const sky = skyGeometry();
+      const isDay = sky.isDay;
       const d = dayFactor;
-      const b = isDay ? sun : moon;
-      const vis = isDay ? Math.max(0, Math.min(1, (d - 0.15) / 0.35)) : Math.max(0, Math.min(1, (0.45 - d) / 0.35));
+      const b = isDay ? sky.sun : sky.moon;
+      const vis = Math.min(1, sky.alt * 2);
       if (vis <= 0.01) return;
       const horizon = h * 0.58;
       const top = horizon + 2;
@@ -3740,13 +4281,11 @@
 
     function drawReflection() {
       const d = dayFactor;
-      const phase = getCyclePhase();
-      const sun = bodyPos(phase);
-      const moon = bodyPos((phase + 0.5) % 1);
-      const isDay = Math.sin(phase * Math.PI * 2) >= 0;
-      const b = isDay ? sun : moon;
+      const sky = skyGeometry();
+      const isDay = sky.isDay;
+      const b = isDay ? sky.sun : sky.moon;
       const mx = b.x;
-      const vis = isDay ? Math.max(0, Math.min(1, (d - 0.15) / 0.35)) : Math.max(0, Math.min(1, (0.45 - d) / 0.35));
+      const vis = Math.min(1, sky.alt * 2);
       if (vis <= 0.01) return;
       const top = h * 0.58;
       const bottom = h * 0.98;
@@ -4388,6 +4927,7 @@
       drawRipplesAndBubbles();
       ctx.restore();
       drawMachineRocks();
+      drawOreChest();
       drawWeather();
 
       ctx.save();
@@ -4803,7 +5343,7 @@
       const contractBtn = e.target.closest('[data-contract]');
       if (contractBtn) { e.stopPropagation(); claimContract(contractBtn.getAttribute('data-contract')); return; }
       const buyBtn = e.target.closest('[data-shop]');
-      if (buyBtn) { e.stopPropagation(); if (buyBtn.getAttribute('data-shop') === 'tablet') buyTablet(); else if (buyBtn.getAttribute('data-shop') === 'battery-pack') buyBatteryPack(); return; }
+      if (buyBtn) { e.stopPropagation(); const what = buyBtn.getAttribute('data-shop'); if (what === 'tablet') buyTablet(); else if (what === 'unjammer') buyUnjammer(); else if (what === 'battery-pack') buyBatteryPack(); return; }
       const cellBtn = e.target.closest('[data-battery]');
       if (cellBtn) { e.stopPropagation(); if (cellBtn.getAttribute('data-battery') === 'use') useBattery(); return; }
       const autoBtn = e.target.closest('[data-auto]');
@@ -4812,6 +5352,8 @@
       if (buildBtn) { e.stopPropagation(); buildMachine(Number(buildBtn.getAttribute('data-machine-build'))); return; }
       const disBtn = e.target.closest('[data-machine-disassemble]');
       if (disBtn) { e.stopPropagation(); disassembleMachine(Number(disBtn.getAttribute('data-machine-disassemble'))); return; }
+      const padBuyBtn = e.target.closest('[data-pad-buy]');
+      if (padBuyBtn) { e.stopPropagation(); buyPad(Number(padBuyBtn.getAttribute('data-pad-buy'))); return; }
       const padBtn = e.target.closest('[data-machine]');
       if (padBtn) { e.stopPropagation(); selectMachine(Number(padBtn.getAttribute('data-machine'))); }
     });
@@ -4819,9 +5361,30 @@
       if (!e.target.closest) return;
       const cellBtn = e.target.closest('[data-battery]');
       if (cellBtn) { e.stopPropagation(); if (cellBtn.getAttribute('data-battery') === 'use') useBattery(); return; }
+      const unjamBtn = e.target.closest('[data-unjam]');
+      if (unjamBtn) { e.stopPropagation(); if (unjamBtn.getAttribute('data-unjam') === 'start') repairAuto(); return; }
       const padBtn = e.target.closest('[data-machine]');
       if (padBtn) { e.stopPropagation(); selectMachine(Number(padBtn.getAttribute('data-machine'))); }
     });
+    chestClose.addEventListener('click', (e) => { e.stopPropagation(); closeChest(); });
+    chestTakeAll.addEventListener('click', (e) => { e.stopPropagation(); takeAllFromChest(); });
+    chestModal.addEventListener('click', (e) => {
+      if (e.target === chestModal) { closeChest(); return; }
+      if (!e.target.closest) return;
+      const takeBtn = e.target.closest('[data-chest-take]');
+      if (!takeBtn) return;
+      e.stopPropagation();
+      const id = takeBtn.getAttribute('data-chest-take');
+      const input = chestModal.querySelector(`[data-chest-qty="${id}"]`);
+      takeFromChest(id, input ? input.value : 1);
+    });
+    flowClose.addEventListener('click', (e) => { e.stopPropagation(); closeUnjam(); });
+    flowReset.addEventListener('click', (e) => { e.stopPropagation(); if (!flowState) return; flowState.paths = {}; flowState.dragging = false; flowState.activeColor = null; drawFlow(); sfxClick(); });
+    flowModal.addEventListener('click', (e) => { if (e.target === flowModal) closeUnjam(); });
+    flowCanvas.addEventListener('pointerdown', flowPointerDown);
+    flowCanvas.addEventListener('pointermove', flowPointerMove);
+    flowCanvas.addEventListener('pointerup', flowPointerUp);
+    flowCanvas.addEventListener('pointercancel', flowPointerUp);
     photoBtn.addEventListener('click', (e) => { e.stopPropagation(); savePhoto(); });
     logBtn.addEventListener('click', (e) => { e.stopPropagation(); renderDiscoveries(); logModal.classList.add('open'); logModal.setAttribute('aria-hidden','false'); });
     logClose.addEventListener('click', () => { logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); });
@@ -4891,18 +5454,24 @@
       const horizon = h * 0.58;
 
       if (perspective === 0 && cameraY <= 0.2) {
+        const chest = chestRect();
+        if (x > chest.x - chest.w * 0.58 && x < chest.x + chest.w * 0.58 && y > chest.y - chest.h * 0.3 && y < chest.waterY + chest.h * 0.16) {
+          openChest();
+          return;
+        }
         const pads = machinePadRects();
         for (let i = 0; i < pads.length; i++) {
           const pad = pads[i];
           if (x > pad.x - pad.w * 0.58 && x < pad.x + pad.w * 0.58 && y > pad.y - pad.h * 0.82 && y < pad.y + pad.h * 0.82) {
             sfxClick();
+            if (!isPadUnlocked(i)) { showToast('pad locked', 'the supply dock sells that rock.', 2200); return; }
             mining.activeMachine = i;
             resetRigState(i);
             saveGameState();
             syncMiningHud();
             renderShop();
             if (mining.tablet) openTablet();
-            else showToast(`machine pad ${i + 1}`, mining.machines[i].tier ? `${AUTO_TIERS[mining.machines[i].tier].name} claw rig is parked here. buy the keeper tablet for live stats.` : 'empty machine pad. the keeper parks up to 2 claw rigs here.', 3000);
+            else showToast(`machine pad ${i + 1}`, mining.machines[i].tier ? `${AUTO_TIERS[mining.machines[i].tier].name} claw rig is parked here. buy the tablet for live stats.` : `empty machine pad. ${unlockedPadCount()}/${MACHINE_PAD_COUNT} rocks unlocked.`, 3000);
             return;
           }
         }
@@ -4967,13 +5536,13 @@
       }
 
       if (isShore()) {
-        const kr = shoreKeeperRect();
-        if (x > kr.x - 26 && x < kr.x + kr.s + 26 && y > kr.y - 30 && y < kr.y + kr.s + 30) {
+        const sign = shoreShopSignRect();
+        if (x > sign.x - 10 && x < sign.x + sign.w + 10 && y > sign.y - 10 && y < sign.y + sign.h + 10) {
           openShop();
           return;
         }
         sfxClick();
-        feedbackStatus.textContent = 'the keeper waves you toward the supply stall.';
+        feedbackStatus.textContent = 'click the SHOP sign to open the supply panel.';
         return;
       }
 
@@ -5175,6 +5744,7 @@
     });
 
     adminBuildRigs.addEventListener('click', () => {
+      mining.unlockedPads = MACHINE_PAD_COUNT;
       for (let i = 0; i < MACHINE_PAD_COUNT; i++) {
         const m = mining.machines[i];
         m.tier = AUTO_TIERS.length - 1;
@@ -5190,7 +5760,7 @@
       renderShop();
       renderTablet();
       sfxClick();
-      adminSetStatus('both pads loaded with abyss crawlers');
+      adminSetStatus('all 4 pads unlocked and loaded with abyss crawlers');
     });
 
     adminChargeRigs.addEventListener('click', () => {
@@ -5210,7 +5780,69 @@
       renderShop();
       renderTablet();
       sfxClick();
-      adminSetStatus(n ? `${n} rig(s) charged and repaired` : 'no rigs built yet');
+      adminSetStatus(n ? `${n} rig(s) charged and unjammed` : 'no rigs built yet');
+    });
+
+    adminRefillMachines.addEventListener('click', () => {
+      let n = 0;
+      for (let i = 0; i < MACHINE_PAD_COUNT; i++) {
+        const m = mining.machines[i];
+        if (!m.tier) continue;
+        m.battery = 100;
+        m.progress = 0;
+        m.message = m.broken ? 'jammed — use unjammer' : 'battery full';
+        if (!m.broken) resetRigState(i);
+        n++;
+      }
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxClick();
+      adminSetStatus(n ? `${n} machine(s) refilled` : 'no machines built yet');
+    });
+
+    adminUnjamMachines.addEventListener('click', () => {
+      let n = 0;
+      for (let i = 0; i < MACHINE_PAD_COUNT; i++) {
+        const m = mining.machines[i];
+        if (!m.tier || !m.broken) continue;
+        m.broken = false;
+        m.progress = 0;
+        m.message = 'unjammed by admin';
+        resetRigState(i);
+        n++;
+      }
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxClick();
+      adminSetStatus(n ? `${n} machine(s) unjammed` : 'no jammed machines');
+    });
+
+    adminBuyAll.addEventListener('click', () => {
+      mining.pickaxe = PICKAXES.length - 1;
+      mining.tablet = true;
+      mining.unjammer = true;
+      mining.batteries = Math.max(99, mining.batteries | 0);
+      mining.unlockedPads = MACHINE_PAD_COUNT;
+      mining.tipSeen = true;
+      saveGameState();
+      syncMiningHud();
+      renderShop();
+      renderTablet();
+      sfxClick();
+      adminSetStatus('all shore gear bought · 4 pads · 99 cells');
+    });
+
+    adminFillChest.addEventListener('click', () => {
+      for (const id of Object.keys(ORE_DEFS)) mining.chest[id] = (mining.chest[id] || 0) + 25;
+      saveGameState();
+      syncMiningHud();
+      renderChest();
+      sfxClick();
+      adminSetStatus('+25 of every ore waiting in the chest');
     });
 
     adminRerollVeins.addEventListener('click', () => {
@@ -5358,7 +5990,7 @@
         }
         return;
       }
-      if (e.key === 'Escape') { closeAdmin(); closeFeedback(); closeShop(); closeTablet(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
+      if (e.key === 'Escape') { closeAdmin(); closeFeedback(); closeShop(); closeTablet(); closeChest(); closeUnjam(); logModal.classList.remove('open'); logModal.setAttribute('aria-hidden','true'); achModal.classList.remove('open'); achModal.setAttribute('aria-hidden','true'); updateModal.classList.remove('open'); updateModal.setAttribute('aria-hidden','true'); settingsPanel.classList.remove('open'); settingsBtn.setAttribute('aria-expanded','false'); setPhotoMode(false); return; }
       if (isTyping) { adminIdx = 0; return; }
       const expected = adminCode[adminIdx];
       if (k === expected) {
