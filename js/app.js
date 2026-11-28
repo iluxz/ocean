@@ -514,7 +514,7 @@
       { name:'abyss crawler', maxLayer:4, interval:4500,  damage:10, drain:3, waste:0.05, breakdown:0.05, note:'hadal specialist. fast, reliable, burns battery fastest.' }
     ];
     const CONTRACTS = [
-      { id:'iron',     title:'first sample',  need:{ iron:6 },                    pickaxe:1, auto:1, line:'bring me 6 iron. that pick won\'t build itself.' },
+      { id:'iron',     title:'isnt that iron pick?',  need:{ iron:6 },                    pickaxe:1, auto:1, line:'bring me 6 iron. that pick won\'t build itself.' },
       { id:'gold',     title:'bright seam',   need:{ gold:5 },                    pickaxe:2, auto:2, line:'5 gold buys a better head.' },
       { id:'diamond',  title:'hard proof',    need:{ diamond:4 },                 pickaxe:3, auto:3, line:'4 diamond. then you get the real bite.' },
       { id:'abyss',    title:'deep receipt',  need:{ abyssite:3, voidglass:2 },   pickaxe:4, auto:0, line:'3 abyssite and 2 voidglass. last upgrade. no refunds.' }
